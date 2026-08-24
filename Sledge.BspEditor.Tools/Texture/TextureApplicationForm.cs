@@ -453,6 +453,7 @@ namespace Sledge.BspEditor.Tools.Texture
 			if (!_currentTextureProperties.DifferentXShiftValues) _currentTextureProperties.XShift = (float)ShiftXValue.Value;
 			if (!_currentTextureProperties.DifferentYShiftValues) _currentTextureProperties.YShift = (float)ShiftYValue.Value;
 			if (!_currentTextureProperties.DifferentRotationValues) _currentTextureProperties.Rotation = (float)RotationValue.Value;
+			if (!_currentTextureProperties.DifferentLightmapValues) _currentTextureProperties.LightmapScale = (float)LightmapValue.Value;
 
 			ApplyPropertyChanges(true);
 			DebouncedPropertiesChanged?.Invoke(this, EventArgs.Empty);
@@ -606,6 +607,7 @@ namespace Sledge.BspEditor.Tools.Texture
 		private void LightmapValueChanged(object sender, EventArgs e)
 		{
 			if (_freeze) return;
+			_currentTextureProperties.DifferentLightmapValues = false;
 			PropertiesChanged();
 		}
 
@@ -757,8 +759,9 @@ namespace Sledge.BspEditor.Tools.Texture
 			public bool AllAlignedToWorld { get; set; }
 			public bool NoneAlignedToWorld { get; set; }
 			public float? LightmapScale { get; set; }
+            public bool DifferentLightmapValues { get; set; }
 
-			public CurrentTextureProperties()
+            public CurrentTextureProperties()
 			{
 				Reset();
 			}
