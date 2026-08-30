@@ -102,7 +102,8 @@ namespace Sledge.BspEditor.Primitives
                 XShift = XShift,
                 XScale = XScale,
                 YShift = YShift,
-                YScale = YScale
+                YScale = YScale,
+                LightmapScale = LightmapScale
             };
         }
         
