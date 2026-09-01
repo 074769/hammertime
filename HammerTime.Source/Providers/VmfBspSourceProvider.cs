@@ -496,6 +496,8 @@ namespace HammerTime.Source.Providers
                         return new VmfSolid(obj);
                     case "hidden":
                         return new VmfHidden(obj);
+                    case "connections":
+                        return new VmfConnections(obj);
                 }
                 return null;
             }
@@ -507,6 +509,51 @@ namespace HammerTime.Source.Providers
                 if (obj is Group g) return new VmfGroup(g);
                 if (obj is Solid s) return new VmfSolid(s);
                 return null;
+            }
+        }
+        private class VmfConnections : VmfObject
+        {
+            private struct OutputConnection
+            {
+                public string Name;
+                public string TargetEntity;
+                public string TargetAction;
+                public string Parameter;
+                public float Delay;
+                public bool Once;
+            }
+            private List<OutputConnection> _connections = new();
+            public VmfConnections(SerialisedObject obj) : base(obj)
+            {
+                foreach (var so in obj.Properties)
+                {
+                    var parts = so.Value.Split(new[] { ',' });
+                    _connections.Add(new OutputConnection
+                    {
+                        Name = so.Key,
+                        TargetEntity = parts.Length > 0 ? parts[0] : string.Empty,
+                        TargetAction = parts.Length > 1 ? parts[1] : string.Empty,
+                        Parameter = parts.Length > 2 ? parts[2] : string.Empty,
+                        Delay = parts.Length > 3 && float.TryParse(parts[3], NumberStyles.Float, CultureInfo.InvariantCulture, out var delay) ? delay : 0f,
+                        Once = parts.Length > 4 && int.TryParse(parts[4], out var once) && once >= 0 ? true : false
+                    });
+
+                }
+            }
+
+            public override IEnumerable<VmfObject> Flatten()
+            {
+                yield return this;
+            }
+
+            public override IMapObject ToMapObject(UniqueNumberGenerator generator)
+            {
+                throw new NotImplementedException();
+            }
+
+            public override SerialisedObject ToSerialisedObject()
+            {
+                throw new NotImplementedException();
             }
         }
 
