@@ -39,6 +39,7 @@
             // 
             // connectionsView
             // 
+            connectionsView.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             connectionsView.Columns.AddRange(new ColumnHeader[] { cSource, cOutput, cInput, cParameter, cDelay, cOnce });
             connectionsView.Location = new Point(3, 3);
             connectionsView.Name = "connectionsView";
