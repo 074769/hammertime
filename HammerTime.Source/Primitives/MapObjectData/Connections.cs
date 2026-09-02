@@ -22,10 +22,10 @@ namespace HammerTime.Source.Primitives.MapObjectData
             public float Delay;
             public bool Once;
         }
-        private List<Connection> _connections = new List<Connection>();
+        public List<Connection> EntityConnections { get; private set; } = new List<Connection>();
         public Connections(List<Connection> connections)
         {
-            _connections = connections;
+            EntityConnections = connections;
         }
 
         public void GetObjectData(SerializationInfo info, StreamingContext context)
