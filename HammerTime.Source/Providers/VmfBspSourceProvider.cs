@@ -497,8 +497,6 @@ namespace HammerTime.Source.Providers
                         return new VmfSolid(obj);
                     case "hidden":
                         return new VmfHidden(obj);
-                    case "connections":
-                        return new VmfConnections(obj);
                 }
                 return null;
             }
@@ -512,11 +510,11 @@ namespace HammerTime.Source.Providers
                 return null;
             }
         }
-        private class VmfConnections : VmfObject
+        private class VmfConnections
         {
 
             private List<Connections.Connection> _connections = new();
-            public VmfConnections(SerialisedObject obj) : base(obj)
+            public VmfConnections(SerialisedObject obj)
             {
                 foreach (var so in obj.Properties)
                 {
@@ -534,17 +532,12 @@ namespace HammerTime.Source.Providers
                 }
             }
 
-            public override IEnumerable<VmfObject> Flatten()
-            {
-                yield return this;
-            }
-
-            public override IMapObject ToMapObject(UniqueNumberGenerator generator)
+            public IMapObjectData ToMapObject()
             {
                 return new Connections(_connections);
             }
 
-            public override SerialisedObject ToSerialisedObject()
+            public SerialisedObject ToSerialisedObject()
             {
                 throw new NotImplementedException();
             }
@@ -557,6 +550,7 @@ namespace HammerTime.Source.Providers
             public Vector3? Origin { get; set; }
 
             private static readonly string[] ExcludedKeys = { "id", "spawnflags", "classname", "origin", "wad", "mapversion" };
+            private VmfConnections? _connections;
 
             public VmfEntity(SerialisedObject obj) : base(obj)
             {
@@ -565,6 +559,11 @@ namespace HammerTime.Source.Providers
                 {
                     var o = Deserialise(so);
                     if (o != null) Objects.Add(o);
+                }
+                var connections = obj.Children.Find(so => so.Name.Equals("connections", StringComparison.InvariantCultureIgnoreCase));
+                if (connections != null)
+                {
+                    _connections = new VmfConnections(connections);
                 }
 
                 var ed = new EntityData();
@@ -605,6 +604,7 @@ namespace HammerTime.Source.Providers
 
                 ent.Data.Add(EntityData);
                 if (Origin != null) ent.Data.Add(new Origin(Origin.Value));
+                if (_connections != null) ent.Data.Add(_connections.ToMapObject());
 
                 Editor.Apply(ent);
 
