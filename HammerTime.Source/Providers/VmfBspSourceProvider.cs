@@ -15,6 +15,7 @@ using System.ComponentModel.Composition;
 using System.Drawing;
 using System.Globalization;
 using System.Numerics;
+using HammerTime.Source.Primitives.MapObjectData;
 using Plane = Sledge.DataStructures.Geometric.Precision.Plane;
 using Polyhedron = Sledge.DataStructures.Geometric.Precision.Polyhedron;
 using PVector3 = Sledge.DataStructures.Geometric.Precision.Vector3;
@@ -513,22 +514,14 @@ namespace HammerTime.Source.Providers
         }
         private class VmfConnections : VmfObject
         {
-            private struct OutputConnection
-            {
-                public string Name;
-                public string TargetEntity;
-                public string TargetAction;
-                public string Parameter;
-                public float Delay;
-                public bool Once;
-            }
-            private List<OutputConnection> _connections = new();
+
+            private List<Connections.Connection> _connections = new();
             public VmfConnections(SerialisedObject obj) : base(obj)
             {
                 foreach (var so in obj.Properties)
                 {
                     var parts = so.Value.Split(new[] { ',' });
-                    _connections.Add(new OutputConnection
+                    _connections.Add(new Connections.Connection
                     {
                         Name = so.Key,
                         TargetEntity = parts.Length > 0 ? parts[0] : string.Empty,
@@ -548,7 +541,7 @@ namespace HammerTime.Source.Providers
 
             public override IMapObject ToMapObject(UniqueNumberGenerator generator)
             {
-                throw new NotImplementedException();
+                return new Connections(_connections);
             }
 
             public override SerialisedObject ToSerialisedObject()
