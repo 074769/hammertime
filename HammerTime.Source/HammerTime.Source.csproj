@@ -1,31 +1,33 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net6.0-windows</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net6.0-windows</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<UseWindowsForms>true</UseWindowsForms>
 
-  <ItemGroup>
-    <Content Include="Translations\HammerTime.Source.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\Sledge.BspEditor.Rendering\Sledge.BspEditor.Rendering.csproj" />
-    <ProjectReference Include="..\Sledge.BspEditor.Tools\Sledge.BspEditor.Tools.csproj" />
-    <ProjectReference Include="..\Sledge.BspEditor\Sledge.BspEditor.csproj" />
-  </ItemGroup>
+	<ItemGroup>
+		<Content Include="Translations\HammerTime.Source.json">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
 
-  <ItemGroup>
-    <Compile Update="Environment\Source\SourceEnvironmentEditor.cs">
-      <SubType>UserControl</SubType>
-    </Compile>
-  </ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\Sledge.BspEditor.Rendering\Sledge.BspEditor.Rendering.csproj" />
+		<ProjectReference Include="..\Sledge.BspEditor.Tools\Sledge.BspEditor.Tools.csproj" />
+		<ProjectReference Include="..\Sledge.BspEditor\Sledge.BspEditor.csproj" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Formats\" />
-  </ItemGroup>
+	<ItemGroup>
+		<Compile Update="Environment\Source\SourceEnvironmentEditor.cs">
+			<SubType>UserControl</SubType>
+		</Compile>
+	</ItemGroup>
+
+	<ItemGroup>
+		<Folder Include="Formats\" />
+	</ItemGroup>
 
 </Project>
