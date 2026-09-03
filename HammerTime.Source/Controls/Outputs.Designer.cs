@@ -29,7 +29,7 @@
         private void InitializeComponent()
         {
             connectionsView = new ListView();
-            cOutputs = new ColumnHeader();
+            cMyOutput = new ColumnHeader();
             cEntity = new ColumnHeader();
             cTargetInput = new ColumnHeader();
             cParameter = new ColumnHeader();
@@ -51,17 +51,19 @@
             // connectionsView
             // 
             connectionsView.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            connectionsView.Columns.AddRange(new ColumnHeader[] { cOutputs, cEntity, cTargetInput, cParameter, cDelay, cOnce });
+            connectionsView.Columns.AddRange(new ColumnHeader[] { cMyOutput, cEntity, cTargetInput, cParameter, cDelay, cOnce });
+            connectionsView.FullRowSelect = true;
             connectionsView.Location = new Point(3, 3);
             connectionsView.Name = "connectionsView";
-            connectionsView.Size = new Size(589, 270);
+            connectionsView.Size = new Size(589, 238);
             connectionsView.TabIndex = 1;
             connectionsView.UseCompatibleStateImageBehavior = false;
             connectionsView.View = View.Details;
+            connectionsView.SelectedIndexChanged += connectionsView_SelectedIndexChanged;
             // 
-            // cOutputs
+            // cMyOutput
             // 
-            cOutputs.Text = "My Output";
+            cMyOutput.Text = "My Output";
             // 
             // cEntity
             // 
@@ -87,7 +89,7 @@
             // 
             label1.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
             label1.AutoSize = true;
-            label1.Location = new Point(3, 279);
+            label1.Location = new Point(3, 247);
             label1.Name = "label1";
             label1.Size = new Size(105, 15);
             label1.TabIndex = 2;
@@ -97,7 +99,7 @@
             // 
             label2.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
             label2.AutoSize = true;
-            label2.Location = new Point(3, 307);
+            label2.Location = new Point(3, 275);
             label2.Name = "label2";
             label2.Size = new Size(129, 15);
             label2.TabIndex = 3;
@@ -107,7 +109,7 @@
             // 
             label3.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
             label3.AutoSize = true;
-            label3.Location = new Point(3, 332);
+            label3.Location = new Point(3, 300);
             label3.Name = "label3";
             label3.Size = new Size(76, 15);
             label3.TabIndex = 4;
@@ -117,7 +119,7 @@
             // 
             label4.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
             label4.AutoSize = true;
-            label4.Location = new Point(3, 354);
+            label4.Location = new Point(3, 322);
             label4.Name = "label4";
             label4.Size = new Size(158, 15);
             label4.TabIndex = 5;
@@ -127,7 +129,7 @@
             // 
             label5.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
             label5.AutoSize = true;
-            label5.Location = new Point(3, 379);
+            label5.Location = new Point(3, 347);
             label5.Name = "label5";
             label5.Size = new Size(146, 15);
             label5.TabIndex = 6;
@@ -137,7 +139,7 @@
             // 
             outputBox.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
             outputBox.FormattingEnabled = true;
-            outputBox.Location = new Point(172, 279);
+            outputBox.Location = new Point(172, 247);
             outputBox.Name = "outputBox";
             outputBox.Size = new Size(121, 23);
             outputBox.TabIndex = 7;
@@ -148,7 +150,7 @@
             entityBox.AutoCompleteMode = AutoCompleteMode.SuggestAppend;
             entityBox.AutoCompleteSource = AutoCompleteSource.ListItems;
             entityBox.FormattingEnabled = true;
-            entityBox.Location = new Point(172, 304);
+            entityBox.Location = new Point(172, 272);
             entityBox.Name = "entityBox";
             entityBox.Size = new Size(121, 23);
             entityBox.TabIndex = 8;
@@ -157,7 +159,7 @@
             // 
             inputBox.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
             inputBox.FormattingEnabled = true;
-            inputBox.Location = new Point(172, 329);
+            inputBox.Location = new Point(172, 297);
             inputBox.Name = "inputBox";
             inputBox.Size = new Size(121, 23);
             inputBox.TabIndex = 9;
@@ -166,7 +168,7 @@
             // 
             parameterBox.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
             parameterBox.FormattingEnabled = true;
-            parameterBox.Location = new Point(172, 354);
+            parameterBox.Location = new Point(172, 322);
             parameterBox.Name = "parameterBox";
             parameterBox.Size = new Size(121, 23);
             parameterBox.TabIndex = 10;
@@ -174,7 +176,7 @@
             // delayBox
             // 
             delayBox.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-            delayBox.Location = new Point(172, 379);
+            delayBox.Location = new Point(172, 347);
             delayBox.Name = "delayBox";
             delayBox.Size = new Size(100, 23);
             delayBox.TabIndex = 11;
@@ -183,7 +185,7 @@
             // 
             chkFireOnce.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
             chkFireOnce.AutoSize = true;
-            chkFireOnce.Location = new Point(299, 381);
+            chkFireOnce.Location = new Point(299, 349);
             chkFireOnce.Name = "chkFireOnce";
             chkFireOnce.Size = new Size(74, 19);
             chkFireOnce.TabIndex = 12;
@@ -207,7 +209,7 @@
             Controls.Add(label1);
             Controls.Add(connectionsView);
             Name = "Outputs";
-            Size = new Size(595, 410);
+            Size = new Size(595, 378);
             ResumeLayout(false);
             PerformLayout();
         }
@@ -215,7 +217,7 @@
         #endregion
 
         private ListView connectionsView;
-        private ColumnHeader cOutputs;
+        private ColumnHeader cMyOutput;
         private ColumnHeader cEntity;
         private ColumnHeader cTargetInput;
         private ColumnHeader cParameter;

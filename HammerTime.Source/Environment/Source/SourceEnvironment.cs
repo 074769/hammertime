@@ -186,7 +186,8 @@ namespace HammerTime.Source.BspEditor.Environment.Source
 				CameraTool.CameraToolCapability,
 				TextureTool.TextureToolLightmapCapable,
 				TextureTool.TextureToolDisplacementCapable,
-				Controls.Inputs.InputsCapable
+				Controls.Inputs.InputsCapable,
+				Controls.Outputs.OutputsFeature
 		};
 		public void AddData(IEnvironmentData data)
 		{
