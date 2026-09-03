@@ -13,7 +13,7 @@ namespace HammerTime.Source.Primitives.MapObjectData
 {
     public class Connections : IMapObjectData
     {
-        public struct Connection
+        public class Connection
         {
             public string Name;
             public string TargetEntity;
