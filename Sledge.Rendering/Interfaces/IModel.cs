@@ -17,5 +17,8 @@ namespace Sledge.Rendering.Interfaces
         List<string> GetSequences();
         string[] GetTextureName();
 		void SetTexture(Texture[] textures);
-	}
+        uint[] GetLayerSet(int skinId);
+
+
+    }
 }

@@ -2,9 +2,10 @@ struct VertexIn
 {
     float3 Position : POSITION0;
     float3 Normal : NORMAL0;
-    float3 Texture : TEXCOORD0;
-    uint1 Bone : POSITION1;
-    uint1 Flags : POSITION1;
+    float2 Texture : TEXCOORD0;
+    uint1 Bone : COLOR0;
+    uint1 Flags : TEXCOORD1;
+    nointerpolation uint TextureLayer : COLOR1;
 };
 
 struct FragmentIn
@@ -12,7 +13,6 @@ struct FragmentIn
     float4 fPosition : SV_Position;
     float4 fNormal : NORMAL0;
     float3 fTexture : TEXCOORD0;
-    uint1 fBone : POSITION1;
 };
 
 cbuffer Projection
@@ -26,6 +26,10 @@ cbuffer Projection
 cbuffer BoneTransforms
 {
     matrix uTransforms[128];
+};
+cbuffer TextureRemapTable
+{
+    uint4 uLayers[16];
 };
 
 static const float4x4 Identity = { 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
@@ -53,8 +57,9 @@ FragmentIn main(VertexIn input)
 
     output.fPosition = viewportPos;
     output.fNormal = normal;
-    output.fTexture = input.Texture;
-    output.fBone = input.Bone;
+
+    uint layer = uLayers[input.TextureLayer / 4][input.TextureLayer % 4];
+    output.fTexture = float3(input.Texture, layer);
 
     return output;
 }

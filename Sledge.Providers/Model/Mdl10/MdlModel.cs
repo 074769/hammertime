@@ -14,8 +14,6 @@ using Sledge.Rendering.Primitives;
 using Sledge.Rendering.Resources;
 using Sledge.Rendering.Viewports;
 using Veldrid;
-using Vortice.Direct3D11;
-using Vortice.DXGI;
 using Buffer = Sledge.Rendering.Resources.Buffer;
 using PixelFormat = System.Drawing.Imaging.PixelFormat;
 
@@ -31,9 +29,11 @@ namespace Sledge.Providers.Model.Mdl10
 		private uint[][] _bodyPartIndices;
 
 		private Rendering.Resources.Texture _textureResource;
+		private List<Rectangle> _originalRectangles;
 		private Buffer _buffer;
 		private uint _numTexturedIndices;
 		private uint _numWireframeIndices;
+		private uint[][] _skins;
 
 		private string TextureName => $"{nameof(MdlModel)}::{_guid}";
 
@@ -89,11 +89,9 @@ namespace Sledge.Providers.Model.Mdl10
 
 			return bmp;
 		}
-		List<Rectangle> _originalRectangles;
 		private List<Rectangle> CreateTexuture(EngineInterface engine, RenderContext context)
 		{
 			if (!Model.Textures.Any()) return new List<Rectangle>();
-
 			// Combine all the textures into one long texture
 			var textures = Model.Textures.Select(x => CreateBitmap(x.Header.Width, x.Header.Height, x.Data, x.Palette, x.Header.Flags.HasFlag(TextureFlags.Masked))).ToList();
 
@@ -129,20 +127,21 @@ namespace Sledge.Providers.Model.Mdl10
 
 			return rectangles;
 		}
-		private List<Rectangle> _rectangles;
 		public void CreateResources(EngineInterface engine, RenderContext context)
 		{
-			_rectangles = CreateTexuture(engine, context);
+			_originalRectangles = CreateTexuture(engine, context);
 			_buffer = engine.CreateBuffer();
+			Init();
 		}
-		public void ReInitResources(int skinId = 0, int bodyPartId = 0)
+		private void Init()
 		{
-			var texHeight = _rectangles.Max(x => x.Bottom);
-			var texWidth = _rectangles.Max(x => x.Right);
+			_skins = Model.Skins.Select(x => x.Textures.Select(x => (uint)x).ToArray()).ToArray();
+
+			var texHeight = _originalRectangles.Max(x => x.Bottom);
+			var texWidth = _originalRectangles.Max(x => x.Right);
 			var maxTexSize = new Vector2(texWidth, texHeight);
 			var vertices = new List<VertexModel3>();
-			var indices = new Dictionary<short, List<uint>>();
-			for (short i = 0; i < Model.Textures.Count; i++) indices[i] = new List<uint>();
+			var indices = new List<uint>();
 
 			var wireframeIndices = new List<uint>();
 
@@ -150,8 +149,7 @@ namespace Sledge.Providers.Model.Mdl10
 			var _bodyPartIndices1 = new uint[Model.BodyParts.Count][];
 
 			uint vi = 0;
-			var skinMax = Math.Max(0, Math.Min(skinId, Model.Skins.Count - 1));
-			bodyPartId = Math.Max(0, bodyPartId);
+			var skinMax = 0;
 
 			var skin = Model.Skins[skinMax].Textures;
 			for (var bpi = 0; bpi < Model.BodyParts.Count; bpi++)
@@ -159,47 +157,45 @@ namespace Sledge.Providers.Model.Mdl10
 				var part = Model.BodyParts[bpi];
 				_bodyPartIndices1[bpi] = new uint[part.Models.Length];
 
-				var body = bodyPartId % part.Models.Length;
-				bodyPartId /= part.Models.Length;
-				var model = part.Models[body];
-				_bodyPartIndices1[bpi][0] = (uint)model.Meshes.Sum(x => x.Vertices.Length);
-				foreach (var mesh in model.Meshes)
+				for (var mdlIndex = 0; mdlIndex < part.Models.Length; mdlIndex++)
 				{
-					var texId = skin[mesh.Header.SkinRef];
-					var rec = _rectangles.Count > texId ? _rectangles[texId] : Rectangle.Empty;
-					for (var i = 0; i < mesh.Vertices.Length; i++)
+					var model = part.Models[mdlIndex];
+					_bodyPartIndices1[bpi][mdlIndex] = (uint)model.Meshes.Sum(x => x.Vertices.Length);
+					foreach (var mesh in model.Meshes)
 					{
-						var x = mesh.Vertices[i];
-						x.Texture = new Vector2(float.IsNaN(x.Texture.X) ? x.Vertex.X : x.Texture.X, float.IsNaN(x.Texture.Y) ? x.Vertex.Z : x.Texture.Y);
-						var origRect = _originalRectangles.Count > texId ? _originalRectangles[texId] : Rectangle.Empty;
-
-						var coeff = maxTexSize / new Vector2(origRect.Width, origRect.Height);
-						var texturePosition = new Vector3((x.Texture.X / maxTexSize.X) * coeff.X, (x.Texture.Y / maxTexSize.Y) * coeff.Y, mesh.Header.SkinRef);
-						vertices.Add(new VertexModel3
+						var texId = skin[mesh.Header.SkinRef];
+						for (var i = 0; i < mesh.Vertices.Length; i++)
 						{
-							Position = x.Vertex,
-							Normal = x.Normal,
-							Texture = texturePosition,
-							Bone = (uint)x.VertexBone,
-							Flags = Flags
-						});
-						indices[texId].Add(vi);
-						wireframeIndices.Add(vi);
-						wireframeIndices.Add(i % 3 == 2 ? vi - 2 : vi + 1);
-						vi++;
+							var x = mesh.Vertices[i];
+							x.Texture = new Vector2(float.IsNaN(x.Texture.X) ? x.Vertex.X : x.Texture.X, float.IsNaN(x.Texture.Y) ? x.Vertex.Z : x.Texture.Y);
+							var origRect = _originalRectangles.Count > texId ? _originalRectangles[texId] : Rectangle.Empty;
+
+							var coeff = maxTexSize / new Vector2(origRect.Width, origRect.Height);
+							var texturePosition = new Vector2((x.Texture.X / maxTexSize.X) * coeff.X, (x.Texture.Y / maxTexSize.Y) * coeff.Y);
+							vertices.Add(new VertexModel3
+							{
+								Position = x.Vertex,
+								Normal = x.Normal,
+								Texture = texturePosition,
+								TextureLayer = (uint)mesh.Header.SkinRef,
+								Bone = (uint)x.VertexBone,
+								Flags = Flags // Always 0 during ctor
+							});
+							indices.Add(vi);
+							wireframeIndices.Add(vi);
+							wireframeIndices.Add(i % 3 == 2 ? vi - 2 : vi + 1);
+							vi++;
+						}
 					}
 				}
+
 			}
 			_bodyPartIndices = _bodyPartIndices1;
 
 			var flatIndices = new uint[vi + wireframeIndices.Count];
 			var currentIndexCount = 0;
-			foreach (var kv in indices.OrderBy(x => x.Key))
-			{
-				var num = kv.Value.Count;
-				Array.Copy(kv.Value.ToArray(), 0, flatIndices, currentIndexCount, num);
-				currentIndexCount += num;
-			}
+			Array.Copy(indices.ToArray(), 0, flatIndices, 0, indices.Count);
+			currentIndexCount = indices.Count;
 			Array.Copy(wireframeIndices.ToArray(), 0, flatIndices, currentIndexCount, wireframeIndices.Count);
 
 			_buffer.Update(vertices, flatIndices);
@@ -208,7 +204,7 @@ namespace Sledge.Providers.Model.Mdl10
 			_numWireframeIndices = (uint)wireframeIndices.Count;
 		}
 
-		public void Render(RenderContext context, IPipeline pipeline, IViewport viewport, CommandList cl)
+		public void Render(RenderContext context, IPipeline pipeline, IViewport viewport, CommandList cl, int skinId, int bodyGroup)
 		{
 			_buffer.Bind(cl, 0);
 
@@ -217,13 +213,19 @@ namespace Sledge.Providers.Model.Mdl10
 				_textureResource.BindTo(cl, 1);
 				uint ci = 0;
 
+				var bodyPartId = bodyGroup;
+
 				foreach (var bpi in _bodyPartIndices)
 				{
-					const int model = 0;
-					for (var j = 0; j < bpi.Length; j++)
+					var body = bodyPartId % bpi.Length;
+					bodyPartId /= bpi.Length;
+					for (var model_index = 0; model_index < bpi.Length; model_index++)
 					{
-						if (j == model) cl.DrawIndexed(bpi[j], 1, ci, 0, 0);
-						ci += bpi[j];
+						var model = bpi[model_index];
+
+						if (model_index == body)
+							cl.DrawIndexed(model, 1, ci, 0, 0);
+						ci += model;
 					}
 				}
 			}
@@ -244,6 +246,13 @@ namespace Sledge.Providers.Model.Mdl10
 			//
 		}
 
+		public uint[] GetLayerSet(int skinId)
+		{
+			var skin = skinId % Model.Skins.Count;
+
+			return _skins[skin];
+		}
+		// This required to solve source engine textures loading issue. Source engie has separate material for each model
 		public string[] GetTextureName()
 		{
 			return null ;

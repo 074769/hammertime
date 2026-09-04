@@ -1,4 +1,11 @@
-﻿using System;
+﻿using LogicAndTrick.Oy;
+using Sledge.Common.Shell.Documents;
+using Sledge.Common.Shell.Settings;
+using Sledge.Common.Translations;
+using Sledge.Common.Transport;
+using Sledge.Shell.Controls;
+using Sledge.Shell.Registers;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.Composition;
@@ -7,13 +14,6 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using LogicAndTrick.Oy;
-using Sledge.Common.Shell.Documents;
-using Sledge.Common.Shell.Settings;
-using Sledge.Common.Translations;
-using Sledge.Common.Transport;
-using Sledge.Shell.Controls;
-using Sledge.Shell.Registers;
 
 namespace Sledge.Shell.Forms
 {
@@ -55,12 +55,34 @@ namespace Sledge.Shell.Forms
 			InitializeComponent();
 			InitializeShell();
 			this.Opacity = 0;
-		}
+            AllowDrop = true;
+            this.DragEnter += Shell_DragEnter;
+            this.DragDrop += Shell_DragDrop;
 
-		/// <summary>
-		/// Setup the shell pre-startup
-		/// </summary>
-		private void InitializeShell()
+        }
+
+        private async void Shell_DragDrop(object sender, DragEventArgs e)
+        {
+			var args = (string[])e.Data.GetData(DataFormats.FileDrop);
+
+            foreach (var arg in args)
+            {
+                Common.Logging.Log.Debug(nameof(Shell), $"Command line: `{arg}`");
+                if (!File.Exists(arg)) continue;
+
+                await _documentRegister.Value.OpenDocument(arg);
+            }
+        }
+
+        void Shell_DragEnter(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop)) e.Effect = DragDropEffects.Copy;
+        }
+
+        /// <summary>
+        /// Setup the shell pre-startup
+        /// </summary>
+        private void InitializeShell()
 		{
 			DocumentTabs.TabPages.Clear();
 

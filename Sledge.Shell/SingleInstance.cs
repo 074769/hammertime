@@ -15,8 +15,16 @@ namespace Sledge.Shell
 
         protected override void OnStartupNextInstance(StartupNextInstanceEventArgs e)
         {
-            e.BringToForeground = true;
+            e.BringToForeground = false;
             base.OnStartupNextInstance(e);
+            MainForm.Invoke(() =>
+            {
+                if (MainForm.WindowState == FormWindowState.Minimized)
+                {
+                    MainForm.WindowState = FormWindowState.Normal;
+                }
+                MainForm.Activate();
+            });
             Oy.Publish("Shell:InstanceOpened", e.CommandLine.ToList());
         }
     }

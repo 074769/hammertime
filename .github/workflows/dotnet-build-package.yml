@@ -12,7 +12,9 @@ jobs:
   build:
     permissions: write-all
     runs-on: windows-latest
-
+    strategy:
+      matrix:
+        arch: [x86, x64]
     steps:
     - uses: actions/checkout@v3
       with:
@@ -32,7 +34,7 @@ jobs:
       run: |
         .\SetVersionNumberConsole.ps1 -ver $env:version
     - name: Build
-      run: dotnet build -c Release -p:Platform=x86 --output ./bin/
+      run: dotnet build -c Release -p:Platform=${{ matrix.arch }} --output ./bin/
     - name: Write build time
       run: date +"%Y-%m-%d %H:%M" > ./bin/build && echo "latest" >> ./bin/build
     - name: Copy prefabs
@@ -42,21 +44,49 @@ jobs:
     - name: Set app version
       run: |
         Set-Content -Path ./Build/Sledge.Editor.New.Installer.nsi -Value ((Get-Content './Build/Sledge.Editor.New.Installer.nsi' -Raw) -replace "{version}", "$env:version")
+    - name: Set app arch
+      run: |
+        Set-Content -Path ./Build/Sledge.Editor.New.Installer.nsi -Value ((Get-Content './Build/Sledge.Editor.New.Installer.nsi' -Raw) -replace "{arch}", "${{ matrix.arch }}")
+    - name: 'Install makensis (choco)'
+      run: choco install nsis
     - name: Build installer
-      uses: joncloud/makensis-action@v4.1
+      uses: joncloud/makensis-action@v5.0
       with:
         script-file: ./Build/Sledge.Editor.New.Installer.nsi
     - name: Create Zip File
       uses: vimtor/action-zip@v1.1
       with:
         files: ./bin/
-        dest: ./HammerTime.zip
+        dest: ./HammerTime.${{ matrix.arch }}.zip
+    - name: Save Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-${{ matrix.arch }}
+        path: |
+            ./Hammertime.*.exe
+            ./Hammertime.${{ matrix.arch }}.zip
+
+  release:
+    permissions: write-all
+    runs-on: windows-latest
+    needs: build
+    steps:
+    - name: Download x86 artifact
+      uses: actions/download-artifact@v5
+      with: 
+        name: build-x86
+        path: ./dist/x86
+    - name: Download x64 artifact
+      uses: actions/download-artifact@v5
+      with: 
+        name: build-x64
+        path: ./dist/x64
     - name: Release
-      uses: "marvinpinto/action-automatic-releases@latest"
+      uses: marvinpinto/action-automatic-releases@latest
       with:
         repo_token: "${{ secrets.GITHUB_TOKEN }}"
         prerelease: false
         files: |
-            ./HammerTime.zip
-            ./Hammertime.Editor.${{ env.version }}.exe
+            ./dist/x86/*
+            ./dist/x64/*
         automatic_release_tag: latest

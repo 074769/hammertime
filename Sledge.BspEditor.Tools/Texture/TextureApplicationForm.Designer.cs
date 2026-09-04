@@ -71,6 +71,7 @@
             RightClickActionButton = new Sledge.Shell.Controls.DropdownButton();
             RightClickActionMenu = new System.Windows.Forms.ContextMenuStrip(components);
             ResetButton = new System.Windows.Forms.Button();
+            apply_null = new System.Windows.Forms.Button();
             lightmapGrp = new System.Windows.Forms.Panel();
             AlignGroup.SuspendLayout();
             JustifyGroup.SuspendLayout();
@@ -121,7 +122,7 @@
             // SmoothingGroupsButton
             // 
             SmoothingGroupsButton.Enabled = false;
-            SmoothingGroupsButton.Location = new System.Drawing.Point(4, 32);
+            SmoothingGroupsButton.Location = new System.Drawing.Point(4, 34);
             SmoothingGroupsButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             SmoothingGroupsButton.Name = "SmoothingGroupsButton";
             SmoothingGroupsButton.Size = new System.Drawing.Size(136, 27);
@@ -492,7 +493,7 @@
             // LightmapValue
             // 
             LightmapValue.CtrlWheelMultiplier = new decimal(new int[] { 0, 0, 0, 0 });
-            LightmapValue.Location = new System.Drawing.Point(74, 6);
+            LightmapValue.Location = new System.Drawing.Point(72, 5);
             LightmapValue.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             LightmapValue.Maximum = new decimal(new int[] { 512, 0, 0, 0 });
             LightmapValue.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
@@ -573,6 +574,16 @@
             ResetButton.UseVisualStyleBackColor = true;
             ResetButton.Click += ResetButton_Click;
             // 
+            // apply_null
+            // 
+            apply_null.Location = new System.Drawing.Point(272, 175);
+            apply_null.Name = "apply_null";
+            apply_null.Size = new System.Drawing.Size(75, 27);
+            apply_null.TabIndex = 39;
+            apply_null.Text = "NULL";
+            apply_null.UseVisualStyleBackColor = true;
+            apply_null.Click += apply_null_Click;
+            // 
             // lightmapGrp
             // 
             lightmapGrp.Controls.Add(SmoothingGroupsButton);
@@ -590,6 +601,7 @@
             AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             ClientSize = new System.Drawing.Size(486, 485);
             Controls.Add(lightmapGrp);
+            Controls.Add(apply_null);
             Controls.Add(ResetButton);
             Controls.Add(RightClickActionButton);
             Controls.Add(LeftClickActionButton);
@@ -675,5 +687,6 @@
 		private System.Windows.Forms.Button RRightButton;
 		private System.Windows.Forms.Button RLeftButton;
 		private System.Windows.Forms.Panel lightmapGrp;
+		private System.Windows.Forms.Button apply_null;
 	}
 }

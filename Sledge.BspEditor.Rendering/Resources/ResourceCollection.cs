@@ -45,28 +45,28 @@ namespace Sledge.BspEditor.Rendering.Resources
 			_resources = new ConcurrentDictionary<string, List<IResource>>();
 		}
 
-		/// <summary>
-		/// Get a model from the collection. If the model isn't loaded already, it will be.
-		/// </summary>
-		/// <param name="environment">The environment to load the model from</param>
-		/// <param name="path">The path to the model</param>
-		/// <returns>Completion task for the model</returns>
-		public async Task<IModel> GetModel(IEnvironment environment, string path)
-		{
-			EnsureEnvironment(environment);
-			var mlist = _models[environment.ID];
-			var rlist = _resources[environment.ID];
-
-			/// Since MdlModel class also provides code for rendering - we have duplicating renderers, that would affect each other same model file
-			/*
+        /// <summary>
+        /// Get a model from the collection. If the model isn't loaded already, it will be.
+        /// </summary>
+        /// <param name="environment">The environment to load the model from</param>
+        /// <param name="path">The path to the model</param>
+        /// <returns>Completion task for the model</returns>
+        public async Task<IModel> GetModel(IEnvironment environment, string path)
+        {
+            EnsureEnvironment(environment);
+            var mlist = _models[environment.ID];
+            var rlist = _resources[environment.ID];
+            
+            /// Since MdlModel class also provides code for rendering - we have duplicating renderers, that would affect each other same model file
+            
             // Check if the model has already been loaded
             var existing = mlist.FirstOrDefault(x =>
                 string.Equals(x.Name, path, StringComparison.InvariantCultureIgnoreCase));
             if (existing != null) return existing.Model;
-            */
-			// Find the file
-			var file = environment.Root.TraversePath(path);
-			if (file == null || !file.Exists) return null;
+            
+            // Find the file
+            var file = environment.Root.TraversePath(path);
+            if (file == null || !file.Exists) return null;
 
 			// Find a provider for the file
 			var provider = _modelProviders.FirstOrDefault(x => x.Value.CanLoadModel(file));
@@ -131,10 +131,11 @@ namespace Sledge.BspEditor.Rendering.Resources
 			var tc = await environment.GetTextureCollection();
 			var item = await tc.GetTextureItem(name);
 
-			using var ss = tc.GetStreamSource();
-			var texture = await UploadTexture(environment, item, ss) as Texture;
-			tList.Add(item.Name);
-			var resource = new SpriteRenderable(texture, item);
+            using var ss = tc.GetStreamSource();
+            var texture = await UploadTexture(environment, item, ss) as Texture;
+            if (texture == null) return null;
+            tList.Add(item.Name);
+            var resource = new SpriteRenderable(texture, item);
 
 			_engine.Value.CreateResource(resource);
 			rList.Add(resource);
@@ -197,19 +198,23 @@ namespace Sledge.BspEditor.Rendering.Resources
 			if (!_resources.ContainsKey(environment.ID)) _resources.TryAdd(environment.ID, new List<IResource>());
 		}
 
-		private async Task<IResource> UploadTexture(IEnvironment environment, TextureItem item,
-			ITextureStreamSource source)
-		{
-			var bitmaps = await source.GetImage(item.Name, 512, 512);
-			var firstbitmap = bitmaps.First();
-			var combinedBitmap = new Bitmap(firstbitmap.Width * bitmaps.Count, firstbitmap.Height);
-			int i = 0;
-			foreach (var bitmap in bitmaps)
-			{
-				using (Graphics g = Graphics.FromImage(combinedBitmap))
-				{
-					g.DrawImage(bitmap, firstbitmap.Width * i, 0);
-				}
+        private async Task<IResource> UploadTexture(IEnvironment environment, TextureItem item,
+            ITextureStreamSource source)
+        {
+            var bitmaps = await source.GetImage(item.Name, 512, 512);
+            var firstbitmap = bitmaps?.First();
+            if(firstbitmap == null)
+            {
+                return null;
+            }
+            var combinedBitmap = new Bitmap(firstbitmap.Width * bitmaps.Count, firstbitmap.Height);
+            int i = 0;
+            foreach (var bitmap in bitmaps)
+            {
+                using (Graphics g = Graphics.FromImage(combinedBitmap))
+                {
+                    g.DrawImage(bitmap, firstbitmap.Width * i, 0);
+                }
 
 				i++;
 			}

@@ -16,7 +16,11 @@ namespace Sledge.Rendering.Engine
 	public class ResourceLoader
 	{
 		private readonly RenderContext _context;
-
+#if DEBUG
+		private const bool DebugMode = true;
+#else
+		private const bool DebugMode = false;
+#endif
 		public ResourceLayout ProjectionLayout { get; }
 		public ResourceLayout TextureLayout { get; }
 		public Sampler TextureSampler { get; }
@@ -55,9 +59,10 @@ namespace Sledge.Rendering.Engine
             VertexModel3LayoutDescription = new VertexLayoutDescription(
                 new VertexElementDescription("Position", VertexElementSemantic.Position, VertexElementFormat.Float3),
                 new VertexElementDescription("Normal", VertexElementSemantic.Normal, VertexElementFormat.Float3),
-                new VertexElementDescription("Texture", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float3),
-                new VertexElementDescription("Bone", VertexElementSemantic.Position, VertexElementFormat.UInt1),
-				new VertexElementDescription("Flags", VertexElementSemantic.Position, VertexElementFormat.UInt1)
+                new VertexElementDescription("Texture", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float2),
+                new VertexElementDescription("Bone", VertexElementSemantic.Color, VertexElementFormat.UInt1),
+				new VertexElementDescription("Flags", VertexElementSemantic.TextureCoordinate, VertexElementFormat.UInt1),
+                new VertexElementDescription("TextureLayer", VertexElementSemantic.Color, VertexElementFormat.UInt1)
 			);
 
 			TextureSampler = context.Device.Aniso4xSampler;
@@ -106,8 +111,8 @@ namespace Sledge.Rendering.Engine
 		public (Shader, Shader) LoadShaders(string name)
 		{
 			return (
-				_context.Device.ResourceFactory.CreateShader(new ShaderDescription(ShaderStages.Vertex, GetEmbeddedShader(name + ".vert.hlsl"), "main")),
-				_context.Device.ResourceFactory.CreateShader(new ShaderDescription(ShaderStages.Fragment, GetEmbeddedShader(name + ".frag.hlsl"), "main"))
+				_context.Device.ResourceFactory.CreateShader(new ShaderDescription(ShaderStages.Vertex, GetEmbeddedShader(name + ".vert.hlsl"), "main", DebugMode)),
+				_context.Device.ResourceFactory.CreateShader(new ShaderDescription(ShaderStages.Fragment, GetEmbeddedShader(name + ".frag.hlsl"), "main", DebugMode))
 			);
 		}
 

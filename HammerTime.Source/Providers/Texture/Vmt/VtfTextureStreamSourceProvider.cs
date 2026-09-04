@@ -1,5 +1,6 @@
 ﻿using Sledge.Formats.Texture.Vtf;
 using Sledge.Providers.Texture;
+using System.Collections.ObjectModel;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
@@ -18,8 +19,10 @@ namespace HammerTime.Source.Providers.Texture.Vmt
 		{
 			_package = null;
 		}
+        public async Task<ICollection<Bitmap>> GetRawImage(string item, int maxWidth, int maxHeight) => await GetImage(item, maxWidth, maxHeight);
 
-		public async Task<ICollection<Bitmap>> GetImage(string item, int maxWidth, int maxHeight)
+
+        public async Task<ICollection<Bitmap>> GetImage(string item, int maxWidth, int maxHeight)
 		{
 			return await Task.Factory.StartNew(() =>
 			{

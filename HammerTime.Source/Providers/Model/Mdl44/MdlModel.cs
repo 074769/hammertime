@@ -23,8 +23,9 @@ namespace HammerTime.Source.Providers.Model.Mdl44
 		private uint _numWireframeIndices;
 		private uint _numTexturedIndices;
 		private List<(int vertexStart, int vertexCount, int materialNum)> Meshes = new();
+        private uint[][] _skins;
 
-		public MdlModel(MdlFile model)
+        public MdlModel(MdlFile model)
 		{
 			Model = model;
 			_guid = Guid.NewGuid();
@@ -37,7 +38,7 @@ namespace HammerTime.Source.Providers.Model.Mdl44
 			{
 				Position = v.Vertex,
 				Normal = v.Normal,
-				Texture = new Vector3(v.Texture, 0),
+				Texture = v.Texture,
 				Bone = 0, //(uint)v.VertexBone, FIXME
 				Flags = VertexFlags.None
 			}).ToArray();
@@ -117,8 +118,14 @@ namespace HammerTime.Source.Providers.Model.Mdl44
 		{
 			return new List<string>();
 		}
+        public uint[] GetLayerSet(int skinId)
+        {
+            var skin = skinId % Model.SkinRef.Length; // TODO: check if this is correct, or if we should use a different method to get the skin index
 
-		internal void Render(RenderContext context, IPipeline pipeline, IViewport viewport, CommandList cl)
+            return _skins[skin];
+        }
+
+        internal void Render(RenderContext context, IPipeline pipeline, IViewport viewport, CommandList cl)
 		{
 			_buffer.Bind(cl, 0);
 

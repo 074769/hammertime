@@ -106,13 +106,13 @@ namespace Sledge.BspEditor.Tools.Texture
         public string ActionAxis { get; set; }
         public string ActionAlignToView { get; set; }
 
-        public void Translate(ITranslationStringProvider strings)
-        {
-            if (Handle == null) CreateHandle();
-            var prefix = GetType().FullName;
-            this.InvokeLater(() =>
-            {
-                Text = strings.GetString(prefix, "Title");
+		public void Translate(ITranslationStringProvider strings)
+		{
+			if (Handle == null) CreateHandle();
+			var prefix = GetType().FullName;
+			this.InvokeLater(() =>
+			{
+				Text = strings.GetString(prefix, "Title");
 
                 ScaleLabel.Text = strings.GetString(prefix, "Scale");
                 ShiftLabel.Text = strings.GetString(prefix, "Shift");
@@ -878,9 +878,14 @@ namespace Sledge.BspEditor.Tools.Texture
             });
         }
 
-        private void RLeftButton_Click(object sender, EventArgs e)
-        {
-            RotateFaceTexture(-90);
-        }
-    }
+		private void RLeftButton_Click(object sender, EventArgs e)
+		{
+			RotateFaceTexture(-90);
+		}
+
+		private async void apply_null_Click(object sender, EventArgs e)
+		{
+			await ApplyTexture("null");
+		}
+	}
 }
