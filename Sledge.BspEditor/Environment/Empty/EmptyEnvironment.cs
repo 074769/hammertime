@@ -1,11 +1,13 @@
-﻿using System.Collections.Generic;
-using System.Threading.Tasks;
-using Sledge.BspEditor.Compile;
+﻿using Sledge.BspEditor.Compile;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Primitives.MapData;
+using Sledge.Common.Shell.Documents;
 using Sledge.DataStructures.GameData;
 using Sledge.FileSystem;
 using Sledge.Providers.Texture;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace Sledge.BspEditor.Environment.Empty
 {
@@ -16,8 +18,9 @@ namespace Sledge.BspEditor.Environment.Empty
         public string Name => "Empty";
         public IFile Root => null;
         public IEnumerable<string> Directories => new string[0];
+		public IReadOnlySet<Capability> Capabilities => new HashSet<Capability>();
 
-        public async Task<TextureCollection> GetTextureCollection()
+		public async Task<TextureCollection> GetTextureCollection()
         {
              return new EmptyTextureCollection(new TexturePackage[0]);
         }
@@ -57,11 +60,13 @@ namespace Sledge.BspEditor.Environment.Empty
             return false;
         }
 
-        public string DefaultBrushEntity => "";
+		public IEnumerable<TexturePackageReference> GetSkyboxes() => Enumerable.Empty<TexturePackageReference>();
+		public string DefaultBrushEntity => "";
         public string DefaultPointEntity => "";
         public decimal DefaultTextureScale => 1;
         public float DefaultGridSize => 16;
 		public string CordonTexture { get; set; }
 		public string[] NonRenderableTextures { get; set; }
+        public string BaseDirectory => ".";
 	}
 }

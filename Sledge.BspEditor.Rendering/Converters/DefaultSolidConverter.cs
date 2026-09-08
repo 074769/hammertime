@@ -55,7 +55,6 @@ namespace Sledge.BspEditor.Rendering.Converters
 			// Pack the indices like this [ solid1 ... solidn ] [ wireframe1 ... wireframe n ]
 			var numSolidIndices = (uint)faces.Sum(x => (x.Vertices.Count - 2) * 3);
 			var numWireframeIndices = numVertices * 2;
-
 			var points = new VertexStandard[numVertices];
 			var shadowPoints = new VertexStandard[numVertices];
 			var indices = new uint[numSolidIndices + numWireframeIndices];
@@ -178,6 +177,7 @@ namespace Sledge.BspEditor.Rendering.Converters
 
 				}
 
+
 				// Triangles - [0 1 2]  ... [0 n-1 n]
 				for (uint i = 2; i < numFaceVerts; i++)
 				{
@@ -185,13 +185,13 @@ namespace Sledge.BspEditor.Rendering.Converters
 					indices[si++] = offs + i - 1;
 					indices[si++] = offs + i;
 				}
-
 				// Lines - [0 1] ... [n-1 n] [n 0]
 				for (uint i = 0; i < numFaceVerts; i++)
 				{
 					indices[wi++] = offs + i;
 					indices[wi++] = offs + (i == numFaceVerts - 1 ? 0 : i + 1);
 				}
+
 			}
 
 			var groups = new List<BufferGroup>();
@@ -200,7 +200,7 @@ namespace Sledge.BspEditor.Rendering.Converters
 			uint texOffset = 0;
 			foreach (var f in faces)
 			{
-				var texInd = (uint)(f.Vertices.Count - 2) * 3;
+				var texInd  = (uint)(f.Vertices.Count - 2) * 3;
 
 				if ((hideNull && tc.IsNullTexture(f.Texture.Name)) || (hideClip && tc.IsClipTexture(f.Texture.Name) || (skybox && f.Texture.Name.ToLower() == "sky")))
 				{

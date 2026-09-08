@@ -1,5 +1,7 @@
-﻿using System.Drawing;
+﻿using System;
+using System.Drawing;
 using Sledge.Common.Shell.Context;
+using Sledge.Common.Shell.Documents;
 
 namespace Sledge.Common.Shell.Components
 {
@@ -17,5 +19,9 @@ namespace Sledge.Common.Shell.Components
         /// The tool's name
         /// </summary>
         string Name { get; }
+        /// <summary>
+        /// The tool's id to filter tools
+        /// </summary>
+        Capability ToolCapability { get; }
     }
 }

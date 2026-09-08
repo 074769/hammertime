@@ -1,12 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel.Composition;
-using System.Drawing;
-using System.Globalization;
-using System.IO;
-using System.Linq;
-using System.Numerics;
-using System.Threading.Tasks;
+﻿using HammerTime.Source.Primitives.MapObjectData;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Environment;
 using Sledge.BspEditor.Grid;
@@ -14,16 +6,21 @@ using Sledge.BspEditor.Primitives;
 using Sledge.BspEditor.Primitives.MapData;
 using Sledge.BspEditor.Primitives.MapObjectData;
 using Sledge.BspEditor.Primitives.MapObjects;
+using Sledge.BspEditor.Providers;
 using Sledge.Common;
 using Sledge.Common.Shell.Documents;
 using Sledge.Common.Transport;
 using Sledge.DataStructures.Geometric;
+using System.ComponentModel.Composition;
+using System.Drawing;
+using System.Globalization;
+using System.Numerics;
+using HammerTime.Source.Primitives.MapObjectData;
 using Plane = Sledge.DataStructures.Geometric.Precision.Plane;
-using Polygon = Sledge.DataStructures.Geometric.Precision.Polygon;
 using Polyhedron = Sledge.DataStructures.Geometric.Precision.Polyhedron;
 using PVector3 = Sledge.DataStructures.Geometric.Precision.Vector3;
 
-namespace Sledge.BspEditor.Providers
+namespace HammerTime.Source.Providers
 {
     [Export(typeof(IBspSourceProvider))]
     public class VmfBspSourceProvider : IBspSourceProvider
@@ -52,12 +49,12 @@ namespace Sledge.BspEditor.Providers
 
         public IEnumerable<FileExtensionInfo> SupportedFileExtensions { get; } = new[]
         {
-            new FileExtensionInfo("Valve map format", ".vmf", ".vmx"), 
+            new FileExtensionInfo("Valve map format", ".vmf", ".vmx"),
         };
 
-		public bool CanSave => true;
+        public bool CanSave => true;
 
-		public async Task<BspFileLoadResult> Load(Stream stream, IEnvironment environment)
+        public async Task<BspFileLoadResult> Load(Stream stream, IEnvironment environment)
         {
             var task = await Task.Factory.StartNew(async () =>
             {
@@ -76,11 +73,11 @@ namespace Sledge.BspEditor.Providers
                     {
                         if (o.Name == nameof(Root))
                         {
-                            map.Root.Unclone((Root) _factory.Deserialise(o));
+                            map.Root.Unclone((Root)_factory.Deserialise(o));
                         }
                         else
                         {
-                            map.Data.Add((IMapData) _factory.Deserialise(o));
+                            map.Data.Add((IMapData)_factory.Deserialise(o));
                         }
                     }
                 }
@@ -134,7 +131,7 @@ namespace Sledge.BspEditor.Providers
 
             // A map of ids from the map -> ids from the vmf
             var mapToSource = new Dictionary<long, long>();
-            
+
             world.Editor.Apply(map.Root);
             mapToSource.Add(map.Root.ID, world.ID);
 
@@ -163,9 +160,9 @@ namespace Sledge.BspEditor.Providers
 
             // All objects should have proper ids by now, get rid of anything with parentid 0 just in case
             var grouped = tree.GroupBy(x => x.Editor.ParentID).Where(x => x.Key > 0).ToDictionary(x => x.Key, x => x.ToList());
-            
+
             // Step through each level of the tree and add them to their parent branches
-            var leaves = new List<IMapObject> {map.Root};
+            var leaves = new List<IMapObject> { map.Root };
 
             // Use a iteration limit of 1000. If the tree's that deep, I don't want to load your map anyway...
             for (var i = 0; i < 1000 && leaves.Any(); i++) // i.e. while (leaves.Any())
@@ -331,7 +328,7 @@ namespace Sledge.BspEditor.Providers
         {
             var self = VmfObject.Serialise(obj);
             if (self == null) return null;
-            
+
             var so = self.ToSerialisedObject();
 
             foreach (var solid in obj.FindAll().OfType<Solid>())
@@ -418,15 +415,15 @@ namespace Sledge.BspEditor.Providers
 
             list.Add(so);
         }
-        
+
         #endregion
-        
-        private static string FormatVector3(Vector3 c)
+
+        private static string FormatVector3(Vector3 c, string format = "0.00####")
         {
-            return $"{FormatDecimal(c.X)} {FormatDecimal(c.Y)} {FormatDecimal(c.Z)}";
+            return $"{FormatDecimal(c.X, format)} {FormatDecimal(c.Y, format)} {FormatDecimal(c.Z, format)}";
         }
 
-        private static string FormatDecimal(float d)
+        private static string FormatDecimal(float d, string format = "0.00####")
         {
             return d.ToString("0.00####", CultureInfo.InvariantCulture);
         }
@@ -436,7 +433,7 @@ namespace Sledge.BspEditor.Providers
             var spl = input.Split(splitChars, StringSplitOptions.RemoveEmptyEntries);
             if (spl.Length == expected)
             {
-                var parsed = spl.Select(x => float.TryParse(x, NumberStyles.Float, CultureInfo.InvariantCulture, out var o) ? (float?) o : null).ToList();
+                var parsed = spl.Select(x => float.TryParse(x, NumberStyles.Float, CultureInfo.InvariantCulture, out var o) ? (float?)o : null).ToList();
                 if (parsed.All(x => x.HasValue))
                 {
                     // ReSharper disable once PossibleInvalidOperationException
@@ -453,7 +450,7 @@ namespace Sledge.BspEditor.Providers
             var spl = input.Split(splitChars, StringSplitOptions.RemoveEmptyEntries);
             if (spl.Length == expected)
             {
-                var parsed = spl.Select(x => double.TryParse(x, NumberStyles.Float, CultureInfo.InvariantCulture, out var o) ? (double?) o : null).ToList();
+                var parsed = spl.Select(x => double.TryParse(x, NumberStyles.Float, CultureInfo.InvariantCulture, out var o) ? (double?)o : null).ToList();
                 if (parsed.All(x => x.HasValue))
                 {
                     // ReSharper disable once PossibleInvalidOperationException
@@ -513,6 +510,38 @@ namespace Sledge.BspEditor.Providers
                 return null;
             }
         }
+        private class VmfConnections
+        {
+
+            private List<Connections.Connection> _connections = new();
+            public VmfConnections(SerialisedObject obj)
+            {
+                foreach (var so in obj.Properties)
+                {
+                    var parts = so.Value.Split(new[] { ',' });
+                    _connections.Add(new Connections.Connection
+                    {
+                        Name = so.Key,
+                        TargetEntity = parts.Length > 0 ? parts[0] : string.Empty,
+                        TargetAction = parts.Length > 1 ? parts[1] : string.Empty,
+                        Parameter = parts.Length > 2 ? parts[2] : string.Empty,
+                        Delay = parts.Length > 3 && float.TryParse(parts[3], NumberStyles.Float, CultureInfo.InvariantCulture, out var delay) ? delay : 0f,
+                        Once = parts.Length > 4 && int.TryParse(parts[4], out var once) && once >= 0 ? true : false
+                    });
+
+                }
+            }
+
+            public IMapObjectData ToMapObject()
+            {
+                return new Connections(_connections);
+            }
+
+            public SerialisedObject ToSerialisedObject()
+            {
+                throw new NotImplementedException();
+            }
+        }
 
         private class VmfEntity : VmfObject
         {
@@ -521,6 +550,7 @@ namespace Sledge.BspEditor.Providers
             public Vector3? Origin { get; set; }
 
             private static readonly string[] ExcludedKeys = { "id", "spawnflags", "classname", "origin", "wad", "mapversion" };
+            private VmfConnections? _connections;
 
             public VmfEntity(SerialisedObject obj) : base(obj)
             {
@@ -529,6 +559,11 @@ namespace Sledge.BspEditor.Providers
                 {
                     var o = Deserialise(so);
                     if (o != null) Objects.Add(o);
+                }
+                var connections = obj.Children.Find(so => so.Name.Equals("connections", StringComparison.InvariantCultureIgnoreCase));
+                if (connections != null)
+                {
+                    _connections = new VmfConnections(connections);
                 }
 
                 var ed = new EntityData();
@@ -547,9 +582,9 @@ namespace Sledge.BspEditor.Providers
                 }
             }
 
-            public VmfEntity(Entity ent) : this((IMapObject) ent)
+            public VmfEntity(Entity ent) : this((IMapObject)ent)
             {
-                
+
             }
 
             protected VmfEntity(IMapObject obj) : base(obj)
@@ -560,7 +595,7 @@ namespace Sledge.BspEditor.Providers
 
             public override IEnumerable<VmfObject> Flatten()
             {
-                return Objects.SelectMany(x => x.Flatten()).Union(new[] {this});
+                return Objects.SelectMany(x => x.Flatten()).Union(new[] { this });
             }
 
             public override IMapObject ToMapObject(UniqueNumberGenerator generator)
@@ -569,6 +604,7 @@ namespace Sledge.BspEditor.Providers
 
                 ent.Data.Add(EntityData);
                 if (Origin != null) ent.Data.Add(new Origin(Origin.Value));
+                if (_connections != null) ent.Data.Add(_connections.ToMapObject());
 
                 Editor.Apply(ent);
 
@@ -691,6 +727,7 @@ namespace Sledge.BspEditor.Providers
 
             private void CreateFaces(Solid solid, List<VmfSide> sides, UniqueNumberGenerator generator)
             {
+
                 // If all the sides don't have enough vertices, calculate them
                 if (!sides.All(x => x.Vertices.Count >= 3))
                 {
@@ -719,10 +756,87 @@ namespace Sledge.BspEditor.Providers
                     var face = new Face(generator.Next("Face"))
                     {
                         Plane = side.Plane.ToStandardPlane(),
-                        Texture = side.Texture
+                        Texture = side.Texture,
+                        LightmapScale = side.LightmapScale
                     };
                     face.Vertices.AddRange(side.Vertices);
                     if (face.Vertices.Any()) solid.Data.Add(face);
+                }
+
+                if (sides.Any(x => x.DisplacementData != null))
+                {
+                    var displacementSide = sides.First(x => x.DisplacementData != null);
+                    var face = new Displacement(generator.Next("Face"))
+                    {
+                        Plane = displacementSide.Plane.ToStandardPlane(),
+                        Texture = displacementSide.Texture,
+                    };
+                    var power = (int)Math.Pow(2, displacementSide.DisplacementData.Power);
+                    var power1 = displacementSide.DisplacementData.Power;
+                    var rowCount = power + 1;
+                    var begin = displacementSide.DisplacementData.StartPosition;
+                    var rowEnd = displacementSide;
+                    var mesh = new Vector3[rowCount, rowCount];
+
+                    var topleftIdx = displacementSide.Vertices.IndexOf(displacementSide.DisplacementData.StartPosition);
+                    var quadIdxs = displacementSide.Vertices.Skip(topleftIdx).Concat(displacementSide.Vertices.Take(topleftIdx)).ToArray();
+
+                    Vector3 v00 = quadIdxs[0];
+                    Vector3 v10 = quadIdxs[1];
+                    Vector3 v11 = quadIdxs[2];
+                    Vector3 v01 = quadIdxs[3];
+                    var res = rowCount;
+                    var normals = displacementSide.DisplacementData.Normals.Values.ToArray();
+                    var distances = displacementSide.DisplacementData.Distances.Values.ToArray();
+
+                    var vertices1 = new List<Vector3>();
+
+                    for (int i = 0; i < rowCount; i++)
+                    {
+                        float u = (float)i / (float)(rowCount - 1); // Interpolation factor along one axis
+                        for (int j = 0; j < rowCount; j++)
+                        {
+                            float v = (float)j / (float)(rowCount - 1); // Interpolation factor along the other axis
+                            mesh[i, j] = (1 - u) * (1 - v) * v00 +
+                                                 u * (1 - v) * v10 +
+                                                 u * v * v11 +
+                                                 (1 - u) * v * v01;
+                            mesh[i, j] += normals[i][j] * distances[i][j];
+                            vertices1.Add(mesh[i, j]);
+                        }
+                    }
+
+                    Vector3[] vertices = new Vector3[res * res];
+                    for (int i = 0; i < res; i++)
+                    {
+                        for (int j = 0; j < res; j++)
+                        {
+                            vertices[i * res + j] = mesh[i, j];
+                        }
+                    }
+                    List<Vector3[]> trianglesVertices = new List<Vector3[]>();
+                    for (int i = 0; i < power; i++)
+                    {
+                        for (int j = 0; j < power; j++)
+                        {
+                            trianglesVertices.Add(new Vector3[]
+                            {
+                                mesh[i, j],
+                                mesh[i + 1, j],
+                                mesh[i, j + 1],
+                            });
+                            trianglesVertices.Add(new Vector3[]
+                            {
+                                mesh[i + 1, j],
+                                mesh[i + 1, j + 1],
+                                mesh[i, j + 1],
+                            });
+                        }
+                    }
+
+                    solid.Data.Remove(x => x is Face);
+                    face.Vertices.AddRange(vertices);
+                    solid.Data.Add(face);
                 }
 
                 solid.DescendantsChanged();
@@ -761,20 +875,196 @@ namespace Sledge.BspEditor.Providers
 
         private class VmfSide
         {
+            public class Displacement
+            {
+                public int Power { get; set; }
+                public Vector3 StartPosition { get; set; }
+                public int Flags { get; set; }
+                public float Elevation { get; set; }
+                public float Subdivision { get; set; }
+                public Dictionary<string, Vector3[]> Normals { get; set; }
+                public Dictionary<string, float[]> Distances { get; set; }
+                public Dictionary<string, Vector3[]> Offsets { get; set; }
+                public Dictionary<string, Vector3[]> OffsetsNormals { get; set; }
+                public Dictionary<string, float[]> Alphas { get; set; }
+                public Dictionary<string, Vector2[]> TriangleTags { get; set; }
+                public KeyValuePair<int, int[]> AllowedVertives { get; set; }
+                public Displacement(SerialisedObject obj)
+                {
+                    Power = obj.Get("power", 0);
+
+                    if (ParseFloatArray(obj.Get("startposition", ""), new[] { ' ', '[', ']' }, 3, out float[] sp))
+                    {
+                        StartPosition = new Vector3(sp[0], sp[1], sp[2]);
+                    }
+                    Flags = obj.Get("flags", 0);
+                    Elevation = obj.Get("elevation", 0f);
+                    Subdivision = obj.Get("subdiv", 0f);
+                    Normals = ReadRowVector3Array(obj, Power, "normals");
+                    Offsets = ReadRowVector3Array(obj, Power, "offsets");
+                    OffsetsNormals = ReadRowVector3Array(obj, Power, "offset_normals");
+                    Distances = ReadRowFloatArray(obj, Power, "distances");
+                    Alphas = ReadRowFloatArray(obj, Power, "alphas");
+                    TriangleTags = ReadRowVector2Array(obj, Power, "triangle_tags");
+                    if (obj.Children.Any(x => x.Name == "allowed_verts"))
+                    {
+
+                        var allowedVertices = obj.Children.First(x => x.Name == "allowed_verts");
+                        var allowedRow = allowedVertices.Properties.FirstOrDefault();
+                        if (ParseFloatArray(allowedRow.Value, new[] { ' ' }, 10, out var allowedValues))
+                        {
+                            AllowedVertives = new KeyValuePair<int, int[]>(int.Parse(allowedRow.Key), allowedValues.Select(x => (int)Math.Round(x)).ToArray());
+                        }
+                        else
+                        {
+                            AllowedVertives = new KeyValuePair<int, int[]>(10, new int[0]);
+                        }
+                    }
+                    else
+                    {
+                        AllowedVertives = new KeyValuePair<int, int[]>(10, new int[0]);
+                    }
+                }
+                Dictionary<string, float[]> ReadRowFloatArray(SerialisedObject obj, int power, string property)
+                {
+                    int vertices = (power * power) + 1;
+
+                    if (obj.Children.Any(x => x.Name == property))
+                    {
+                        var propObj = obj.Children.First(x => x.Name == property);
+                        var rows = new Dictionary<string, float[]>();
+
+                        foreach (var kv in propObj.Properties)
+                        {
+                            var floatArray = new float[vertices];
+                            if (ParseFloatArray(kv.Value, new[] { ' ', '[', ']' }, vertices, out float[] propValue))
+                            {
+                                floatArray = propValue;
+                            }
+                            rows[kv.Key] = floatArray;
+                        }
+                        return rows;
+                    }
+                    return Enumerable.Range(0, vertices).ToDictionary(i => "row" + i, i => Enumerable.Range(0, vertices).Select(j => 0f).ToArray());
+                }
+                Dictionary<string, Vector3[]> ReadRowVector3Array(SerialisedObject obj, int power, string property)
+                {
+                    int vertices = (int)MathF.Pow(2, power) + 1;
+
+                    if (obj.Children.Any(x => x.Name == property))
+                    {
+                        var normalsObj = obj.Children.First(x => x.Name == property);
+                        var normals = new Dictionary<string, Vector3[]>();
+
+                        foreach (var kv in normalsObj.Properties)
+                        {
+                            var parts = kv.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                            if (parts.Length != vertices * 3) continue;
+                            var normalArray = new Vector3[vertices];
+                            for (int i = 0; i < vertices; i++)
+                            {
+                                if (ParseFloatArray(string.Join(' ', parts.Skip(i * 3).Take(3)), new[] { ' ', '[', ']' }, 3, out float[] n))
+                                {
+                                    normalArray[i] = new Vector3(n[0], n[1], n[2]);
+                                }
+                            }
+                            normals[kv.Key] = normalArray;
+                        }
+                        return normals;
+                    }
+                    return Enumerable.Range(0, vertices).ToDictionary(i => "row" + i, i => Enumerable.Range(0, vertices).ToDictionary(i => i, i => Vector3.Zero).Values.ToArray());
+                }
+                Dictionary<string, Vector2[]> ReadRowVector2Array(SerialisedObject obj, int power, string property)
+                {
+                    int vertices = (power * power);
+
+                    if (obj.Children.Any(x => x.Name == property))
+                    {
+                        var normalsObj = obj.Children.First(x => x.Name == property);
+                        var normals = new Dictionary<string, Vector2[]>();
+
+                        foreach (var kv in normalsObj.Properties)
+                        {
+                            var parts = kv.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                            if (parts.Length != vertices * 2) continue;
+                            var normalArray = new Vector2[vertices];
+                            for (int i = 0; i < vertices; i++)
+                            {
+                                if (ParseFloatArray(string.Join(' ', parts.Skip(i * 2).Take(2)), new[] { ' ', '[', ']' }, 2, out float[] n))
+                                {
+                                    normalArray[i] = new Vector2(n[0], n[1]);
+                                }
+                            }
+                            normals[kv.Key] = normalArray;
+                        }
+                        return normals;
+                    }
+                    return Enumerable.Range(0, vertices).ToDictionary(i => "row" + i, i => Enumerable.Range(0, vertices).ToDictionary(i => i, i => Vector2.Zero).Values.ToArray());
+                }
+                public SerialisedObject ToSerialisedObject()
+                {
+                    var so = new SerialisedObject("dispinfo");
+                    so.Set("power", Power);
+                    so.Set("startposition", $"[{FormatVector3(StartPosition, "0")}]");
+                    so.Set("flags", Flags);
+                    so.Set("elevation", FormatDecimal(Elevation));
+                    so.Set("subdiv", FormatDecimal(Subdivision));
+
+                    so.Children.Add(SerializeRowVector3("normals", Normals));
+                    so.Children.Add(SerializeRowVector3("offsets", Offsets));
+                    so.Children.Add(SerializeRowVector3("offset_normals", OffsetsNormals));
+                    so.Children.Add(SerializeRowFloat("distances", Distances));
+                    so.Children.Add(SerializeRowFloat("alphas", Alphas));
+                    so.Children.Add(SerializeRowVector2("triangle_tags", TriangleTags));
+                    var allowedVerts = new SerialisedObject("allowed_vertices");
+                    allowedVerts.Set(AllowedVertives.Key.ToString(), string.Join(' ', AllowedVertives.Value.Select(v => FormatDecimal(v, "0"))));
+
+                    return so;
+                    SerialisedObject SerializeRowFloat(string name, Dictionary<string, float[]> data)
+                    {
+                        var ob = new SerialisedObject(name);
+                        foreach (var kv in data)
+                        {
+                            ob.Set(kv.Key, string.Join(' ', kv.Value.Select(v => FormatDecimal(v))));
+                        }
+                        return ob;
+                    }
+                    SerialisedObject SerializeRowVector2(string name, Dictionary<string, Vector2[]> data)
+                    {
+                        var ob = new SerialisedObject(name);
+                        foreach (var kv in data)
+                        {
+                            ob.Set(kv.Key, string.Join(' ', kv.Value.SelectMany(v => new[] { FormatDecimal(v.X, "0"), FormatDecimal(v.Y, "0") })));
+                        }
+                        return ob;
+                    }
+
+                    SerialisedObject SerializeRowVector3(string name, Dictionary<string, Vector3[]> data)
+                    {
+                        var ob = new SerialisedObject(name);
+                        foreach (var kv in data)
+                        {
+                            ob.Set(kv.Key, string.Join(' ', kv.Value.SelectMany(v => new[] { FormatDecimal(v.X), FormatDecimal(v.Y), FormatDecimal(v.Z) })));
+                        }
+                        return ob;
+                    }
+                }
+            }
             public long ID { get; set; }
             public Plane Plane { get; set; }
-            public Texture Texture { get; set; }
+            public Sledge.BspEditor.Primitives.Texture Texture { get; set; }
             public float LightmapScale { get; set; }
             public string SmoothingGroups { get; set; } // ?
             public List<Vector3> Vertices { get; set; }
+            public Displacement DisplacementData { get; set; }
 
             public VmfSide(SerialisedObject obj)
             {
                 ID = obj.Get("ID", 0L);
-                LightmapScale = obj.Get("lightmapscale", 0);
+                LightmapScale = obj.Get("lightmapscale", 16);
                 SmoothingGroups = obj.Get("smoothing_groups", "");
 
-                if (ParseDoubleArray(obj.Get("plane", ""), new[] {' ', '(', ')'}, 9, out double[] pl))
+                if (ParseDoubleArray(obj.Get("plane", ""), new[] { ' ', '(', ')' }, 9, out double[] pl))
                 {
                     Plane = new Plane(
                         new PVector3(pl[0], pl[1], pl[2]).Round(),
@@ -787,22 +1077,27 @@ namespace Sledge.BspEditor.Providers
                     Plane = new Plane(PVector3.UnitZ, 0);
                 }
 
-                Texture = new Texture
+                Texture = new Sledge.BspEditor.Primitives.Texture
                 {
                     Name = obj.Get("material", ""),
-                    Rotation = obj.Get("rotation", 0f)
+                    Rotation = obj.Get("rotation", 0f),
+                    LightmapScale = LightmapScale
                 };
-                if (ParseFloatArray(obj.Get("uaxis", ""), new[] {' ', '[', ']'}, 5, out float[] ua))
+                if (ParseFloatArray(obj.Get("uaxis", ""), new[] { ' ', '[', ']' }, 5, out float[] ua))
                 {
                     Texture.UAxis = new Vector3(ua[0], ua[1], ua[2]);
                     Texture.XShift = ua[3];
                     Texture.XScale = ua[4];
                 }
-                if (ParseFloatArray(obj.Get("vaxis", ""), new[] {' ', '[', ']'}, 5, out float[] va))
+                if (ParseFloatArray(obj.Get("vaxis", ""), new[] { ' ', '[', ']' }, 5, out float[] va))
                 {
                     Texture.VAxis = new Vector3(va[0], va[1], va[2]);
                     Texture.YShift = va[3];
                     Texture.YScale = va[4];
+                }
+                if (obj.Children.Any(x => x.Name == "dispinfo"))
+                {
+                    DisplacementData = new Displacement(obj.Children.First(x => x.Name == "dispinfo"));
                 }
 
                 // Older versions of sledge save vertices, this is entirely optional but why not.
@@ -829,6 +1124,7 @@ namespace Sledge.BspEditor.Providers
                 Plane = face.Plane.ToPrecisionPlane();
                 Texture = face.Texture;
                 Vertices = face.Vertices.ToList();
+                LightmapScale = face.LightmapScale ?? 16;
             }
 
             public SerialisedObject ToSerialisedObject()
@@ -840,7 +1136,7 @@ namespace Sledge.BspEditor.Providers
                 so.Set("uaxis", $"[{FormatVector3(Texture.UAxis)} {FormatDecimal(Texture.XShift)}] {FormatDecimal(Texture.XScale)}");
                 so.Set("vaxis", $"[{FormatVector3(Texture.VAxis)} {FormatDecimal(Texture.YShift)}] {FormatDecimal(Texture.YScale)}");
                 so.Set("rotation", Texture.Rotation);
-                so.Set("lightmapscale", LightmapScale);
+                so.Set("lightmapscale", Texture.LightmapScale);
                 so.Set("smoothing_groups", SmoothingGroups);
 
                 var verts = new SerialisedObject("vertex");
@@ -850,6 +1146,10 @@ namespace Sledge.BspEditor.Providers
                     verts.Set("vertex" + i, FormatVector3(Vertices[i]));
                 }
                 so.Children.Add(verts);
+                if (DisplacementData != null)
+                {
+                    so.Children.Add(DisplacementData.ToSerialisedObject());
+                }
 
                 return so;
             }

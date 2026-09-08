@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Numerics;
 using Sledge.Rendering.Resources;
 
 namespace Sledge.Rendering.Interfaces
@@ -16,5 +15,10 @@ namespace Sledge.Rendering.Interfaces
         /// </summary>
         /// <returns>List of sequences</returns>
         List<string> GetSequences();
+        string[] GetTextureName();
+		void SetTexture(Texture[] textures);
+        uint[] GetLayerSet(int skinId);
+
+
     }
 }

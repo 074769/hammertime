@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 namespace Sledge.BspEditor.Compile
 {
-	internal class CommandProcess : BatchProcess
+	public class CommandProcess : BatchProcess
 	{
 		public CommandProcess(BatchStepType stepType, string process) : base(stepType, RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "cmd" : "", $"/c {process}")
 		{

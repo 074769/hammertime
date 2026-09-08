@@ -246,11 +246,21 @@ namespace Sledge.Providers.Model.Mdl10
 			//
 		}
 
-		internal uint[] GetLayerSet(int skinId)
+		public uint[] GetLayerSet(int skinId)
 		{
 			var skin = skinId % Model.Skins.Count;
 
 			return _skins[skin];
+		}
+		// This required to solve source engine textures loading issue. Source engie has separate material for each model
+		public string[] GetTextureName()
+		{
+			return null ;
+		}
+
+		public void SetTexture(Rendering.Resources.Texture[] textures)
+		{
+			return;
 		}
 	}
 }

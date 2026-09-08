@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace Sledge.Common.Shell.Documents
@@ -27,6 +29,7 @@ namespace Sledge.Common.Shell.Documents
         /// True if this document has unsaved changes
         /// </summary>
         bool HasUnsavedChanges { get; }
+        IReadOnlySet<Capability> Capabilities { get; }
 
         /// <summary>
         /// Nicely request if this document can be closed.

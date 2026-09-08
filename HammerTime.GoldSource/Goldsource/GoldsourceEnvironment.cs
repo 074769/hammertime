@@ -9,13 +9,27 @@ using System.Windows.Forms;
 using LogicAndTrick.Oy;
 using Sledge.BspEditor.Compile;
 using Sledge.BspEditor.Documents;
+using Sledge.BspEditor.Grid;
 using Sledge.BspEditor.Primitives;
 using Sledge.BspEditor.Primitives.MapData;
 using Sledge.BspEditor.Primitives.MapObjectData;
 using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.BspEditor.Providers;
+using Sledge.BspEditor.Tools;
+using Sledge.BspEditor.Tools.Brush;
+using Sledge.BspEditor.Tools.Clip;
+using Sledge.BspEditor.Tools.Cordon;
+using Sledge.BspEditor.Tools.Decal;
+using Sledge.BspEditor.Tools.Entity;
+using Sledge.BspEditor.Tools.PathTool;
+using Sledge.BspEditor.Tools.Prefab;
+using Sledge.BspEditor.Tools.Selection;
+using Sledge.BspEditor.Tools.Texture;
+using Sledge.BspEditor.Tools.Vertex;
+using Sledge.BspEditor.Tools.WrapTexture;
 using Sledge.Common;
 using Sledge.Common.Shell.Commands;
+using Sledge.Common.Shell.Documents;
 using Sledge.DataStructures.GameData;
 using Sledge.DataStructures.Geometric;
 using Sledge.FileSystem;
@@ -25,7 +39,7 @@ using Path = System.IO.Path;
 
 namespace Sledge.BspEditor.Environment.Goldsource
 {
-	public class GoldsourceEnvironment : IEnvironment
+	public class GoldsourceEnvironment : IEnvironment, IDynamicSizeGridEnvironment
 	{
 		private readonly ITexturePackageProvider _wadProvider;
 		private readonly ITexturePackageProvider _spriteProvider;
@@ -151,7 +165,22 @@ namespace Sledge.BspEditor.Environment.Goldsource
 				yield return Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
 			}
 		}
-
+		public IReadOnlySet<Capability> Capabilities => new HashSet<Capability>() {
+				SelectTool.SelectToolCapability,
+				TextureTool.TextureToolCapability,
+				BrushTool.BrushToolCapability,
+				ClipTool.ClipToolCapability,
+				CordonTool.CordonToolCapability,
+				DecalTool.DecalToolCapability,
+				EntityTool.EntityToolCapability,
+				PathTool.PathToolCapability,
+				PrefabTool.PrefabToolCapability,
+				VertexTool.VertexToolCapability,
+				WrapTextureTool.WrapTextureToolCapability,
+				CameraTool.CameraToolCapability
+		};
+		//new[]{"SelectTool", "TextureTool", "BrushTool", "ClipTool", "CordonTool", "DecalTool",
+		//"EntityTool", "PathTool", "PrefabTool" , "VertexTool", "WrapTextureTool", "CameraTool" };
 
 		public GoldsourceEnvironment()
 		{
