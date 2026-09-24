@@ -11,10 +11,7 @@ namespace Sledge.BspEditor.Rendering.Viewport
 		[Setting] public static bool Camera2DPanRequiresMouseClick { get; set; } = false;
 		[Setting] public static bool Camera3DPanRequiresMouseClick { get; set; } = false;
 		[Setting] public static bool EnableArrowKeyMovement { get; set; } = true;
-<<<<<<< ours
-=======
 		[Setting] public static bool EnableAltArrowKeyMovement { get; set; } = true;
->>>>>>> theirs
 
 		[Setting] public static int ForwardSpeed { get; set; } = 1000;
 		[Setting] public static decimal TimeToTopSpeed { get; set; } = 0.5m;
@@ -33,10 +30,7 @@ namespace Sledge.BspEditor.Rendering.Viewport
 			yield return new SettingKey("Navigation/2D", "Camera2DPanRequiresMouseClick", typeof(bool));
 			yield return new SettingKey("Navigation/3D", "Camera3DPanRequiresMouseClick", typeof(bool));
 			yield return new SettingKey("Tools/Movement", "EnableArrowKeyMovement", typeof(bool));
-<<<<<<< ours
-=======
 			yield return new SettingKey("Tools/Movement", "EnableAltArrowKeyMovement", typeof(bool));
->>>>>>> theirs
 			yield return new SettingKey("Navigation/3D", "FOV", typeof(int)) { EditorType = "Slider", EditorHint = "20,100,5,10,0.5" };
 			yield return new SettingKey("Navigation/3D", "ForwardSpeed", typeof(int)) { EditorType = "Slider", EditorHint = "100,500,10,50,0.1" };
 			yield return new SettingKey("Navigation/3D", "TimeToTopSpeed", typeof(decimal)) { EditorType = "Slider", EditorHint = "0,5,0.1,1,10" };

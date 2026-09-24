@@ -94,12 +94,6 @@ namespace Sledge.BspEditor.Rendering.Viewport
             
             var isArrowKey = e.KeyCode == Keys.Left || e.KeyCode == Keys.Right || e.KeyCode == Keys.Up || e.KeyCode == Keys.Down;
 
-<<<<<<< ours
-            // Shift+arrow always pans the 2D view by a quarter of the viewport.
-            // When arrow-key object movement is disabled, plain arrow keys pan too (by a
-            // smaller amount, so they act like a nudge for the camera instead of the selection).
-            if (isArrowKey && (KeyboardState.Shift || !CameraNavigationViewportSettings.EnableArrowKeyMovement))
-=======
             // Alt+arrow is reserved for moving geometry (when enabled), so it never pans the view.
             var altMovesGeometry = KeyboardState.Alt && CameraNavigationViewportSettings.EnableAltArrowKeyMovement;
 
@@ -107,7 +101,6 @@ namespace Sledge.BspEditor.Rendering.Viewport
             // When arrow-key object movement is disabled, plain arrow keys pan too (by a
             // smaller amount, so they act like a nudge for the camera instead of the selection).
             if (isArrowKey && !altMovesGeometry && (KeyboardState.Shift || !CameraNavigationViewportSettings.EnableArrowKeyMovement))
->>>>>>> theirs
             {
                 var divisor = KeyboardState.Shift ? 4 : 16;
                 var shift = new Vector3(0, 0, 0);
