@@ -67,6 +67,7 @@ namespace Sledge.BspEditor.Tools.Selection
 		[Setting] public bool SelectionBoxOnlySelectsByCenterHandles { get; set; } = false;
 		[Setting] public bool SelectionClickCycles { get; set; } = true;
 		[Setting] public bool KeepVisgroupsWhenCloning { get; set; } = true;
+		[Setting] public bool EnableArrowKeyMovement { get; set; } = true;
 
 		string ISettingsContainer.Name => "Sledge.BspEditor.Tools.SelectTool";
 		public override Capability ToolCapability => SelectToolCapability;
@@ -82,6 +83,7 @@ namespace Sledge.BspEditor.Tools.Selection
 			yield return new SettingKey("Tools/Selection", "SelectionBoxOnlySelectsByCenterHandles", typeof(bool));
 			yield return new SettingKey("Tools/Selection", "SelectionClickCycles", typeof(bool));
 			yield return new SettingKey("Tools/Selection", "KeepVisgroupsWhenCloning", typeof(bool));
+			yield return new SettingKey("Tools/Movement", "EnableArrowKeyMovement", typeof(bool));
 		}
 
 		void ISettingsContainer.LoadValues(ISettingsStore store)
@@ -695,7 +697,7 @@ namespace Sledge.BspEditor.Tools.Selection
 			if (e.KeyCode == Keys.Enter) Confirm(document);
 			else if (e.KeyCode == Keys.Escape) Cancel(document);
 
-			var nudge = GetNudgeValue(e.KeyCode);
+			var nudge = EnableArrowKeyMovement ? GetNudgeValue(e.KeyCode) : null;
 			if (nudge != null && (_selectionBox.State.Action == BoxAction.Drawn) && !document.Selection.IsEmpty)
 			{
 				var translate = camera.Expand(nudge.Value);
