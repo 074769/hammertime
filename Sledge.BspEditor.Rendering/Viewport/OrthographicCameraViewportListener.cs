@@ -92,23 +92,29 @@ namespace Sledge.BspEditor.Rendering.Viewport
                 e.Handled = true;
             }
             
-            if (KeyboardState.Shift)
+            var isArrowKey = e.KeyCode == Keys.Left || e.KeyCode == Keys.Right || e.KeyCode == Keys.Up || e.KeyCode == Keys.Down;
+
+            // Shift+arrow always pans the 2D view by a quarter of the viewport.
+            // When arrow-key object movement is disabled, plain arrow keys pan too (by a
+            // smaller amount, so they act like a nudge for the camera instead of the selection).
+            if (isArrowKey && (KeyboardState.Shift || !CameraNavigationViewportSettings.EnableArrowKeyMovement))
             {
+                var divisor = KeyboardState.Shift ? 4 : 16;
                 var shift = new Vector3(0, 0, 0);
 
                 switch (e.KeyCode)
                 {
                     case Keys.Left:
-                        shift.X = -Viewport.Width / Camera.Zoom / 4;
+                        shift.X = -Viewport.Width / Camera.Zoom / divisor;
                         break;
                     case Keys.Right:
-                        shift.X = Viewport.Width / Camera.Zoom / 4;
+                        shift.X = Viewport.Width / Camera.Zoom / divisor;
                         break;
                     case Keys.Up:
-                        shift.Y = Viewport.Height / Camera.Zoom / 4;
+                        shift.Y = Viewport.Height / Camera.Zoom / divisor;
                         break;
                     case Keys.Down:
-                        shift.Y = -Viewport.Height / Camera.Zoom / 4;
+                        shift.Y = -Viewport.Height / Camera.Zoom / divisor;
                         break;
                 }
 
