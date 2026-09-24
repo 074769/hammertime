@@ -695,7 +695,12 @@ namespace Sledge.BspEditor.Tools.Selection
 			if (e.KeyCode == Keys.Enter) Confirm(document);
 			else if (e.KeyCode == Keys.Escape) Cancel(document);
 
+<<<<<<< ours
 			var nudge = CameraNavigationViewportSettings.EnableArrowKeyMovement ? GetNudgeValue(e.KeyCode) : null;
+=======
+			var altMovement = KeyboardState.Alt && CameraNavigationViewportSettings.EnableAltArrowKeyMovement;
+			var nudge = (CameraNavigationViewportSettings.EnableArrowKeyMovement || altMovement) ? GetNudgeValue(e.KeyCode) : null;
+>>>>>>> theirs
 			if (nudge != null && (_selectionBox.State.Action == BoxAction.Drawn) && !document.Selection.IsEmpty)
 			{
 				var translate = camera.Expand(nudge.Value);
