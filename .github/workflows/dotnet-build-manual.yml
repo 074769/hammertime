@@ -1,0 +1,72 @@
+# Manually-triggered build. Run from the Actions tab (or `gh workflow run`) —
+# no push/PR/tag needed. Builds the chosen branch/arch and uploads a zip
+# artifact to the run; does not create a GitHub Release.
+
+name: .NET-build-manual
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: 'Platform to build'
+        required: true
+        default: 'x86'
+        type: choice
+        options:
+          - x86
+          - x64
+          - both
+      configuration:
+        description: 'Build configuration'
+        required: true
+        default: 'Release'
+        type: choice
+        options:
+          - Release
+          - Debug
+
+jobs:
+  build:
+    permissions: write-all
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: ${{ (github.event.inputs.arch == 'both') && fromJSON('["x86","x64"]') || fromJSON(format('["{0}"]', github.event.inputs.arch)) }}
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: true
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 6.0.x
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build -c ${{ github.event.inputs.configuration }} -p:Platform=${{ matrix.arch }} --output ./bin/
+
+    - name: Write build time
+      run: date +"%Y-%m-%d %H:%M" > ./bin/build && echo "manual-${{ github.ref_name }}-${{ matrix.arch }}" >> ./bin/build
+
+    - name: Copy prefabs
+      run: cp "./Resources/prefabs" "./bin" -r
+
+    - name: Cleaning output symbols
+      if: github.event.inputs.configuration == 'Release'
+      run: del ./bin/*.pdb
+
+    - name: Create Zip File
+      uses: vimtor/action-zip@v1.1
+      with:
+        files: ./bin/
+        dest: ./HammerTime.${{ matrix.arch }}.manual.zip
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: hammertime-manual-${{ matrix.arch }}-${{ github.event.inputs.configuration }}
+        path: ./HammerTime.${{ matrix.arch }}.manual.zip
+        retention-days: 14
