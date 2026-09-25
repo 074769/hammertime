@@ -44,12 +44,16 @@ namespace Sledge.BspEditor.Rendering.Overlay
     [Export(typeof(IMapObject2DOverlay))]
     public class EntityMovementOverlay : IMapObject2DOverlay
     {
-        private const float MoveArrowScale = 0.4f;
-        private const float RotateArrowScale = 0.7f;
+        private const float MoveArrowScale = 0.45f;
+        private const float RotateArrowScale = 0.75f;
         private const int RotateArcSegments = 28;
         private const double RotateArcDegrees = 300; // leave a gap so the arrowhead/direction reads clearly
-        private const float ArrowHeadLength = 8f; // screen pixels
-        private const float ArrowHeadAngle = 25f; // degrees, half-angle of the arrowhead
+        private const float ArrowHeadLength = 14f; // screen pixels
+        private const float ArrowHeadAngle = 28f; // degrees, half-angle of the arrowhead
+        private const float ShaftWidth = 3f; // screen pixels
+        private const float OutlineExtraWidth = 2f; // added on top of ShaftWidth for the outline pass
+        private const int ArrowHeadFillSteps = 7; // number of fan lines used to solid-fill the arrowhead
+        private const float AnchorDotRadius = 3f;
 
         public void Render(IViewport viewport, ICollection<IMapObject> objects, OrthographicCamera camera, Vector3 worldMin, Vector3 worldMax, I2DRenderer im, MapDocument document)
         {
@@ -168,8 +172,9 @@ namespace Sledge.BspEditor.Rendering.Overlay
             var start = camera.WorldToScreen(origin).ToVector2();
             var end = camera.WorldToScreen(origin + direction * length).ToVector2();
 
-            im.AddLine(start, end, color, 2);
-            DrawArrowHead(im, start, end, color, 2);
+            DrawOutlinedLine(im, start, end, color, ShaftWidth);
+            DrawArrowHead(im, start, end, color);
+            DrawAnchorDot(im, start, color);
         }
 
         private static void DrawRotateArrow(OrthographicCamera camera, I2DRenderer im, Vector3 origin, Vector3 axis, float radius, Color color, bool reversed)
@@ -192,6 +197,7 @@ namespace Sledge.BspEditor.Rendering.Overlay
             Vector2? prev = null;
             var lastFrom = Vector2.Zero;
             var lastTo = Vector2.Zero;
+            var firstPoint = Vector2.Zero;
 
             for (var i = 0; i <= RotateArcSegments; i++)
             {
@@ -199,38 +205,66 @@ namespace Sledge.BspEditor.Rendering.Overlay
                 var offset = (u * (float) Math.Cos(t) + v * (float) Math.Sin(t)) * radius;
                 var screen = camera.WorldToScreen(origin + offset).ToVector2();
 
+                if (i == 0) firstPoint = screen;
+
                 if (prev.HasValue)
                 {
-                    im.AddLine(prev.Value, screen, color, 2);
+                    DrawOutlinedLine(im, prev.Value, screen, color, ShaftWidth);
                     lastFrom = prev.Value;
                     lastTo = screen;
                 }
                 prev = screen;
             }
 
-            DrawArrowHead(im, lastFrom, lastTo, color, 2);
+            DrawArrowHead(im, lastFrom, lastTo, color);
+            DrawAnchorDot(im, firstPoint, color);
         }
 
-        private static void DrawArrowHead(I2DRenderer im, Vector2 from, Vector2 to, Color color, float width)
+        /// <summary>
+        /// Draws a line with a slightly wider black line underneath it, so the
+        /// helper stays readable against any background color or texture.
+        /// </summary>
+        private static void DrawOutlinedLine(I2DRenderer im, Vector2 start, Vector2 end, Color color, float width)
+        {
+            im.AddLine(start, end, Color.Black, width + OutlineExtraWidth);
+            im.AddLine(start, end, color, width);
+        }
+
+        private static void DrawAnchorDot(I2DRenderer im, Vector2 at, Color color)
+        {
+            im.AddCircleFilled(at, AnchorDotRadius + 1.5f, Color.Black);
+            im.AddCircleFilled(at, AnchorDotRadius, color);
+        }
+
+        /// <summary>
+        /// Draws a solid, outlined arrowhead. I2DRenderer has no filled-triangle
+        /// primitive, so the fill is approximated with a fan of lines from the
+        /// apex to points along the base edge - each pair close enough together
+        /// (relative to the line width) that the result reads as a solid shape.
+        /// </summary>
+        private static void DrawArrowHead(I2DRenderer im, Vector2 from, Vector2 to, Color color)
         {
             var dir = to - from;
             if (dir.LengthSquared() < 1f) return;
             dir = Vector2.Normalize(dir);
+            var perp = new Vector2(-dir.Y, dir.X);
 
-            var rad = ArrowHeadAngle * (float) Math.PI / 180f;
+            var halfWidth = ArrowHeadLength * (float) Math.Tan(ArrowHeadAngle * Math.PI / 180.0);
+            var baseCenter = to - dir * ArrowHeadLength;
+            var baseLeft = baseCenter + perp * halfWidth;
+            var baseRight = baseCenter - perp * halfWidth;
 
-            Vector2 Rotate(Vector2 d, float a)
+            FillTriangleFan(im, to, baseLeft, baseRight, Color.Black, ShaftWidth + OutlineExtraWidth);
+            FillTriangleFan(im, to, baseLeft, baseRight, color, ShaftWidth);
+        }
+
+        private static void FillTriangleFan(I2DRenderer im, Vector2 apex, Vector2 baseLeft, Vector2 baseRight, Color color, float width)
+        {
+            for (var i = 0; i <= ArrowHeadFillSteps; i++)
             {
-                var cos = (float) Math.Cos(a);
-                var sin = (float) Math.Sin(a);
-                return new Vector2(d.X * cos - d.Y * sin, d.X * sin + d.Y * cos);
+                var t = (float) i / ArrowHeadFillSteps;
+                im.AddLine(apex, Vector2.Lerp(baseLeft, baseRight, t), color, width);
             }
-
-            var left = to - Rotate(dir, rad) * ArrowHeadLength;
-            var right = to - Rotate(dir, -rad) * ArrowHeadLength;
-
-            im.AddLine(to, left, color, width);
-            im.AddLine(to, right, color, width);
         }
     }
 }
