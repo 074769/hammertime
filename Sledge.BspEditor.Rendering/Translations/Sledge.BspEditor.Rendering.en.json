@@ -16,7 +16,7 @@
             "Camera2DPanRequiresMouseClick": "Moving the 2D camera (when space is pressed) requires a mouse click",
             "Camera3DPanRequiresMouseClick": "Moving the 3D camera (when space is pressed) requires a mouse click",
             "EnableArrowKeyMovement": "Move Objects with Arrow keys",
-            "EnableAltArrowKeyMovement": "Holding ALT moves Objects",
+            "EnableAltArrowKeyMovement": "Holding ALT moves Objects With arrow keys",
             "FOV": "Vertical field of view",
             "ForwardSpeed": "Maximum forward speed (units)",
             "TimeToTopSpeed": "Time to top speed (seconds)",
