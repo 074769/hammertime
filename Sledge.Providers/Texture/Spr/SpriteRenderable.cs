@@ -32,6 +32,11 @@ namespace Sledge.Providers.Texture.Spr
 			set => _location.Location = value;
 		}
 		public Vector3 Angles { get; set; }
+
+		/// <summary>How this sprite billboards in the 3D viewport. Defaults to Parallel
+		/// (always face the camera) and is otherwise taken from the .spr file's own header,
+		/// same as the engine would use it.</summary>
+		public SpriteOrientation Orientation { get; set; } = SpriteOrientation.Parallel;
 		public int Sequence { get; set; }
 		public int Framerate { get; set; } = 10;
 		public float Scale { get; set; } = 1;
@@ -48,6 +53,7 @@ namespace Sledge.Providers.Texture.Spr
 			_texture = texture ?? new Rendering.Resources.Texture();
 			_textureItem = item;
 			Model = texture == null ? null : new MdlModel(null);
+			if (item?.Orientation != null) Orientation = item.Orientation.Value;
 		}
 
 		public void CreateResources(EngineInterface engine, RenderContext context)
@@ -65,7 +71,8 @@ namespace Sledge.Providers.Texture.Spr
 			{
 				FrameCount = 1,
 				CurrentFrame = 0,
-				UniformPadding = Vector2.Zero
+				Orientation = (float) Orientation,
+				Angles = Angles
 			});
 			_buffer = Engine.Interface.CreateBuffer();
 		}
@@ -105,6 +112,8 @@ namespace Sledge.Providers.Texture.Spr
 			{
 				FrameCount = frameCount,
 				CurrentFrame = (float)(Sequence % frameCount),
+				Orientation = (float) Orientation,
+				Angles = Angles,
 			};
 
 			cl.UpdateBuffer(_uvBuffer, 0, uv);
@@ -132,16 +141,9 @@ namespace Sledge.Providers.Texture.Spr
 		public void Render(RenderContext context, IPipeline pipeline, IViewport viewport, CommandList cl,
 			ILocation locationObject)
 		{
+			// Per-location rendering just draws the sprite at its own origin - the UV/orientation
+			// buffer update above already covers everything this overload needs.
 			Render(context, pipeline, viewport, cl);
-			return;
-			var frameCount = _texture == null ? 1 : (float)_texture.FrameCount;
-
-			context.Device.UpdateBuffer(_uvBuffer, 0, new BillboardUV
-			{
-				FrameCount = frameCount,
-				CurrentFrame = (float)(Sequence % frameCount),
-			});
-			cl.SetGraphicsResourceSet(1, _uvProjectionSet);
 		}
 
 		public bool ShouldRender(IPipeline pipeline, IViewport viewport)

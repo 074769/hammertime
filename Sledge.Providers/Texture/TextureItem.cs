@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Drawing;
 using Sledge.Common;
+using Sledge.Providers.Texture.Spr;
 
 namespace Sledge.Providers.Texture
 {
@@ -9,6 +10,12 @@ namespace Sledge.Providers.Texture
         public string Name { get; }
         public TextureFlags Flags { get; }
         public string Reference { get; set; }
+
+        /// <summary>
+        /// The orientation baked into the .spr file itself (Parallel, ParallelUpright,
+        /// Oriented, ParallelOriented, FacingUpright). Null for non-sprite textures.
+        /// </summary>
+        public SpriteOrientation? Orientation { get; set; }
 
         private Dictionary<TextureSubItemType, TextureSubItem> SubItems { get; }
 

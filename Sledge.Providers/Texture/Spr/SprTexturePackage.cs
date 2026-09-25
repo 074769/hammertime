@@ -25,24 +25,28 @@ namespace Sledge.Providers.Texture.Spr
             Textures.UnionWith(dir.GetFiles(".*\\.spr$", true).Select(x => x.GetRelativePath(dir)));
         }
 
-        private static Size GetSize(IFile file)
+        private static (Size Size, SpriteOrientation Orientation) GetSize(IFile file)
         {
             using (var br = new BinaryReader(file.Open()))
             {
                 var idst = br.ReadFixedLengthString(Encoding.ASCII, 4);
-                if (idst != "IDSP") return Size.Empty;
+                if (idst != "IDSP") return (Size.Empty, SpriteOrientation.Parallel);
 
                 var version = br.ReadInt32();
-                if (version != 2) return Size.Empty;
+                if (version != 2) return (Size.Empty, SpriteOrientation.Parallel);
 
-                var type = br.ReadInt32();
+                // Previously read and discarded - this is the sprite's render mode
+                // (Parallel / ParallelUpright / Oriented / ParallelOriented / FacingUpright)
+                // as authored by studiomdl/spritegen. We now keep it so the 3D viewport
+                // can billboard the sprite the same way the engine would.
+                var type = (SpriteOrientation) br.ReadInt32();
                 var texFormat = br.ReadInt32();
                 var boundingRadius = br.ReadSingle();
 
                 var width = br.ReadInt32();
                 var height = br.ReadInt32();
 
-                return new Size(width, height);
+                return (new Size(width, height), type);
             }
         }
 
@@ -57,8 +61,11 @@ namespace Sledge.Providers.Texture.Spr
                 var entry = _file.TraversePath(name);
                 if (entry == null || !entry.Exists) continue;
 
-                var size = GetSize(entry);
-                var item = new TextureItem(name, TextureFlags.None, size.Width, size.Height);
+                var (size, orientation) = GetSize(entry);
+                var item = new TextureItem(name, TextureFlags.None, size.Width, size.Height)
+                {
+                    Orientation = orientation
+                };
                 list.Add(item);
             }
 

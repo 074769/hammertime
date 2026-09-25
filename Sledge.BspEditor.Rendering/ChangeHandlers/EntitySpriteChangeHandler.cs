@@ -2,6 +2,7 @@
 using System.ComponentModel.Composition;
 using System.Drawing;
 using System.Linq;
+using System.Numerics;
 using System.Threading.Tasks;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Environment;
@@ -45,7 +46,14 @@ namespace Sledge.BspEditor.Rendering.ChangeHandlers
 					es.Name == sn.Name &&
 					es.Scale == sn.Scale &&
 					es.Color == sn.Color &&
-					es.Framerate == sn.Framerate && es.ContentsReplaced) continue;
+					es.Framerate == sn.Framerate && es.ContentsReplaced)
+				{
+					// None of the fields that force a full sprite rebuild changed, but the
+					// entity's "angles" may have - keep Oriented/ParallelOriented sprites in
+					// sync without tearing down and recreating the renderable.
+					if (es.Renderable != null) es.Renderable.Angles = GetAngles(entity);
+					continue;
+				}
 				var sd = await CreateSpriteData(entity, change.Document, gd, tc, sn.Name);
 				if (es != null)
 					_resourceCollection.Value.DestroyModelRenderable(change.Document.Environment, es.Renderable);
@@ -117,7 +125,19 @@ namespace Sledge.BspEditor.Rendering.ChangeHandlers
 			}
 			var renderable = await _resourceCollection.Value.CreateSpriteRenderable(doc.Environment, name);
 			if (renderable == null) return null;
+			renderable.Angles = GetAngles(entity);
 			return new EntitySprite(name, scale, color, size, framerate, renderable, isGizmo);
+		}
+
+		/// <summary>
+		/// Reads the entity's "angles" keyvalue (pitch yaw roll, in degrees) the same way
+		/// EntityModelChangeHandler does, so Oriented/ParallelOriented sprites rotate the
+		/// same way a model with the same angles would.
+		/// </summary>
+		private static Vector3 GetAngles(Entity entity)
+		{
+			var ang = entity.EntityData.GetVector3("angles");
+			return ang.HasValue ? ang.Value * (float) Math.PI / 180f : Vector3.Zero;
 		}
 
 		private static EntitySpriteData GetSpriteData(Entity entity, GameData gd)
