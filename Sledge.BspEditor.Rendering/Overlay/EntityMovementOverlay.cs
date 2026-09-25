@@ -47,13 +47,16 @@ namespace Sledge.BspEditor.Rendering.Overlay
         private const float MoveArrowScale = 0.45f;
         private const float RotateArrowScale = 0.75f;
         private const int RotateArcSegments = 28;
-        private const double RotateArcDegrees = 300; // leave a gap so the arrowhead/direction reads clearly
-        private const float ArrowHeadLength = 14f; // screen pixels
-        private const float ArrowHeadAngle = 28f; // degrees, half-angle of the arrowhead
-        private const float ShaftWidth = 3f; // screen pixels
-        private const float OutlineExtraWidth = 2f; // added on top of ShaftWidth for the outline pass
-        private const int ArrowHeadFillSteps = 7; // number of fan lines used to solid-fill the arrowhead
-        private const float AnchorDotRadius = 3f;
+        private const double RotateArcDegrees = 300; // leave a gap so the hooked head reads clearly
+
+        // Block-arrow head, in screen pixels - stays a fixed icon size regardless
+        // of zoom/entity size, only the shaft length grows with the arrow.
+        private const float HeadLength = 16f;
+        private const float HeadHalfWidth = 9f;
+        private const float ShaftHalfWidth = 4f;
+
+        private const float StrokeWidth = 2f; // screen pixels
+        private const float OutlineExtraWidth = 2f; // added on top of StrokeWidth for the outline pass
 
         public void Render(IViewport viewport, ICollection<IMapObject> objects, OrthographicCamera camera, Vector3 worldMin, Vector3 worldMax, I2DRenderer im, MapDocument document)
         {
@@ -165,6 +168,14 @@ namespace Sledge.BspEditor.Rendering.Overlay
 
         // --- Drawing -------------------------------------------------------
 
+        /// <summary>
+        /// Straight mover: a hollow block-arrow outline (thin shaft rectangle
+        /// that steps out to a wider flared head, then comes to a point) -
+        /// projecting only the shaft's start/end from 3D and building the icon
+        /// shape directly in screen space is correct in every 2D viewport,
+        /// since the icon is meant to read as a flat overlay glyph regardless
+        /// of which axis is being viewed.
+        /// </summary>
         private static void DrawMoveArrow(OrthographicCamera camera, I2DRenderer im, Vector3 origin, Vector3 direction, float length, Color color)
         {
             direction = Vector3.Normalize(direction);
@@ -172,21 +183,29 @@ namespace Sledge.BspEditor.Rendering.Overlay
             var start = camera.WorldToScreen(origin).ToVector2();
             var end = camera.WorldToScreen(origin + direction * length).ToVector2();
 
-            DrawOutlinedLine(im, start, end, color, ShaftWidth);
-            DrawArrowHead(im, start, end, color);
-            DrawAnchorDot(im, start, color);
+            var dir = end - start;
+            if (dir.LengthSquared() < 1f) return;
+            dir = Vector2.Normalize(dir);
+            var perp = new Vector2(-dir.Y, dir.X);
+
+            var poly = BuildBlockArrowPolygon(start, dir, perp, Vector2.Distance(start, end));
+            DrawPolygonOutline(im, poly, color);
         }
 
+        /// <summary>
+        /// Rotator: a looping arc (a true 3D circle around the rotation axis,
+        /// projected point-by-point per viewport) that ends in a hooked
+        /// triangular head, matching the reference "redo"-style icon. Building
+        /// the loop in 3D - rather than just in screen space - is what makes it
+        /// read correctly in all three 2D views: it appears as a full circle
+        /// when looking straight down the axis, and flattens toward a line when
+        /// the axis lies in the view plane, which is the physically correct
+        /// picture either way.
+        /// </summary>
         private static void DrawRotateArrow(OrthographicCamera camera, I2DRenderer im, Vector3 origin, Vector3 axis, float radius, Color color, bool reversed)
         {
             axis = Vector3.Normalize(axis);
 
-            // Build two vectors spanning the plane perpendicular to the axis. When
-            // projected into a 2D viewport this circle will appear as a full
-            // circle when looking straight down the axis, and progressively
-            // flatten into a line when the axis lies in the view plane - which is
-            // exactly the correct visual in either case, and needs no special
-            // handling per Top/Front/Side view.
             var helper = Math.Abs(Vector3.Dot(axis, Vector3.UnitZ)) > 0.9f ? Vector3.UnitX : Vector3.UnitZ;
             var u = Vector3.Normalize(Vector3.Cross(axis, helper));
             var v = Vector3.Cross(axis, u);
@@ -197,7 +216,6 @@ namespace Sledge.BspEditor.Rendering.Overlay
             Vector2? prev = null;
             var lastFrom = Vector2.Zero;
             var lastTo = Vector2.Zero;
-            var firstPoint = Vector2.Zero;
 
             for (var i = 0; i <= RotateArcSegments; i++)
             {
@@ -205,19 +223,60 @@ namespace Sledge.BspEditor.Rendering.Overlay
                 var offset = (u * (float) Math.Cos(t) + v * (float) Math.Sin(t)) * radius;
                 var screen = camera.WorldToScreen(origin + offset).ToVector2();
 
-                if (i == 0) firstPoint = screen;
-
                 if (prev.HasValue)
                 {
-                    DrawOutlinedLine(im, prev.Value, screen, color, ShaftWidth);
+                    DrawOutlinedLine(im, prev.Value, screen, color, ShaftHalfWidth * 2);
                     lastFrom = prev.Value;
                     lastTo = screen;
                 }
                 prev = screen;
             }
 
-            DrawArrowHead(im, lastFrom, lastTo, color);
-            DrawAnchorDot(im, firstPoint, color);
+            var hookDir = lastTo - lastFrom;
+            if (hookDir.LengthSquared() < 1f) return;
+            hookDir = Vector2.Normalize(hookDir);
+            var hookPerp = new Vector2(-hookDir.Y, hookDir.X);
+
+            var apex = lastTo;
+            var baseCenter = apex - hookDir * HeadLength;
+            var baseLeft = baseCenter + hookPerp * HeadHalfWidth;
+            var baseRight = baseCenter - hookPerp * HeadHalfWidth;
+
+            DrawPolygonOutline(im, new[] { apex, baseLeft, baseRight }, color);
+        }
+
+        /// <summary>
+        /// The 7-point hollow block-arrow silhouette (shaft rectangle + a
+        /// stepped-out triangular head), built directly in screen space around
+        /// a unit direction/perpendicular pair.
+        /// </summary>
+        private static Vector2[] BuildBlockArrowPolygon(Vector2 tail, Vector2 dir, Vector2 perp, float totalLength)
+        {
+            var headLength = Math.Min(HeadLength, totalLength);
+            var shaftLength = totalLength - headLength;
+
+            Vector2 P(float along, float across) => tail + dir * along + perp * across;
+
+            return new[]
+            {
+                P(0, ShaftHalfWidth),
+                P(shaftLength, ShaftHalfWidth),
+                P(shaftLength, HeadHalfWidth),
+                P(totalLength, 0),
+                P(shaftLength, -HeadHalfWidth),
+                P(shaftLength, -ShaftHalfWidth),
+                P(0, -ShaftHalfWidth),
+            };
+        }
+
+        private static void DrawPolygonOutline(I2DRenderer im, IReadOnlyList<Vector2> points, Color color)
+        {
+            for (var i = 0; i < points.Count; i++)
+            {
+                var a = points[i];
+                var b = points[(i + 1) % points.Count];
+                DrawOutlinedLine(im, a, b, color, StrokeWidth);
+            }
         }
 
         /// <summary>
@@ -228,43 +287,6 @@ namespace Sledge.BspEditor.Rendering.Overlay
         {
             im.AddLine(start, end, Color.Black, width + OutlineExtraWidth);
             im.AddLine(start, end, color, width);
-        }
-
-        private static void DrawAnchorDot(I2DRenderer im, Vector2 at, Color color)
-        {
-            im.AddCircleFilled(at, AnchorDotRadius + 1.5f, Color.Black);
-            im.AddCircleFilled(at, AnchorDotRadius, color);
-        }
-
-        /// <summary>
-        /// Draws a solid, outlined arrowhead. I2DRenderer has no filled-triangle
-        /// primitive, so the fill is approximated with a fan of lines from the
-        /// apex to points along the base edge - each pair close enough together
-        /// (relative to the line width) that the result reads as a solid shape.
-        /// </summary>
-        private static void DrawArrowHead(I2DRenderer im, Vector2 from, Vector2 to, Color color)
-        {
-            var dir = to - from;
-            if (dir.LengthSquared() < 1f) return;
-            dir = Vector2.Normalize(dir);
-            var perp = new Vector2(-dir.Y, dir.X);
-
-            var halfWidth = ArrowHeadLength * (float) Math.Tan(ArrowHeadAngle * Math.PI / 180.0);
-            var baseCenter = to - dir * ArrowHeadLength;
-            var baseLeft = baseCenter + perp * halfWidth;
-            var baseRight = baseCenter - perp * halfWidth;
-
-            FillTriangleFan(im, to, baseLeft, baseRight, Color.Black, ShaftWidth + OutlineExtraWidth);
-            FillTriangleFan(im, to, baseLeft, baseRight, color, ShaftWidth);
-        }
-
-        private static void FillTriangleFan(I2DRenderer im, Vector2 apex, Vector2 baseLeft, Vector2 baseRight, Color color, float width)
-        {
-            for (var i = 0; i <= ArrowHeadFillSteps; i++)
-            {
-                var t = (float) i / ArrowHeadFillSteps;
-                im.AddLine(apex, Vector2.Lerp(baseLeft, baseRight, t), color, width);
-            }
         }
     }
 }
