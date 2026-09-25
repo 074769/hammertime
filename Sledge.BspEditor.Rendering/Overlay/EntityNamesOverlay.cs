@@ -3,6 +3,7 @@ using System.ComponentModel.Composition;
 using System.Drawing;
 using System.Linq;
 using System.Numerics;
+using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Primitives.MapObjectData;
 using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.Rendering.Cameras;
@@ -14,7 +15,7 @@ namespace Sledge.BspEditor.Rendering.Overlay
     [Export(typeof(IMapObject2DOverlay))]
     public class EntityNamesOverlay : IMapObject2DOverlay
     {
-        public void Render(IViewport viewport, ICollection<IMapObject> objects, OrthographicCamera camera, Vector3 worldMin, Vector3 worldMax, I2DRenderer im)
+        public void Render(IViewport viewport, ICollection<IMapObject> objects, OrthographicCamera camera, Vector3 worldMin, Vector3 worldMax, I2DRenderer im, MapDocument document)
         {
             if (camera.Zoom < 1) return;
 
