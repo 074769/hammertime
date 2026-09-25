@@ -45,7 +45,7 @@ namespace Sledge.BspEditor.Rendering.Overlay
             // Render the overlay for each object
             foreach (var overlay in _overlays)
             {
-                overlay.Value.Render(viewport, objects, camera, worldMin, worldMax, im, doc);
+                overlay.Value.Render(viewport, objects, camera, worldMin, worldMax, im);
             }
         }
 
