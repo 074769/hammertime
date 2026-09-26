@@ -79,44 +79,38 @@ void main(point GeometryIn input[1], inout TriangleStream<FragmentIn> output)
     {
         // Oriented sprites are a FIXED plane in world space - unlike every other orientation
         // mode here, they must never billboard or otherwise react to the camera at all.
+        // Starting from a fixed reference plane (facing world +X, "up" = world Z, i.e. what
+        // angles = 0,0,0 means for a normal GoldSrc entity), each of pitch/yaw/roll rotates it
+        // around its own fixed axis (Angles.x = pitch, Angles.y = yaw, Angles.z = roll), signs
+        // confirmed against actual compiled/in-game screenshots per-axis:
+        //  - pitch tilts the plane up/down around the fixed horizontal "right" axis.
+        //  - roll swings the plane left/right around the fixed vertical axis.
+        //  - yaw spins the plane in place around its own (already tilted/swung) facing direction.
         //
-        // Confirmed against an actual compiled/in-game screenshot (yaw 0/90/180/270, pitch and
-        // roll both 0) that yaw spins the flat plane in place rather than turning its facing
-        // direction: yaw 0/90/180/270 showed the printed arrow pointing right/down/left/up on
-        // screen, i.e. a clockwise spin as yaw increases.
-        //
-        // Pitch turned out NOT to behave like that - lumping it into the same spin as yaw made
-        // it indistinguishable from yaw, which testing showed is wrong. So pitch instead tilts
-        // the plane's fixed facing direction itself, same as it would for a normal GoldSrc
-        // entity, starting from a fixed reference plane (facing world +X, "up" = world Z, i.e.
-        // what angles = 0,0,0 means normally) and tilting it around a fixed horizontal axis.
-        // Yaw and roll both then spin whatever that tilted plane is, around its own (tilted)
-        // facing direction.
-        //
-        // Per-axis testing (Angles.x = pitch, Angles.y = yaw, Angles.z = roll) found:
-        //  - pitch's tilt direction was backwards -> sign flipped below.
-        //  - yaw's spin direction was backwards -> sign flipped below.
-        //  - roll was indistinguishable from yaw (both just spun in place) - wrong. Roll now
-        //    swings the facing direction left/right around the vertical axis instead, the same
-        //    role a classic "yaw" would normally play, so it's actually distinct from the spin
-        //    that Angles.y does here. Roll's sign/axis is a first guess, not yet confirmed.
-        const float3 baseForward = float3(1, 0, 0);
-        const float3 baseRight   = float3(0, -1, 0);
+        // IMPORTANT: the three basis vectors (forward/right/up) are carried through each
+        // rotation step together and rotated directly - never re-derived from a cross product
+        // partway through. Re-deriving right/up from cross(forward, WorldUp) after tilting was
+        // the earlier bug: at pitch = 90 the tilted forward becomes parallel to WorldUp, so that
+        // cross product goes to zero and roll (which swings around WorldUp) silently stopped
+        // doing anything. Rotating right/up directly has no such singularity - even when
+        // forward points straight up/down, right/up are still horizontal and still rotate.
+        float3 f = float3(1, 0, 0);
+        float3 r = float3(0, -1, 0);
+        float3 u = WorldUp;
 
-        // Pitch tilts the plane up/down around a fixed horizontal axis.
-        float3 tilted = RotateAroundAxis(baseForward, baseRight, -Angles.x);
+        // Pitch tilts the plane up/down around the fixed horizontal "right" axis.
+        float3 f1 = RotateAroundAxis(f, r, -Angles.x);
+        float3 u1 = RotateAroundAxis(u, r, -Angles.x);
+        // r is unchanged - you can't rotate a vector out of the axis it's rotating around.
 
-        // Roll swings the tilted plane left/right around the vertical axis.
-        float3 forward = RotateAroundAxis(tilted, WorldUp, -Angles.z);
-
-        float3 r = cross(forward, WorldUp);
-        if (dot(r, r) < 0.0001) r = baseRight; // forward ~= world up, fall back to the fixed reference
-        r = normalize(r);
-        float3 u = normalize(cross(r, forward));
+        // Roll swings the tilted plane left/right around the fixed vertical axis.
+        float3 f2 = RotateAroundAxis(f1, WorldUp, -Angles.z);
+        float3 r2 = RotateAroundAxis(r,  WorldUp, -Angles.z);
+        float3 u2 = RotateAroundAxis(u1, WorldUp, -Angles.z);
 
         // Yaw spins the resulting plane in place around its own facing direction.
-        right = RotateAroundAxis(r, forward, Angles.y);
-        up = RotateAroundAxis(u, forward, Angles.y);
+        right = RotateAroundAxis(r2, f2, Angles.y);
+        up = RotateAroundAxis(u2, f2, Angles.y);
     }
     else if (Orientation == ORIENT_PARALLEL_UPRIGHT || Orientation == ORIENT_FACING_UPRIGHT)
     {
