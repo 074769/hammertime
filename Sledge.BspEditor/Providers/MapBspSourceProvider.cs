@@ -49,9 +49,7 @@ namespace Sledge.BspEditor.Providers
 		public async Task<BspFileLoadResult> Load(Stream stream, IEnvironment environment)
 		{
 			_gameData = await environment.GetGameData();
-
-			List<Entity> loadedEntities = null;
-			var result = await Task.Factory.StartNew(() =>
+			return await Task.Factory.StartNew(() =>
 			{
 				using (var reader = new StreamReader(stream, Encoding.ASCII, true, 1024, false))
 				{
@@ -82,30 +80,10 @@ namespace Sledge.BspEditor.Providers
 
 					map.Root.DescendantsChanged();
 
-					loadedEntities = entities;
 					loadResult.Map = map;
 					return loadResult;
 				}
 			});
-
-			// The .map file stores the angle GoldSrc needs for Oriented/ParallelOriented sprites,
-			// which is the mirror image of what the viewport shows (see OrientedSpriteAngleTranslator).
-			// Translate it back on the way in so the document/viewport always shows the mapper's
-			// intended facing, not the raw compiled value.
-			if (loadedEntities != null)
-			{
-				var tc = await environment.GetTextureCollection();
-				foreach (var entity in loadedEntities)
-				{
-					if (!entity.EntityData.Properties.TryGetValue("angles", out _)) continue;
-					if (!await OrientedSpriteAngleTranslator.IsOrientedSprite(entity, _gameData, tc)) continue;
-
-					var angles = entity.EntityData.GetVector3("angles") ?? Vector3.Zero;
-					entity.EntityData.Set("angles", FormatVector3(OrientedSpriteAngleTranslator.Translate(angles)));
-				}
-			}
-
-			return result;
 		}
 
 		#region Reading
@@ -353,11 +331,10 @@ namespace Sledge.BspEditor.Providers
 		{
 			_document = document;
 			var gd = document != null ? await document.Environment.GetGameData() : null;
-			var tc = document != null ? await document.Environment.GetTextureCollection() : null;
 
 			using (var writer = new StreamWriter(stream, Encoding.ASCII, 1024, true))
 			{
-				await WriteWorld(writer, map.Root, gd, tc);
+				WriteWorld(writer, map.Root, gd);
 			}
 		}
 
@@ -433,7 +410,7 @@ namespace Sledge.BspEditor.Providers
 			sw.WriteLine('"' + key + "\" \"" + value + '"');
 		}
 
-		private async Task WriteEntity(StreamWriter sw, Entity ent, GameData gd, TextureCollection tc)
+		private void WriteEntity(StreamWriter sw, Entity ent, GameData gd)
 		{
 			var solids = new List<Solid>();
 			CollectSolids(solids, ent);
@@ -447,10 +424,6 @@ namespace Sledge.BspEditor.Providers
 				WriteProperty(sw, "spawnflags", ent.EntityData.Flags.ToString(CultureInfo.InvariantCulture));
 			}
 			var entityClass = gd?.Classes.FirstOrDefault(x => x.Name == ent.EntityData.Name);
-
-			// Oriented/ParallelOriented sprites need their yaw mirrored to compile correctly -
-			// see OrientedSpriteAngleTranslator for why. Everything else is written unchanged.
-			var isOrientedSprite = await OrientedSpriteAngleTranslator.IsOrientedSprite(ent, gd, tc);
 
 			foreach (var prop in ent.EntityData.Properties)
 			{
@@ -469,12 +442,6 @@ namespace Sledge.BspEditor.Providers
 				var property = entityClass?.Properties.FirstOrDefault(x => x.Name == prop.Key);
 				var value = property?.VariableType == VariableType.Choices && String.IsNullOrEmpty(prop.Value) ? "0" : prop.Value;
 
-				if (prop.Key == "angles" && isOrientedSprite)
-				{
-					var angles = ent.EntityData.GetVector3("angles") ?? Vector3.Zero;
-					value = FormatVector3(OrientedSpriteAngleTranslator.Translate(angles));
-				}
-
 				// GoldSrc treats a rendercolor of "0 0 0" as broken (it's a known, long-standing
 				// Valve Hammer Editor bug, not a valid "black" tint), so an unset/zeroed
 				// Color255 keyvalue is written as white instead of black.
@@ -492,7 +459,7 @@ namespace Sledge.BspEditor.Providers
 			sw.WriteLine("}");
 		}
 
-		private async Task WriteWorld(StreamWriter sw, Root world, GameData gd, TextureCollection tc)
+		private void WriteWorld(StreamWriter sw, Root world, GameData gd)
 		{
 			var solids = new List<Solid>();
 			var entities = new List<Entity>();
@@ -517,7 +484,7 @@ namespace Sledge.BspEditor.Providers
 
 			foreach (var entity in entities)
 			{
-				await WriteEntity(sw, entity, gd, tc);
+				WriteEntity(sw, entity, gd);
 			}
 		}
 

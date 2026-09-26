@@ -9,6 +9,7 @@ using Sledge.BspEditor.Environment;
 using Sledge.BspEditor.Modification;
 using Sledge.BspEditor.Modification.ChangeHandling;
 using Sledge.BspEditor.Primitives.MapObjects;
+using Sledge.BspEditor.Providers;
 using Sledge.BspEditor.Rendering.Resources;
 using Sledge.DataStructures.GameData;
 using Sledge.DataStructures.Geometric;
@@ -131,13 +132,19 @@ namespace Sledge.BspEditor.Rendering.ChangeHandlers
 
 		/// <summary>
 		/// Reads the entity's "angles" keyvalue (pitch yaw roll, in degrees) the same way
-		/// EntityModelChangeHandler does, so Oriented/ParallelOriented sprites rotate the
-		/// same way a model with the same angles would.
+		/// EntityModelChangeHandler does, then mirrors the yaw before converting to radians.
+		/// The raw "angles" value is exactly what gets compiled and shown by GoldSrc - it is
+		/// never touched - but GoldSrc's actual SPR_ORIENTED renderer faces an Oriented/
+		/// ParallelOriented sprite the mirror image of what plain AngleVectors math (what this
+		/// viewport would otherwise use) suggests. Mirroring yaw here, only for the preview,
+		/// makes the viewport match the compiled/in-game result 1:1. See
+		/// OrientedSpriteAngleTranslator for the full reasoning and how it was derived.
 		/// </summary>
 		private static Vector3 GetAngles(Entity entity)
 		{
 			var ang = entity.EntityData.GetVector3("angles");
-			return ang.HasValue ? ang.Value * (float) Math.PI / 180f : Vector3.Zero;
+			if (!ang.HasValue) return Vector3.Zero;
+			return OrientedSpriteAngleTranslator.Translate(ang.Value) * (float) Math.PI / 180f;
 		}
 
 		private static EntitySpriteData GetSpriteData(Entity entity, GameData gd)
