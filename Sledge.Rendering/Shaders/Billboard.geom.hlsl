@@ -93,22 +93,30 @@ void main(point GeometryIn input[1], inout TriangleStream<FragmentIn> output)
         // Yaw and roll both then spin whatever that tilted plane is, around its own (tilted)
         // facing direction.
         //
-        // Only yaw's contribution here is empirically confirmed. Pitch's tilt axis/sign and
-        // roll's sign (and whether roll really belongs with yaw here rather than with pitch)
-        // are a best guess pending a compiled test with nonzero pitch and/or roll - adjust
-        // freely once you can see what those actually do in-game.
+        // Per-axis testing (Angles.x = pitch, Angles.y = yaw, Angles.z = roll) found:
+        //  - pitch's tilt direction was backwards -> sign flipped below.
+        //  - yaw's spin direction was backwards -> sign flipped below.
+        //  - roll was indistinguishable from yaw (both just spun in place) - wrong. Roll now
+        //    swings the facing direction left/right around the vertical axis instead, the same
+        //    role a classic "yaw" would normally play, so it's actually distinct from the spin
+        //    that Angles.y does here. Roll's sign/axis is a first guess, not yet confirmed.
         const float3 baseForward = float3(1, 0, 0);
         const float3 baseRight   = float3(0, -1, 0);
 
-        float3 forward = RotateAroundAxis(baseForward, baseRight, Angles.x);
+        // Pitch tilts the plane up/down around a fixed horizontal axis.
+        float3 tilted = RotateAroundAxis(baseForward, baseRight, -Angles.x);
+
+        // Roll swings the tilted plane left/right around the vertical axis.
+        float3 forward = RotateAroundAxis(tilted, WorldUp, -Angles.z);
+
         float3 r = cross(forward, WorldUp);
         if (dot(r, r) < 0.0001) r = baseRight; // forward ~= world up, fall back to the fixed reference
         r = normalize(r);
         float3 u = normalize(cross(r, forward));
 
-        float spin = Angles.z - Angles.y;
-        right = RotateAroundAxis(r, forward, spin);
-        up = RotateAroundAxis(u, forward, spin);
+        // Yaw spins the resulting plane in place around its own facing direction.
+        right = RotateAroundAxis(r, forward, Angles.y);
+        up = RotateAroundAxis(u, forward, Angles.y);
     }
     else if (Orientation == ORIENT_PARALLEL_UPRIGHT || Orientation == ORIENT_FACING_UPRIGHT)
     {
