@@ -49,14 +49,16 @@ namespace Sledge.BspEditor.Providers
 		public async Task<BspFileLoadResult> Load(Stream stream, IEnvironment environment)
 		{
 			_gameData = await environment.GetGameData();
-			return await Task.Factory.StartNew(() =>
+
+			List<Entity> loadedEntities = null;
+			var result = await Task.Factory.StartNew(() =>
 			{
 				using (var reader = new StreamReader(stream, Encoding.ASCII, true, 1024, false))
 				{
-					var result = new BspFileLoadResult();
+					var loadResult = new BspFileLoadResult();
 
 					var map = new Map();
-					var entities = ReadAllEntities(reader, map.NumberGenerator, result);
+					var entities = ReadAllEntities(reader, map.NumberGenerator, loadResult);
 
 					var worldspawn = entities.FirstOrDefault(x => x.EntityData?.Name == "worldspawn")
 									 ?? new Entity(0) { Data = { new EntityData { Name = "worldspawn" } } };
@@ -80,10 +82,30 @@ namespace Sledge.BspEditor.Providers
 
 					map.Root.DescendantsChanged();
 
-					result.Map = map;
-					return result;
+					loadedEntities = entities;
+					loadResult.Map = map;
+					return loadResult;
 				}
 			});
+
+			// The .map file stores the angle GoldSrc needs for Oriented/ParallelOriented sprites,
+			// which is the mirror image of what the viewport shows (see OrientedSpriteAngleTranslator).
+			// Translate it back on the way in so the document/viewport always shows the mapper's
+			// intended facing, not the raw compiled value.
+			if (loadedEntities != null)
+			{
+				var tc = await environment.GetTextureCollection();
+				foreach (var entity in loadedEntities)
+				{
+					if (!entity.EntityData.Properties.TryGetValue("angles", out _)) continue;
+					if (!await OrientedSpriteAngleTranslator.IsOrientedSprite(entity, _gameData, tc)) continue;
+
+					var angles = entity.EntityData.GetVector3("angles") ?? Vector3.Zero;
+					entity.EntityData.Set("angles", FormatVector3(OrientedSpriteAngleTranslator.Translate(angles)));
+				}
+			}
+
+			return result;
 		}
 
 		#region Reading
@@ -327,16 +349,16 @@ namespace Sledge.BspEditor.Providers
 
 		#endregion
 
-		public Task Save(Stream stream, Map map, MapDocument document = null)
+		public async Task Save(Stream stream, Map map, MapDocument document = null)
 		{
 			_document = document;
-			return Task.Factory.StartNew(() =>
+			var gd = document != null ? await document.Environment.GetGameData() : null;
+			var tc = document != null ? await document.Environment.GetTextureCollection() : null;
+
+			using (var writer = new StreamWriter(stream, Encoding.ASCII, 1024, true))
 			{
-				using (var writer = new StreamWriter(stream, Encoding.ASCII, 1024, true))
-				{
-					WriteWorld(writer, map.Root);
-				}
-			});
+				await WriteWorld(writer, map.Root, gd, tc);
+			}
 		}
 
 		#region Writing
@@ -347,6 +369,14 @@ namespace Sledge.BspEditor.Providers
 			return c.X.ToString("0.000", CultureInfo.InvariantCulture)
 				   + " " + c.Y.ToString("0.000", CultureInfo.InvariantCulture)
 				   + " " + c.Z.ToString("0.000", CultureInfo.InvariantCulture);
+		}
+
+		private static bool IsZeroOrEmptyVector3(string value)
+		{
+			if (String.IsNullOrWhiteSpace(value)) return true;
+			var parts = value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+			if (parts.Length < 3) return true;
+			return parts.Take(3).All(p => float.TryParse(p, NumberStyles.Float, CultureInfo.InvariantCulture, out var f) && f == 0f);
 		}
 
 		private void CollectSolids(List<Solid> solids, IMapObject parent)
@@ -403,7 +433,7 @@ namespace Sledge.BspEditor.Providers
 			sw.WriteLine('"' + key + "\" \"" + value + '"');
 		}
 
-		private async void WriteEntity(StreamWriter sw, Entity ent)
+		private async Task WriteEntity(StreamWriter sw, Entity ent, GameData gd, TextureCollection tc)
 		{
 			var solids = new List<Solid>();
 			CollectSolids(solids, ent);
@@ -416,10 +446,11 @@ namespace Sledge.BspEditor.Providers
 				// VHE doesn't write the spawnflags when they are zero
 				WriteProperty(sw, "spawnflags", ent.EntityData.Flags.ToString(CultureInfo.InvariantCulture));
 			}
-			//var newClass = new GameData().Classes.FirstOrDefault(x => x.ClassType != ClassType.Base && (x.Name ?? "").ToLower() == txt) ?? new GameDataObject(txt, "", ClassType.Any);
-			GameData gd;
-			gd = await _document.Environment.GetGameData();
-			var entityClass = gd.Classes.Where(x => x.Name == ent.EntityData.Name).FirstOrDefault();
+			var entityClass = gd?.Classes.FirstOrDefault(x => x.Name == ent.EntityData.Name);
+
+			// Oriented/ParallelOriented sprites need their yaw mirrored to compile correctly -
+			// see OrientedSpriteAngleTranslator for why. Everything else is written unchanged.
+			var isOrientedSprite = await OrientedSpriteAngleTranslator.IsOrientedSprite(ent, gd, tc);
 
 			foreach (var prop in ent.EntityData.Properties)
 			{
@@ -436,8 +467,23 @@ namespace Sledge.BspEditor.Providers
 				//     if (emptyGd && emptyProp) continue;
 				// }
 				var property = entityClass?.Properties.FirstOrDefault(x => x.Name == prop.Key);
-				WriteProperty(sw, prop.Key, property?.VariableType == VariableType.Choices && String.IsNullOrEmpty(prop.Value) ? "0" : prop.Value);
+				var value = property?.VariableType == VariableType.Choices && String.IsNullOrEmpty(prop.Value) ? "0" : prop.Value;
 
+				if (prop.Key == "angles" && isOrientedSprite)
+				{
+					var angles = ent.EntityData.GetVector3("angles") ?? Vector3.Zero;
+					value = FormatVector3(OrientedSpriteAngleTranslator.Translate(angles));
+				}
+
+				// GoldSrc treats a rendercolor of "0 0 0" as broken (it's a known, long-standing
+				// Valve Hammer Editor bug, not a valid "black" tint), so an unset/zeroed
+				// Color255 keyvalue is written as white instead of black.
+				if (property?.VariableType == VariableType.Color255 && IsZeroOrEmptyVector3(value))
+				{
+					value = "255 255 255";
+				}
+
+				WriteProperty(sw, prop.Key, value);
 			}
 
 			if (solids.Any()) solids.ForEach(x => WriteSolid(sw, x)); // Brush entity
@@ -446,7 +492,7 @@ namespace Sledge.BspEditor.Providers
 			sw.WriteLine("}");
 		}
 
-		private void WriteWorld(StreamWriter sw, Root world)
+		private async Task WriteWorld(StreamWriter sw, Root world, GameData gd, TextureCollection tc)
 		{
 			var solids = new List<Solid>();
 			var entities = new List<Entity>();
@@ -471,7 +517,7 @@ namespace Sledge.BspEditor.Providers
 
 			foreach (var entity in entities)
 			{
-				WriteEntity(sw, entity);
+				await WriteEntity(sw, entity, gd, tc);
 			}
 		}
 
