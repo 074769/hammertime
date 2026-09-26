@@ -120,6 +120,22 @@ namespace Sledge.BspEditor.Primitives.MapObjectData
 
 		public void Transform(Matrix4x4 matrix)
 		{
+			// If the incoming transform has no rotational component (e.g. a plain
+			// move from copy/duplicate/paste), skip the angle recompute entirely.
+			// Rebuilding "angles" via a rotation-matrix round trip is lossy (it goes
+			// through Math.Asin/Atan2, which only cover a limited range and hit an
+			// explicit gimbal-lock branch near +/-90 degrees), so running it on a
+			// pure translation can silently corrupt angles that should be untouched
+			// (e.g. "360 180 360" turning into "0 -90 0" on paste).
+			bool hasRotation =
+				Math.Abs(matrix.M11 - 1) > 0.0001f || Math.Abs(matrix.M22 - 1) > 0.0001f ||
+				Math.Abs(matrix.M33 - 1) > 0.0001f || Math.Abs(matrix.M12) > 0.0001f ||
+				Math.Abs(matrix.M13) > 0.0001f || Math.Abs(matrix.M21) > 0.0001f ||
+				Math.Abs(matrix.M23) > 0.0001f || Math.Abs(matrix.M31) > 0.0001f ||
+				Math.Abs(matrix.M32) > 0.0001f;
+
+			if (!hasRotation) return;
+
 			if (Properties.TryGetValue("angles", out var angleString))
 			{
 				var initialAngles = angleString.Split(' ');
