@@ -77,22 +77,22 @@ void main(point GeometryIn input[1], inout TriangleStream<FragmentIn> output)
 
     if (Orientation == ORIENT_ORIENTED)
     {
-        // Fixed orientation from the entity's own angles - ignores the camera entirely.
-        // GoldSrc-style pitch/yaw/roll forward vector. If sprites come out
-        // upside-down or mirrored, flip the sign on sin(Angles.x) here.
-        float3 forward = normalize(float3(
-            cos(Angles.x) * cos(Angles.y),
-            cos(Angles.x) * sin(Angles.y),
-            -sin(Angles.x)));
-
-        float3 r = cross(forward, WorldUp);
-        if (dot(r, r) < 0.0001) r = float3(0, 1, 0); // forward ~= world up, pick an arbitrary right
-        r = normalize(r);
-        float3 u = normalize(cross(r, forward));
-
-        // Roll around the fixed forward axis.
-        right = RotateAroundAxis(r, forward, Angles.z);
-        up = RotateAroundAxis(u, forward, Angles.z);
+        // Confirmed against an actual compiled/in-game screenshot (yaw 0/90/180/270, pitch
+        // and roll both 0): GoldSrc does NOT swing the sprite's facing direction around the
+        // world Z axis the way plain AngleVectors math (the old version of this branch) would.
+        // Instead the sprite stays facing the camera, like ORIENT_PARALLEL_ORIENTED, and each
+        // of pitch/yaw/roll independently just spins the picture around that same fixed view
+        // axis rather than tilting or turning it in 3D - there's no other axis a flat,
+        // always-camera-facing quad could sensibly rotate on. Yaw 0/90/180/270 showed the
+        // printed arrow pointing right/down/left/up on screen (a clockwise spin as yaw
+        // increases), which is what fixes the sign on the Angles.y term below. Pitch and roll
+        // are added with the same sign as each other, matching the sign ORIENT_PARALLEL_ORIENTED
+        // already uses for roll - unlike yaw, that hasn't been separately confirmed in-game
+        // (every test so far kept pitch and roll at 0), so flip Angles.x and/or Angles.z here
+        // if either turns out to spin the wrong way once you test them.
+        float spin = Angles.x + Angles.z - Angles.y;
+        right = RotateAroundAxis(camRight, camForward, spin);
+        up = RotateAroundAxis(camUp, camForward, spin);
     }
     else if (Orientation == ORIENT_PARALLEL_UPRIGHT || Orientation == ORIENT_FACING_UPRIGHT)
     {
