@@ -78,26 +78,37 @@ void main(point GeometryIn input[1], inout TriangleStream<FragmentIn> output)
     if (Orientation == ORIENT_ORIENTED)
     {
         // Oriented sprites are a FIXED plane in world space - unlike every other orientation
-        // mode here, they must never billboard or otherwise react to the camera at all. So
-        // there's no camera-relative basis to spin (that was wrong in an earlier version of
-        // this branch). Instead this starts from a fixed reference plane - facing world +X,
-        // "up" = world Z, i.e. exactly what angles = 0,0,0 would mean for a normal GoldSrc
-        // entity - and spins it in place. Confirmed against an actual compiled/in-game
-        // screenshot (yaw 0/90/180/270, pitch and roll both 0) that pitch/yaw/roll each just
-        // spin the flat plane rather than tilting or turning its facing direction: yaw
-        // 0/90/180/270 showed the printed arrow pointing right/down/left/up on screen (a
-        // clockwise spin as yaw increases), which is what fixes the sign on the Angles.y term
-        // below. Pitch and roll are added with the same sign as each other; unlike yaw, that
-        // hasn't been separately confirmed in-game (every test so far kept pitch and roll at
-        // 0), so flip Angles.x and/or Angles.z here if either turns out to spin the wrong way
-        // once you test them.
-        const float3 fixedForward = float3(1, 0, 0);
-        const float3 fixedRight   = float3(0, -1, 0);
-        const float3 fixedUp      = float3(0, 0, 1);
+        // mode here, they must never billboard or otherwise react to the camera at all.
+        //
+        // Confirmed against an actual compiled/in-game screenshot (yaw 0/90/180/270, pitch and
+        // roll both 0) that yaw spins the flat plane in place rather than turning its facing
+        // direction: yaw 0/90/180/270 showed the printed arrow pointing right/down/left/up on
+        // screen, i.e. a clockwise spin as yaw increases.
+        //
+        // Pitch turned out NOT to behave like that - lumping it into the same spin as yaw made
+        // it indistinguishable from yaw, which testing showed is wrong. So pitch instead tilts
+        // the plane's fixed facing direction itself, same as it would for a normal GoldSrc
+        // entity, starting from a fixed reference plane (facing world +X, "up" = world Z, i.e.
+        // what angles = 0,0,0 means normally) and tilting it around a fixed horizontal axis.
+        // Yaw and roll both then spin whatever that tilted plane is, around its own (tilted)
+        // facing direction.
+        //
+        // Only yaw's contribution here is empirically confirmed. Pitch's tilt axis/sign and
+        // roll's sign (and whether roll really belongs with yaw here rather than with pitch)
+        // are a best guess pending a compiled test with nonzero pitch and/or roll - adjust
+        // freely once you can see what those actually do in-game.
+        const float3 baseForward = float3(1, 0, 0);
+        const float3 baseRight   = float3(0, -1, 0);
 
-        float spin = Angles.x + Angles.z - Angles.y;
-        right = RotateAroundAxis(fixedRight, fixedForward, spin);
-        up = RotateAroundAxis(fixedUp, fixedForward, spin);
+        float3 forward = RotateAroundAxis(baseForward, baseRight, Angles.x);
+        float3 r = cross(forward, WorldUp);
+        if (dot(r, r) < 0.0001) r = baseRight; // forward ~= world up, fall back to the fixed reference
+        r = normalize(r);
+        float3 u = normalize(cross(r, forward));
+
+        float spin = Angles.z - Angles.y;
+        right = RotateAroundAxis(r, forward, spin);
+        up = RotateAroundAxis(u, forward, spin);
     }
     else if (Orientation == ORIENT_PARALLEL_UPRIGHT || Orientation == ORIENT_FACING_UPRIGHT)
     {
