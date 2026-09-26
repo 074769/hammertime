@@ -3,26 +3,32 @@
 namespace Sledge.BspEditor.Providers
 {
     /// <summary>
-    /// GoldSrc's real SPR_ORIENTED renderer (confirmed against the compiled/in-game result, and
-    /// against the open-source Xash3D-FWGS reimplementation of AngleVectors/R_DrawSpriteModel)
-    /// builds its "right" vector from an entity's yaw the mirror image of what plain AngleVectors
-    /// math - the math Hammertime's own 3D viewport used to use - would suggest.
+    /// GoldSrc ends up compiling an Oriented/ParallelOriented sprite's yaw differently to what
+    /// was set in Hammertime. Confirmed by diffing a saved .map against the same map decompiled
+    /// back out of the compiled result, entity-for-entity, by origin:
     ///
-    /// The "angles" keyvalue itself is never touched; whatever the mapper types is exactly what
-    /// gets saved to the .map and exactly what GoldSrc reads at compile time. This translator is
-    /// applied only on the render side (see EntitySpriteChangeHandler.GetAngles), purely to make
-    /// the viewport's preview match that compiled/in-game result 1:1.
+    ///   yaw set in Hammertime -> yaw once compiled
+    ///          0 (360)        ->        180
+    ///          90             ->        90
+    ///          180            ->        0
+    ///          270            ->        270
     ///
-    /// This was derived from a test with pitch = 0 and roll = 0 (yaw 0/90/180/270 only), which
-    /// showed the compiled sprite's facing was consistently the negation of the yaw that was set.
-    /// Pitch and roll are passed through unchanged. If an Oriented sprite ever needs a tilt or
-    /// roll, verify that behaviour in a compiled map before trusting this translator for it.
+    /// i.e. compiled = 180 - yaw (0 and 180 swap with each other; 90 and 270 are untouched).
+    /// Pitch and roll were 0 in every test and were not observed to change.
+    ///
+    /// The "angles" keyvalue itself is never touched by Hammertime; whatever the mapper types is
+    /// exactly what gets saved to the .map, and it's the compile step that does this. This
+    /// translator is applied only on the render side (see EntitySpriteChangeHandler.GetAngles),
+    /// purely so the viewport's preview matches that compiled/in-game result 1:1.
+    ///
+    /// If an Oriented sprite ever needs a tilt or roll, verify that behaviour against a compiled
+    /// map (the same way this was derived) before trusting this translator for it.
     /// </summary>
     public static class OrientedSpriteAngleTranslator
     {
         public static Vector3 Translate(Vector3 angles)
         {
-            var yaw = -angles.Y % 360f;
+            var yaw = (180f - angles.Y) % 360f;
             if (yaw < 0) yaw += 360f;
             return new Vector3(angles.X, yaw, angles.Z);
         }
