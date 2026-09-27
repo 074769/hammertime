@@ -341,11 +341,24 @@ namespace Sledge.BspEditor.Providers
 		#region Writing
 
 
+		/// <summary>
+		/// Formats a float the way reference tools like hlfix do: enough fractional digits to
+		/// preserve the value (important for normalized texture axis vectors, which lose real
+		/// precision - and end up with visibly wrong UVs - if rounded to 3 decimal places), but
+		/// with trailing zeros trimmed so whole numbers like brush coordinates don't get padded
+		/// out to "448.000" and bloat the file. A custom pattern (rather than "G"/round-trip
+		/// formatting) is used deliberately so we never emit scientific notation, which the .map
+		/// format can't parse.
+		/// </summary>
+		private static string FormatFloat(float value)
+		{
+			var s = value.ToString("0.######", CultureInfo.InvariantCulture);
+			return s == "-0" ? "0" : s;
+		}
+
 		private string FormatVector3(Vector3 c)
 		{
-			return c.X.ToString("0.000", CultureInfo.InvariantCulture)
-				   + " " + c.Y.ToString("0.000", CultureInfo.InvariantCulture)
-				   + " " + c.Z.ToString("0.000", CultureInfo.InvariantCulture);
+			return FormatFloat(c.X) + " " + FormatFloat(c.Y) + " " + FormatFloat(c.Z);
 		}
 
 		private static bool IsZeroOrEmptyVector3(string value)
@@ -383,15 +396,15 @@ namespace Sledge.BspEditor.Providers
 			strings.Add(String.IsNullOrWhiteSpace(face.Texture.Name) ? "AAATRIGGER" : face.Texture.Name);
 			strings.Add("[");
 			strings.Add(FormatVector3(face.Texture.UAxis));
-			strings.Add(face.Texture.XShift.ToString("0.0000", CultureInfo.InvariantCulture));
+			strings.Add(FormatFloat(face.Texture.XShift));
 			strings.Add("]");
 			strings.Add("[");
 			strings.Add(FormatVector3(face.Texture.VAxis));
-			strings.Add(face.Texture.YShift.ToString("0.0000", CultureInfo.InvariantCulture));
+			strings.Add(FormatFloat(face.Texture.YShift));
 			strings.Add("]");
-			strings.Add(face.Texture.Rotation.ToString("0.0000", CultureInfo.InvariantCulture));
-			strings.Add(face.Texture.XScale.ToString("0.0000", CultureInfo.InvariantCulture));
-			strings.Add(face.Texture.YScale.ToString("0.0000", CultureInfo.InvariantCulture));
+			strings.Add(FormatFloat(face.Texture.Rotation));
+			strings.Add(FormatFloat(face.Texture.XScale));
+			strings.Add(FormatFloat(face.Texture.YScale));
 			sw.WriteLine(String.Join(" ", strings));
 		}
 
