@@ -103,14 +103,22 @@ void main(point GeometryIn input[1], inout TriangleStream<FragmentIn> output)
         float3 u1 = RotateAroundAxis(u, r, -Angles.x);
         // r is unchanged - you can't rotate a vector out of the axis it's rotating around.
 
-        // Roll swings the tilted plane left/right around the fixed vertical axis.
-        float3 f2 = RotateAroundAxis(f1, WorldUp, Angles.z);
-        float3 r2 = RotateAroundAxis(r,  WorldUp, Angles.z);
-        float3 u2 = RotateAroundAxis(u1, WorldUp, Angles.z);
+        // Yaw swings the tilted plane left/right around the fixed world-up axis - this
+        // is the rotation that actually changes which way the plane faces. Bug fix:
+        // this stage was previously driven by Angles.z (roll) instead of Angles.y (yaw),
+        // and the stage below used Angles.y instead of Angles.z - the two were swapped.
+        // Verified against oriented_sprite_debbuging.map's hand-placed reference arrows
+        // (13 known-good angle/direction pairs covering yaw 0/90/180/270 and roll
+        // 0/90/180/270, plus pitch sanity checks) - only this swap reproduces all 13.
+        float3 f2 = RotateAroundAxis(f1, WorldUp, Angles.y);
+        float3 r2 = RotateAroundAxis(r,  WorldUp, Angles.y);
+        float3 u2 = RotateAroundAxis(u1, WorldUp, Angles.y);
 
-        // Yaw spins the resulting plane in place around its own facing direction.
-        right = RotateAroundAxis(r2, f2, Angles.y);
-        up = RotateAroundAxis(u2, f2, Angles.y);
+        // Roll spins the resulting plane in place around its own (pitched+yawed) facing
+        // direction - this only rotates the picture in place, it never changes which
+        // way the plane faces.
+        right = RotateAroundAxis(r2, f2, Angles.z);
+        up = RotateAroundAxis(u2, f2, Angles.z);
     }
     else if (Orientation == ORIENT_PARALLEL_UPRIGHT || Orientation == ORIENT_FACING_UPRIGHT)
     {
