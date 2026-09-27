@@ -6,6 +6,7 @@ using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Environment;
 using Sledge.BspEditor.Modification;
 using Sledge.BspEditor.Modification.Operations;
+using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.BspEditor.Rendering.Resources;
 using Sledge.Common.Shell.Commands;
 using Sledge.Common.Translations;
@@ -54,9 +55,12 @@ namespace Sledge.BspEditor.Editing.Commands.Textures
 
             // Force every object to reconvert and re-request its textures. This is not an
             // undoable edit - nothing about the map itself has changed.
+            // (The no-op is explicitly typed as Action<MapDocument> to disambiguate it from
+            // TrivialOperation's other constructor overload, which takes Func<MapDocument, Task>.)
+            Action<MapDocument> noop = x => { };
             await MapDocumentOperation.Perform(document,
                 new TrivialOperation(
-                    x => { },
+                    noop,
                     x => x.UpdateRange(x.Document.Map.Root.FindAll())
                 )
             );
