@@ -104,9 +104,9 @@ void main(point GeometryIn input[1], inout TriangleStream<FragmentIn> output)
         // r is unchanged - you can't rotate a vector out of the axis it's rotating around.
 
         // Roll swings the tilted plane left/right around the fixed vertical axis.
-        float3 f2 = RotateAroundAxis(f1, WorldUp, -Angles.z);
-        float3 r2 = RotateAroundAxis(r,  WorldUp, -Angles.z);
-        float3 u2 = RotateAroundAxis(u1, WorldUp, -Angles.z);
+        float3 f2 = RotateAroundAxis(f1, WorldUp, Angles.z);
+        float3 r2 = RotateAroundAxis(r,  WorldUp, Angles.z);
+        float3 u2 = RotateAroundAxis(u1, WorldUp, Angles.z);
 
         // Yaw spins the resulting plane in place around its own facing direction.
         right = RotateAroundAxis(r2, f2, Angles.y);
