@@ -166,6 +166,18 @@ namespace Sledge.Rendering.Engine
 		}
 
 		/// <summary>
+		/// Destroy a previously uploaded texture by name, if one exists.
+		/// Safe to call even if a texture with this name was never uploaded.
+		/// Use this to force a texture to be re-read from source next time it's requested,
+		/// e.g. after the underlying WAD file was edited on disk.
+		/// </summary>
+		/// <param name="name">The texture name, as passed to UploadTexture</param>
+		public void DestroyTextureByName(string name)
+		{
+			Engine.Instance.Context.ResourceLoader.TryDestroyTexture(name);
+		}
+
+		/// <summary>
 		/// Create a new viewport for the engine.
 		/// </summary>
 		/// <returns>The viewport</returns>

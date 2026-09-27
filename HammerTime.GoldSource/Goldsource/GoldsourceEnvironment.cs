@@ -39,15 +39,19 @@ using Path = System.IO.Path;
 
 namespace Sledge.BspEditor.Environment.Goldsource
 {
-	public class GoldsourceEnvironment : IEnvironment, IDynamicSizeGridEnvironment
+	public class GoldsourceEnvironment : IEnvironment, IDynamicSizeGridEnvironment, ITexturePackageManager
 	{
 		private readonly ITexturePackageProvider _wadProvider;
 		private readonly ITexturePackageProvider _spriteProvider;
 		private readonly ITexturePackageProvider _envProvider;
 		private readonly IGameDataProvider _fgdProvider;
-		private readonly Lazy<Task<TextureCollection>> _textureCollection;
+		private Lazy<Task<TextureCollection>> _textureCollection;
 		private readonly List<IEnvironmentData> _data;
 		private readonly Lazy<Task<GameData>> _gameData;
+
+		// Packages the user has manually unloaded for the map currently open in this
+		// environment instance (not part of the saved game profile - see ITexturePackageManager).
+		private List<string> _manuallyDisabledWads = new List<string>();
 
 		private IEnumerable<TexturePackageReference> _skyTextures;
 		public string Engine => "Goldsource";
@@ -201,7 +205,8 @@ namespace Sledge.BspEditor.Environment.Goldsource
 
 		private async Task<TextureCollection> MakeTextureCollectionAsync()
 		{
-			var wadRefs = _wadProvider.GetPackagesInFile(Root).Where(x => !ExcludedWads.Contains(x.Name, StringComparer.InvariantCultureIgnoreCase));
+			var wadRefs = _wadProvider.GetPackagesInFile(Root).Where(x => !ExcludedWads.Contains(x.Name, StringComparer.InvariantCultureIgnoreCase)
+			                                                              && !_manuallyDisabledWads.Contains(x.Name, StringComparer.InvariantCultureIgnoreCase));
 			var extraWads = AdditionalTextureFiles.SelectMany(x => _wadProvider.GetPackagesInFile(new NativeFile(x)));
 			var wads = await _wadProvider.GetTexturePackages(wadRefs.Union(extraWads));
 
@@ -211,6 +216,36 @@ namespace Sledge.BspEditor.Environment.Goldsource
 			return new GoldsourceTextureCollection(wads.Union(sprites));
 		}
 		public IEnumerable<TexturePackageReference> GetSkyboxes() => _skyTextures;
+
+		// ITexturePackageManager
+
+		/// <summary>
+		/// All WAD package names found on disk for this environment, regardless of whether
+		/// they are currently loaded, globally excluded, or manually disabled for this map.
+		/// </summary>
+		public IEnumerable<string> GetAllTexturePackageNames()
+		{
+			return _wadProvider.GetPackagesInFile(Root).Select(x => x.Name).Distinct(StringComparer.InvariantCultureIgnoreCase);
+		}
+
+		public IEnumerable<string> ManuallyDisabledTexturePackages => _manuallyDisabledWads;
+
+		public void SetManuallyDisabledTexturePackages(IEnumerable<string> packageNames)
+		{
+			_manuallyDisabledWads = (packageNames ?? Enumerable.Empty<string>())
+				.Distinct(StringComparer.InvariantCultureIgnoreCase)
+				.ToList();
+
+			RefreshTexturePackages();
+		}
+
+		public void RefreshTexturePackages()
+		{
+			// Replace the lazy holder so the next call to GetTextureCollection() re-scans
+			// disk and re-reads WAD contents, picking up both live file edits and any change
+			// to the manually-disabled package set.
+			_textureCollection = new Lazy<Task<TextureCollection>>(MakeTextureCollectionAsync);
+		}
 
 		private Task<GameData> MakeGameDataAsync()
 		{

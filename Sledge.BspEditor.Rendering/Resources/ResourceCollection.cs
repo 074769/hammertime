@@ -245,6 +245,29 @@ namespace Sledge.BspEditor.Rendering.Resources
 		}
 
 		/// <summary>
+		/// Discards all already-uploaded textures for the given environment, so the next time
+		/// they're needed (e.g. after a change triggers a reconversion of map geometry) they
+		/// will be re-read from the texture collection and re-uploaded with fresh pixel data.
+		/// Used to reflect WAD files that were edited on disk without restarting the editor.
+		/// Note: this only covers textures uploaded via <see cref="Upload"/> and
+		/// <see cref="CreateSpriteRenderable"/> (world/brush faces and sprites) - textures
+		/// baked into already-loaded models are not affected.
+		/// </summary>
+		/// <param name="environment">The environment whose textures should be refreshed</param>
+		public void RefreshTextures(IEnvironment environment)
+		{
+			if (environment?.ID == null) return;
+			EnsureEnvironment(environment);
+
+			var tlist = _textures[environment.ID];
+			foreach (var textureName in tlist)
+			{
+				_engine.Value.DestroyTextureByName($"{environment.ID}::{textureName}");
+			}
+			tlist.Clear();
+		}
+
+		/// <summary>
 		/// Dispose all resources for environments not in the given list.
 		/// </summary>
 		/// <param name="usedEnvironments">The environments to retain resources for</param>

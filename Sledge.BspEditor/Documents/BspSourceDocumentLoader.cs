@@ -242,6 +242,17 @@ namespace Sledge.BspEditor.Documents
 		{
 			await env.UpdateDocumentData(document);
 
+			// Re-apply any texture packages (e.g. WADs) the user has previously chosen to
+			// manually unload for this specific map, before anything else touches textures.
+			if (env is ITexturePackageManager packageManager && !String.IsNullOrWhiteSpace(document.FileName))
+			{
+				var disabled = MapTexturePackageSettingsManager.GetInstance()?.GetDisabledPackages(document.FileName);
+				if (disabled != null && disabled.Count > 0)
+				{
+					packageManager.SetManuallyDisabledTexturePackages(disabled);
+				}
+			}
+
 			foreach (var p in _processors.Select(x => x.Value).OrderBy(x => x.OrderHint))
 			{
 				await p.AfterLoad(document);
@@ -271,6 +282,19 @@ namespace Sledge.BspEditor.Documents
 			var map = (MapDocument)document;
 
 			await map.Environment.UpdateDocumentData(map);
+
+			// If this map was unsaved when the user toggled off some texture packages (so
+			// there was nothing to key the choice against yet), remember the choice now that
+			// we have a real path for it.
+			if (map.Environment is ITexturePackageManager packageManager)
+			{
+				var disabled = packageManager.ManuallyDisabledTexturePackages.ToList();
+				if (disabled.Count > 0)
+				{
+					MapTexturePackageSettingsManager.GetInstance()?.SetDisabledPackages(location, disabled);
+					await Oy.Publish("Settings:Save");
+				}
+			}
 
 			await ProcessBeforeSave(map);
 

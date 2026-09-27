@@ -29,6 +29,7 @@
         private void InitializeComponent()
         {
             this.PackageTree = new System.Windows.Forms.TreeView();
+            this.ReloadTexturesButton = new System.Windows.Forms.Button();
             this.panel1 = new System.Windows.Forms.Panel();
             this.SortDescendingCheckbox = new System.Windows.Forms.CheckBox();
             this.SortOrderCombo = new System.Windows.Forms.ComboBox();
@@ -55,13 +56,25 @@
             // 
             // PackageTree
             // 
+            this.PackageTree.CheckBoxes = true;
             this.PackageTree.Dock = System.Windows.Forms.DockStyle.Top;
             this.PackageTree.HideSelection = false;
             this.PackageTree.Location = new System.Drawing.Point(0, 0);
             this.PackageTree.Name = "PackageTree";
-            this.PackageTree.Size = new System.Drawing.Size(226, 413);
+            this.PackageTree.Size = new System.Drawing.Size(226, 386);
             this.PackageTree.TabIndex = 1;
             this.PackageTree.AfterSelect += new System.Windows.Forms.TreeViewEventHandler(this.SelectedPackageChanged);
+            this.PackageTree.AfterCheck += new System.Windows.Forms.TreeViewEventHandler(this.PackageTreeAfterCheck);
+            // 
+            // ReloadTexturesButton
+            // 
+            this.ReloadTexturesButton.Location = new System.Drawing.Point(0, 386);
+            this.ReloadTexturesButton.Name = "ReloadTexturesButton";
+            this.ReloadTexturesButton.Size = new System.Drawing.Size(226, 27);
+            this.ReloadTexturesButton.TabIndex = 2;
+            this.ReloadTexturesButton.Text = "Reload Textures";
+            this.ReloadTexturesButton.UseVisualStyleBackColor = true;
+            this.ReloadTexturesButton.Click += new System.EventHandler(this.ReloadTexturesButtonClick);
             // 
             // panel1
             // 
@@ -221,6 +234,7 @@
             this.LeftbarPanel.Controls.Add(this.FavouriteTexturesLabel);
             this.LeftbarPanel.Controls.Add(this.RenameFolderButton);
 			this.LeftbarPanel.Controls.Add(this.FavouritesTree);
+            this.LeftbarPanel.Controls.Add(this.ReloadTexturesButton);
             this.LeftbarPanel.Controls.Add(this.PackageTree);
             this.LeftbarPanel.Dock = System.Windows.Forms.DockStyle.Left;
             this.LeftbarPanel.Location = new System.Drawing.Point(0, 0);
@@ -319,6 +333,7 @@
 		#endregion
 
 		private System.Windows.Forms.TreeView PackageTree;
+		private System.Windows.Forms.Button ReloadTexturesButton;
         private System.Windows.Forms.Panel panel1;
         private System.Windows.Forms.Label TextureSizeLabel;
         private System.Windows.Forms.Label TextureNameLabel;

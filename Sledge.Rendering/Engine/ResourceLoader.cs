@@ -102,6 +102,23 @@ namespace Sledge.Rendering.Engine
 			texture.Dispose();
 		}
 
+		/// <summary>
+		/// Destroys a previously uploaded texture by name, if one exists. Unlike
+		/// <see cref="GetTexture"/>, this never falls back to the missing-texture
+		/// placeholder, so it's safe to call for a name that was never uploaded.
+		/// </summary>
+		/// <param name="name">The texture name, as passed to UploadTexture</param>
+		/// <returns>True if a texture was found and destroyed</returns>
+		internal bool TryDestroyTexture(string name)
+		{
+			if (_textures.TryRemove(name, out var texture))
+			{
+				texture.Dispose();
+				return true;
+			}
+			return false;
+		}
+
 		internal Texture GetTexture(string name)
 		{
 			return _textures.TryGetValue(name, out var tex) ? tex : MissingTexture.Value;

@@ -5,12 +5,15 @@ using System.Drawing;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using LogicAndTrick.Oy;
 using Sledge.BspEditor.Documents;
+using Sledge.BspEditor.Environment;
 using Sledge.BspEditor.Modification;
 using Sledge.BspEditor.Modification.Operations.Selection;
 using Sledge.BspEditor.Primitives;
 using Sledge.BspEditor.Primitives.MapData;
 using Sledge.BspEditor.Primitives.MapObjects;
+using Sledge.Common.Shell.Commands;
 using Sledge.Common.Shell.Settings;
 using Sledge.Common.Translations;
 using Sledge.QuickForms;
@@ -221,21 +224,53 @@ namespace Sledge.BspEditor.Tools.Texture
 			UpdateTextureList();
 		}
 
+		// True while we're rebuilding PackageTree nodes ourselves, so the AfterCheck handler
+		// below knows to ignore checkbox states it's setting programmatically and only react
+		// to the user actually clicking a checkbox.
+		private bool _updatingPackageList;
+
 		private void UpdatePackageList()
 		{
 			var selected = PackageTree.SelectedNode;
 			var selectedKey = selected == null ? GetMemory<string>("SelectedPackage") : selected.Name;
-			var packages = _textureList.Collection.Packages.Where(p => _textures.Any(p.HasTexture));
-			PackageTree.Nodes.Clear();
-			var parent = PackageTree.Nodes.Add("", "All Packages");
-			TreeNode reselect = null;
-			foreach (var tp in packages.OrderBy(x => x.ToString()))
+
+			var packageManager = _document?.Environment as ITexturePackageManager;
+			var loadedCounts = _textureList.Collection.Packages
+				.Where(p => _textures.Any(p.HasTexture))
+				.GroupBy(p => p.ToString(), StringComparer.InvariantCultureIgnoreCase)
+				.ToDictionary(g => g.Key, g => g.First().Textures.Count, StringComparer.InvariantCultureIgnoreCase);
+
+			var packageNames = packageManager != null
+				? packageManager.GetAllTexturePackageNames()
+				: loadedCounts.Keys.AsEnumerable();
+
+			var disabled = packageManager != null
+				? new HashSet<string>(packageManager.ManuallyDisabledTexturePackages, StringComparer.InvariantCultureIgnoreCase)
+				: new HashSet<string>(StringComparer.InvariantCultureIgnoreCase);
+
+			_updatingPackageList = true;
+			try
 			{
-				var node = parent.Nodes.Add(tp.ToString(), tp + " (" + tp.Textures.Count + ")");
-				if (selectedKey == node.Name) reselect = node;
+				PackageTree.CheckBoxes = packageManager != null;
+				PackageTree.Nodes.Clear();
+				var parent = PackageTree.Nodes.Add("", "All Packages");
+				parent.Checked = true;
+				TreeNode reselect = null;
+				foreach (var name in packageNames.OrderBy(x => x, StringComparer.InvariantCultureIgnoreCase))
+				{
+					var isLoaded = loadedCounts.TryGetValue(name, out var count);
+					var label = isLoaded ? $"{name} ({count})" : $"{name} (unloaded)";
+					var node = parent.Nodes.Add(name, label);
+					node.Checked = !disabled.Contains(name);
+					if (selectedKey == node.Name) reselect = node;
+				}
+				PackageTree.SelectedNode = reselect;
+				PackageTree.ExpandAll();
 			}
-			PackageTree.SelectedNode = reselect;
-			PackageTree.ExpandAll();
+			finally
+			{
+				_updatingPackageList = false;
+			}
 		}
 
 		private IEnumerable<string> GetPackageTextures()
@@ -243,10 +278,61 @@ namespace Sledge.BspEditor.Tools.Texture
 			var package = PackageTree.SelectedNode;
 			var key = package?.Name;
 			if (String.IsNullOrWhiteSpace(key)) key = null;
+			if (key == null) return new HashSet<string>(_textures);
 			var p = _textureList.Collection.Packages.FirstOrDefault(x => x.ToString() == key);
+			if (p == null) return new HashSet<string>(); // package is unloaded for this map
 			var set = new HashSet<string>(_textures);
-			if (p != null) set.IntersectWith(p.Textures);
+			set.IntersectWith(p.Textures);
 			return set;
+		}
+
+		private async void PackageTreeAfterCheck(object sender, TreeViewEventArgs e)
+		{
+			// Ignore checkbox changes we made ourselves while rebuilding the tree, and clicks
+			// on the "All Packages" root node (it isn't tied to a real package).
+			if (_updatingPackageList || e.Node?.Parent == null) return;
+			if (!(_document?.Environment is ITexturePackageManager packageManager)) return;
+
+			var disabled = new HashSet<string>(packageManager.ManuallyDisabledTexturePackages, StringComparer.InvariantCultureIgnoreCase);
+			if (e.Node.Checked) disabled.Remove(e.Node.Name);
+			else disabled.Add(e.Node.Name);
+
+			packageManager.SetManuallyDisabledTexturePackages(disabled);
+
+			if (!String.IsNullOrWhiteSpace(_document?.FileName))
+			{
+				MapTexturePackageSettingsManager.GetInstance()?.SetDisabledPackages(_document.FileName, disabled);
+				await Oy.Publish("Settings:Save");
+			}
+
+			await RefreshTexturesFromEnvironment();
+		}
+
+		private async Task RefreshTexturesFromEnvironment()
+		{
+			_textureList.Collection = await _document.Environment.GetTextureCollection();
+			_textures.Clear();
+			_textures.AddRange(_textureList.Collection.GetBrowsableTextures());
+
+			UpdatePackageList();
+			await UpdateTextureList();
+		}
+
+		private async void ReloadTexturesButtonClick(object sender, EventArgs e)
+		{
+			ReloadTexturesButton.Enabled = false;
+			try
+			{
+				if (_document != null)
+				{
+					await Oy.Publish("Command:Run", new CommandMessage("BspEditor:Textures:Reload"));
+					await RefreshTexturesFromEnvironment();
+				}
+			}
+			finally
+			{
+				ReloadTexturesButton.Enabled = true;
+			}
 		}
 
 		private void UpdateFavouritesList()
