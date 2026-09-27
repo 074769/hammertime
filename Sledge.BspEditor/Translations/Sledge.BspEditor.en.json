@@ -192,5 +192,8 @@
     },
     "MenuDataProvider": {
         "Window": "Window"
+    },
+    "AutomaticVisgroups": {
+        "EntitiesByClass": "Entities by Class"
     } 
 }

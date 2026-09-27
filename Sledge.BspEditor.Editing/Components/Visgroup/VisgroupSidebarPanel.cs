@@ -136,7 +136,7 @@ namespace Sledge.BspEditor.Editing.Components.Visgroup
                         var seg = String.Join("/", path);
                         if (!parents.ContainsKey(seg))
                         {
-                            var group = new VisgroupItem(_translation.GetString(spl))
+                            var group = new VisgroupItem(_translation.GetString(spl) ?? spl)
                             {
                                 Parent = parent,
                                 Disabled = true
@@ -151,7 +151,7 @@ namespace Sledge.BspEditor.Editing.Components.Visgroup
                 {
                     parent = parents[av.Path];
                 }
-                list.Add(new VisgroupItem(_translation.GetString(av.Key))
+                list.Add(new VisgroupItem(_translation.GetString(av.Key) ?? av.Key)
                 {
                     CheckState = GetVisibilityCheckState(av.Objects),
                     Tag = av,
