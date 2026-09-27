@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
+using System.Numerics;
 using System.Windows.Forms;
 using LogicAndTrick.Oy;
+using Sledge.Common.Shell.Commands;
 using Sledge.Rendering.Cameras;
 using Sledge.Rendering.Engine;
 using Sledge.Rendering.Viewports;
@@ -68,6 +70,27 @@ namespace Sledge.BspEditor.Rendering.Viewport
 				if (viewport.IsFocused) await Oy.Publish<string>("BspEditor:Edit:PasteFromView", (Viewport.Camera is OrthographicCamera camera) ?
 					camera.ViewType == OrthographicCamera.OrthographicType.Top ? "Z" :
 					camera.ViewType == OrthographicCamera.OrthographicType.Front ? "X" : "Y" : "3D");
+			});
+
+			// Rotate the current selection around the axis perpendicular to whichever
+			// 2D viewport is currently focused (i.e. the axis the viewport is "looking down").
+			// Only fires for the focused viewport, and only when that viewport is 2D -
+			// there is no well-defined single rotation axis for the 3D/perspective viewport.
+			Oy.Subscribe<string>("BspEditor:Viewport:RotateSelection", async (direction) =>
+			{
+				if (!viewport.IsFocused) return;
+				if (!(Viewport.Camera is OrthographicCamera camera)) return;
+
+				// Same axis derivation used by the 2D viewport's right-click Rotate menu:
+				// the "unused" (depth) axis of this viewport, with the Side viewport's axis
+				// negated to correct for its mirrored (orientation-reversing) axis mapping.
+				var expand = camera.Expand(new Vector3(1, 2, 3));
+				var axis = expand.X == 0 ? Vector3.UnitX : (expand.Y == 0 ? -Vector3.UnitY : Vector3.UnitZ);
+
+				const float rotateHotkeyAngleDegrees = 90f;
+				var angle = direction == "CW" ? -rotateHotkeyAngleDegrees : rotateHotkeyAngleDegrees;
+
+				await Oy.Publish("Command:Run", new CommandMessage("BspEditor:Tools:Rotate", new { Axis = axis, Angle = angle }));
 			});
 		}
 
