@@ -93,7 +93,7 @@
             // HideMaskCheckbox
             // 
             HideMaskCheckbox.Appearance = System.Windows.Forms.Appearance.Button;
-            HideMaskCheckbox.Location = new System.Drawing.Point(354, 145);
+            HideMaskCheckbox.Location = new System.Drawing.Point(354, 113);
             HideMaskCheckbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             HideMaskCheckbox.Name = "HideMaskCheckbox";
             HideMaskCheckbox.Size = new System.Drawing.Size(119, 27);
@@ -106,7 +106,7 @@
             // RecentFilterTextbox
             // 
             RecentFilterTextbox.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
-            RecentFilterTextbox.Location = new System.Drawing.Point(371, 550);
+            RecentFilterTextbox.Location = new System.Drawing.Point(371, 563);
             RecentFilterTextbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             RecentFilterTextbox.Name = "RecentFilterTextbox";
             RecentFilterTextbox.Size = new System.Drawing.Size(101, 23);
@@ -116,7 +116,7 @@
             // FilterRecentLabel
             // 
             FilterRecentLabel.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
-            FilterRecentLabel.Location = new System.Drawing.Point(371, 515);
+            FilterRecentLabel.Location = new System.Drawing.Point(371, 528);
             FilterRecentLabel.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
             FilterRecentLabel.Name = "FilterRecentLabel";
             FilterRecentLabel.Size = new System.Drawing.Size(102, 28);
@@ -326,10 +326,10 @@
             // 
             // TextureDetailsLabel
             // 
-            TextureDetailsLabel.Location = new System.Drawing.Point(14, 297);
+            TextureDetailsLabel.Location = new System.Drawing.Point(14, 298);
             TextureDetailsLabel.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
             TextureDetailsLabel.Name = "TextureDetailsLabel";
-            TextureDetailsLabel.Size = new System.Drawing.Size(458, 8);
+            TextureDetailsLabel.Size = new System.Drawing.Size(458, 18);
             TextureDetailsLabel.TabIndex = 21;
             TextureDetailsLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
@@ -494,7 +494,7 @@
             // 
             // SelectedTextureListPanel
             // 
-            SelectedTextureListPanel.Location = new System.Drawing.Point(14, 305);
+            SelectedTextureListPanel.Location = new System.Drawing.Point(14, 318);
             SelectedTextureListPanel.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             SelectedTextureListPanel.Name = "SelectedTextureListPanel";
             SelectedTextureListPanel.Size = new System.Drawing.Size(350, 238);
@@ -503,7 +503,7 @@
             // RecentTextureListPanel
             // 
             RecentTextureListPanel.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
-            RecentTextureListPanel.Location = new System.Drawing.Point(371, 305);
+            RecentTextureListPanel.Location = new System.Drawing.Point(371, 318);
             RecentTextureListPanel.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             RecentTextureListPanel.Name = "RecentTextureListPanel";
             RecentTextureListPanel.Size = new System.Drawing.Size(102, 207);
@@ -511,7 +511,7 @@
             // 
             // LeftClickActionButton
             // 
-            LeftClickActionButton.Location = new System.Drawing.Point(14, 550);
+            LeftClickActionButton.Location = new System.Drawing.Point(14, 563);
             LeftClickActionButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             LeftClickActionButton.Menu = LeftClickActionMenu;
             LeftClickActionButton.Name = "LeftClickActionButton";
@@ -528,7 +528,7 @@
             // 
             // RightClickActionButton
             // 
-            RightClickActionButton.Location = new System.Drawing.Point(191, 550);
+            RightClickActionButton.Location = new System.Drawing.Point(191, 563);
             RightClickActionButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             RightClickActionButton.Menu = RightClickActionMenu;
             RightClickActionButton.Name = "RightClickActionButton";
@@ -556,9 +556,9 @@
             // 
             // apply_null
             // 
-            apply_null.Location = new System.Drawing.Point(354, 112);
+            apply_null.Location = new System.Drawing.Point(279, 80);
             apply_null.Name = "apply_null";
-            apply_null.Size = new System.Drawing.Size(119, 27);
+            apply_null.Size = new System.Drawing.Size(66, 27);
             apply_null.TabIndex = 39;
             apply_null.Text = "NULL";
             apply_null.UseVisualStyleBackColor = true;
@@ -661,7 +661,7 @@
             // 
             AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            ClientSize = new System.Drawing.Size(486, 585);
+            ClientSize = new System.Drawing.Size(486, 598);
             Controls.Add(RotateLabel);
             Controls.Add(TreatAsOneCheckbox);
             Controls.Add(RotMinus180Button);
