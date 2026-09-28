@@ -64,7 +64,8 @@ namespace Sledge.BspEditor.Tools.Selection
 		[Setting] public bool Show3DWidgets { get; set; } = false;
 		[Setting] public bool ShowMoveWidget { get; set; } = true;
 		[Setting] public bool ShowRotateWidget { get; set; } = true;
-		[Setting] public bool ShowEntityMotionWidget { get; set; } = true;
+		[Setting] public bool ShowMoveArrowWidget { get; set; } = true;
+		[Setting] public bool ShowRotationArcWidget { get; set; } = true;
 		[Setting] public bool SelectByCenterHandles { get; set; } = true;
 		[Setting] public bool OnlySelectByCenterHandles { get; set; } = false;
 		[Setting] public bool SelectionBoxOnlySelectsByCenterHandles { get; set; } = false;
@@ -82,7 +83,8 @@ namespace Sledge.BspEditor.Tools.Selection
 			yield return new SettingKey("Tools/Selection", "Show3DWidgets", typeof(bool));
 			yield return new SettingKey("Tools/Selection", "ShowMoveWidget", typeof(bool));
 			yield return new SettingKey("Tools/Selection", "ShowRotateWidget", typeof(bool));
-			yield return new SettingKey("Tools/Selection", "ShowEntityMotionWidget", typeof(bool));
+			yield return new SettingKey("Tools/Selection", "ShowMoveArrowWidget", typeof(bool));
+			yield return new SettingKey("Tools/Selection", "ShowRotationArcWidget", typeof(bool));
 			yield return new SettingKey("Tools/Selection", "SelectByCenterHandles", typeof(bool));
 			yield return new SettingKey("Tools/Selection", "OnlySelectByCenterHandles", typeof(bool));
 			yield return new SettingKey("Tools/Selection", "SelectionBoxOnlySelectsByCenterHandles", typeof(bool));
@@ -94,7 +96,7 @@ namespace Sledge.BspEditor.Tools.Selection
 		{
 			store.LoadInstance(this);
 			Oy.Publish("SelectTool:SetShow3DWidgets", Show3DWidgets ? "1" : "0");
-			_selectionBox.SetWidgetToggles(ShowMoveWidget, ShowRotateWidget, ShowEntityMotionWidget);
+			_selectionBox.SetWidgetToggles(ShowMoveWidget, ShowRotateWidget, ShowMoveArrowWidget, ShowRotationArcWidget);
 			Oy.Publish("SelectTool:SetWidgetToggles", WidgetTogglesToString());
 			ValuesLoaded = true;
 		}
@@ -153,20 +155,21 @@ namespace Sledge.BspEditor.Tools.Selection
 				_selectionBox.ShowWidgets = Show3DWidgets;
 				_selectionBox.Update();
 			});
-			// Format: three chars, "1"/"0" each, in the order Move, Rotate, EntityMotion
+			// Format: four chars, "1"/"0" each, in the order Move, Rotate, MoveArrow, RotationArc
 			Oy.Subscribe<string>("SelectTool:WidgetTogglesChanged", x =>
 			{
-				if (string.IsNullOrEmpty(x) || x.Length < 3) return;
+				if (string.IsNullOrEmpty(x) || x.Length < 4) return;
 				ShowMoveWidget = x[0] == '1';
 				ShowRotateWidget = x[1] == '1';
-				ShowEntityMotionWidget = x[2] == '1';
-				_selectionBox.SetWidgetToggles(ShowMoveWidget, ShowRotateWidget, ShowEntityMotionWidget);
+				ShowMoveArrowWidget = x[2] == '1';
+				ShowRotationArcWidget = x[3] == '1';
+				_selectionBox.SetWidgetToggles(ShowMoveWidget, ShowRotateWidget, ShowMoveArrowWidget, ShowRotationArcWidget);
 			});
 		}
 
 		private string WidgetTogglesToString()
 		{
-			return (ShowMoveWidget ? "1" : "0") + (ShowRotateWidget ? "1" : "0") + (ShowEntityMotionWidget ? "1" : "0");
+			return (ShowMoveWidget ? "1" : "0") + (ShowRotateWidget ? "1" : "0") + (ShowMoveArrowWidget ? "1" : "0") + (ShowRotationArcWidget ? "1" : "0");
 		}
 
 		public void TransformationModeChanged(SelectionBoxDraggableState.TransformationMode mode)

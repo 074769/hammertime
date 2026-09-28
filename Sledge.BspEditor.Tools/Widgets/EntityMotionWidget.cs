@@ -63,6 +63,12 @@ namespace Sledge.BspEditor.Tools.Widgets
 		private const float StrokeWidth = 2f;
 		private const float OutlineExtraWidth = 2f;
 
+		/// <summary>Whether to draw the straight movement arrow (movedir).</summary>
+		public bool ShowMoveArrow { get; set; } = true;
+
+		/// <summary>Whether to draw the rotation arc.</summary>
+		public bool ShowRotationArc { get; set; } = true;
+
 		public EntityMotionWidget()
 		{
 			Usage = ToolUsage.View3D;
@@ -109,26 +115,36 @@ namespace Sledge.BspEditor.Tools.Widgets
 				var box = ed.BoundingBox;
 				if (box == null) continue;
 				var min = Math.Min(box.Width, Math.Min(box.Height, box.Length));
+				var max = Math.Max(box.Width, Math.Max(box.Height, box.Length));
 				if (min <= 0) continue;
 
 				var color = ed.Color?.Color ?? Color.White;
 				var center = box.Center;
 
-				var moveDir = GetMoveDirection(data);
-				if (moveDir.HasValue)
+				if (ShowMoveArrow)
 				{
-					var length = GetMoveLength(ed, data, moveDir.Value, min);
-					DrawArrow3D(camera, im, center, moveDir.Value, length, color);
+					var moveDir = GetMoveDirection(data);
+					if (moveDir.HasValue)
+					{
+						var length = GetMoveLength(ed, data, moveDir.Value, min);
+						DrawArrow3D(camera, im, center, moveDir.Value, length, color);
+					}
 				}
 
-				var rotateAxis = GetRotationAxis(cls, data);
-				if (rotateAxis.HasValue)
+				if (ShowRotationArc)
 				{
-					var pivot = GetRotationPivot(ed, center);
-					var radius = min * RotateArrowScale; // object-size only - never grows with camera distance
-					var reversed = IsReversed(cls, data);
-					var sweep = GetSweepDegrees(cls, data);
-					DrawRotation3D(camera, im, pivot, rotateAxis.Value, radius, color, reversed, sweep);
+					var rotateAxis = GetRotationAxis(cls, data);
+					if (rotateAxis.HasValue)
+					{
+						var pivot = GetRotationPivot(ed, center);
+						// Use the entity's largest dimension, not the smallest - a 20x120
+						// block should draw an arc sized off the 120, so it reads as the
+						// actual sweep of the object rather than looking undersized.
+						var radius = max * RotateArrowScale; // object-size only - never grows with camera distance
+						var reversed = IsReversed(cls, data);
+						var sweep = GetSweepDegrees(cls, data);
+						DrawRotation3D(camera, im, pivot, rotateAxis.Value, radius, color, reversed, sweep);
+					}
 				}
 			}
 		}
@@ -140,12 +156,17 @@ namespace Sledge.BspEditor.Tools.Widgets
 			var md = data.GetVector3("movedir");
 			if (!md.HasValue) return null;
 
-			// Quake/Source "movedir" convention: the yaw component carries special
-			// sentinel values for the "straight up" / "straight down" picks in
-			// Hammer's direction control, instead of a literal angle - these two
-			// cases can't be produced by ordinary pitch/yaw/roll math.
-			if (Math.Abs(md.Value.Y - -1f) < 0.01f) return Vector3.UnitZ;   // up
-			if (Math.Abs(md.Value.Y - -2f) < 0.01f) return -Vector3.UnitZ; // down
+			// "movedir" special-cases straight up/down: this build's Hammer direction
+			// control writes pitch = 90 for straight up and pitch = -90 for straight
+			// down. Handled explicitly since the generic pitch/yaw/roll math doesn't
+			// reliably reduce to a clean vertical vector for those two values.
+			if (Math.Abs(md.Value.X - 90f) < 0.5f) return Vector3.UnitZ;    // up
+			if (Math.Abs(md.Value.X - -90f) < 0.5f) return -Vector3.UnitZ; // down
+
+			// Also accept the classic Quake/Source yaw sentinel (-1 up, -2 down), in
+			// case a different FGD/engine convention is in play for some entities.
+			if (Math.Abs(md.Value.Y - -1f) < 0.01f) return Vector3.UnitZ;
+			if (Math.Abs(md.Value.Y - -2f) < 0.01f) return -Vector3.UnitZ;
 
 			var dir = AngleToDirection(md.Value);
 			return dir.LengthSquared() < 0.0001f ? (Vector3?) null : dir;

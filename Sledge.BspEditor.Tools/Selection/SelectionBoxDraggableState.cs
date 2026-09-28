@@ -62,13 +62,15 @@ namespace Sledge.BspEditor.Tools.Selection
 		// Which of the individual widgets are enabled (only relevant while ShowWidgets is on)
 		public bool ShowMoveWidget { get; private set; } = true;
 		public bool ShowRotateWidget { get; private set; } = true;
-		public bool ShowEntityMotionWidget { get; private set; } = true;
+		public bool ShowMoveArrowWidget { get; private set; } = true;
+		public bool ShowRotationArcWidget { get; private set; } = true;
 
-		public void SetWidgetToggles(bool move, bool rotate, bool entityMotion)
+		public void SetWidgetToggles(bool move, bool rotate, bool moveArrow, bool rotationArc)
 		{
 			ShowMoveWidget = move;
 			ShowRotateWidget = rotate;
-			ShowEntityMotionWidget = entityMotion;
+			ShowMoveArrowWidget = moveArrow;
+			ShowRotationArcWidget = rotationArc;
 			Update();
 		}
 
@@ -198,8 +200,15 @@ namespace Sledge.BspEditor.Tools.Selection
 			}
 
 			// The motion arrows are informational (not tied to a transformation mode),
-			// so they show whenever 3D widgets are on and something can be selected.
-			if (MotionWidget != null) MotionWidget.Active = ShowWidgets && ShowEntityMotionWidget;
+			// so they show whenever 3D widgets are on and something can be selected. The
+			// two kinds (straight move arrow, rotation arc) are independently toggled so
+			// they don't fight each other visually when only one applies.
+			if (MotionWidget != null)
+			{
+				MotionWidget.Active = ShowWidgets && (ShowMoveArrowWidget || ShowRotationArcWidget);
+				MotionWidget.ShowMoveArrow = ShowMoveArrowWidget;
+				MotionWidget.ShowRotationArc = ShowRotationArcWidget;
+			}
 		}
 
 		protected override void CreateBoxHandles()

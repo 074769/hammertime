@@ -174,7 +174,8 @@
             "Show3DWidgets": "Show 3D widgets",
             "MoveWidget": "Move widget",
             "RotateWidget": "Rotate widget",
-            "EntityMotionWidget": "Entity motion arrows",
+            "MoveArrowWidget": "Move arrow",
+            "RotationArcWidget": "Rotation arc",
             "Actions": "Actions:",
             "MoveToWorld": "Move to world",
             "TieToEntity": "Tie to entity"
