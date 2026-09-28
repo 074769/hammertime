@@ -284,7 +284,10 @@ namespace Sledge.BspEditor.Editing.Components.Properties
 
 		private async Task SelectionChanged(MapDocument document)
 		{
-			if (_selectedObjects.Count > 1) return;
+			// The selection is null if the dialog was hidden (which clears it) or hasn't finished
+			// activating yet when this message arrives. Nothing is loaded in the tabs, so nothing to save.
+			var selected = _selectedObjects;
+			if (selected == null || selected.Count > 1) return;
 			await Save();
 		}
 
@@ -306,7 +309,7 @@ namespace Sledge.BspEditor.Editing.Components.Properties
 		{
 			_selectedObjects = _selectionForced
 				? _selectedObjects
-				: _currentDocument?.Selection.GetSelectedParents().ToList();
+				: _currentDocument?.Selection.GetSelectedParents().ToList() ?? new List<IMapObject>();
 			var entityParent = _selectedObjects.Select(obj => obj.Hierarchy.Parent).Where(x => x != null).Distinct();
 			if (entityParent.Count() == 1 && entityParent.FirstOrDefault() != _currentDocument?.Map.Root)
 			{
