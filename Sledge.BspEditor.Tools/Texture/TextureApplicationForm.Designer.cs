@@ -30,8 +30,6 @@
         {
             components = new System.ComponentModel.Container();
             HideMaskCheckbox = new System.Windows.Forms.CheckBox();
-            RecentFilterTextbox = new System.Windows.Forms.TextBox();
-            FilterRecentLabel = new System.Windows.Forms.Label();
             SmoothingGroupsButton = new System.Windows.Forms.Button();
             AlignGroup = new System.Windows.Forms.GroupBox();
             AlignToFaceCheckbox = new System.Windows.Forms.CheckBox();
@@ -62,8 +60,7 @@
             LightmapLabel = new System.Windows.Forms.Label();
             LightmapValue = new Sledge.Shell.Controls.NumericUpDownEx();
             HoverTip = new System.Windows.Forms.ToolTip(components);
-            SelectedTextureListPanel = new System.Windows.Forms.Panel();
-            RecentTextureListPanel = new System.Windows.Forms.Panel();
+            TextureViewerPanel = new System.Windows.Forms.Panel();
             LeftClickActionButton = new Sledge.Shell.Controls.DropdownButton();
             LeftClickActionMenu = new System.Windows.Forms.ContextMenuStrip(components);
             RightClickActionButton = new Sledge.Shell.Controls.DropdownButton();
@@ -93,36 +90,15 @@
             // HideMaskCheckbox
             // 
             HideMaskCheckbox.Appearance = System.Windows.Forms.Appearance.Button;
-            HideMaskCheckbox.Location = new System.Drawing.Point(354, 113);
+            HideMaskCheckbox.Location = new System.Drawing.Point(371, 563);
             HideMaskCheckbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             HideMaskCheckbox.Name = "HideMaskCheckbox";
-            HideMaskCheckbox.Size = new System.Drawing.Size(119, 27);
+            HideMaskCheckbox.Size = new System.Drawing.Size(102, 27);
             HideMaskCheckbox.TabIndex = 34;
             HideMaskCheckbox.Text = "Hide Mask";
             HideMaskCheckbox.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             HideMaskCheckbox.UseVisualStyleBackColor = true;
             HideMaskCheckbox.CheckedChanged += HideMaskCheckboxToggled;
-            // 
-            // RecentFilterTextbox
-            // 
-            RecentFilterTextbox.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
-            RecentFilterTextbox.Location = new System.Drawing.Point(371, 563);
-            RecentFilterTextbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
-            RecentFilterTextbox.Name = "RecentFilterTextbox";
-            RecentFilterTextbox.Size = new System.Drawing.Size(101, 23);
-            RecentFilterTextbox.TabIndex = 33;
-            RecentFilterTextbox.TextChanged += RecentFilterTextChanged;
-            // 
-            // FilterRecentLabel
-            // 
-            FilterRecentLabel.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
-            FilterRecentLabel.Location = new System.Drawing.Point(371, 528);
-            FilterRecentLabel.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
-            FilterRecentLabel.Name = "FilterRecentLabel";
-            FilterRecentLabel.Size = new System.Drawing.Size(102, 28);
-            FilterRecentLabel.TabIndex = 32;
-            FilterRecentLabel.Text = "Filter Recent:";
-            FilterRecentLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // SmoothingGroupsButton
             // 
@@ -269,10 +245,10 @@
             // 
             // ApplyButton
             // 
-            ApplyButton.Location = new System.Drawing.Point(354, 80);
+            ApplyButton.Location = new System.Drawing.Point(371, 384);
             ApplyButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             ApplyButton.Name = "ApplyButton";
-            ApplyButton.Size = new System.Drawing.Size(119, 27);
+            ApplyButton.Size = new System.Drawing.Size(102, 27);
             ApplyButton.TabIndex = 22;
             ApplyButton.Text = "Apply";
             ApplyButton.UseVisualStyleBackColor = true;
@@ -294,10 +270,10 @@
             // 
             // ReplaceButton
             // 
-            ReplaceButton.Location = new System.Drawing.Point(354, 47);
+            ReplaceButton.Location = new System.Drawing.Point(371, 351);
             ReplaceButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             ReplaceButton.Name = "ReplaceButton";
-            ReplaceButton.Size = new System.Drawing.Size(119, 27);
+            ReplaceButton.Size = new System.Drawing.Size(102, 27);
             ReplaceButton.TabIndex = 24;
             ReplaceButton.Text = "Replace...";
             ReplaceButton.UseVisualStyleBackColor = true;
@@ -305,10 +281,10 @@
             // 
             // BrowseButton
             // 
-            BrowseButton.Location = new System.Drawing.Point(354, 14);
+            BrowseButton.Location = new System.Drawing.Point(371, 318);
             BrowseButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             BrowseButton.Name = "BrowseButton";
-            BrowseButton.Size = new System.Drawing.Size(119, 27);
+            BrowseButton.Size = new System.Drawing.Size(102, 27);
             BrowseButton.TabIndex = 23;
             BrowseButton.Text = "Browse...";
             BrowseButton.UseVisualStyleBackColor = true;
@@ -492,30 +468,21 @@
             HoverTip.IsBalloon = true;
             HoverTip.ReshowDelay = 100;
             // 
-            // SelectedTextureListPanel
+            // TextureViewerPanel
             // 
-            SelectedTextureListPanel.Location = new System.Drawing.Point(14, 318);
-            SelectedTextureListPanel.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
-            SelectedTextureListPanel.Name = "SelectedTextureListPanel";
-            SelectedTextureListPanel.Size = new System.Drawing.Size(350, 238);
-            SelectedTextureListPanel.TabIndex = 35;
-            // 
-            // RecentTextureListPanel
-            // 
-            RecentTextureListPanel.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
-            RecentTextureListPanel.Location = new System.Drawing.Point(371, 318);
-            RecentTextureListPanel.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
-            RecentTextureListPanel.Name = "RecentTextureListPanel";
-            RecentTextureListPanel.Size = new System.Drawing.Size(102, 207);
-            RecentTextureListPanel.TabIndex = 36;
+            TextureViewerPanel.Location = new System.Drawing.Point(14, 318);
+            TextureViewerPanel.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
+            TextureViewerPanel.Name = "TextureViewerPanel";
+            TextureViewerPanel.Size = new System.Drawing.Size(350, 272);
+            TextureViewerPanel.TabIndex = 35;
             // 
             // LeftClickActionButton
             // 
-            LeftClickActionButton.Location = new System.Drawing.Point(14, 563);
+            LeftClickActionButton.Location = new System.Drawing.Point(14, 598);
             LeftClickActionButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             LeftClickActionButton.Menu = LeftClickActionMenu;
             LeftClickActionButton.Name = "LeftClickActionButton";
-            LeftClickActionButton.Size = new System.Drawing.Size(173, 27);
+            LeftClickActionButton.Size = new System.Drawing.Size(171, 23);
             LeftClickActionButton.TabIndex = 37;
             LeftClickActionButton.Text = "Left click: Lift";
             LeftClickActionButton.UseVisualStyleBackColor = true;
@@ -528,11 +495,11 @@
             // 
             // RightClickActionButton
             // 
-            RightClickActionButton.Location = new System.Drawing.Point(191, 563);
+            RightClickActionButton.Location = new System.Drawing.Point(193, 598);
             RightClickActionButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             RightClickActionButton.Menu = RightClickActionMenu;
             RightClickActionButton.Name = "RightClickActionButton";
-            RightClickActionButton.Size = new System.Drawing.Size(173, 27);
+            RightClickActionButton.Size = new System.Drawing.Size(171, 23);
             RightClickActionButton.TabIndex = 37;
             RightClickActionButton.Text = "Right click: Apply";
             RightClickActionButton.UseVisualStyleBackColor = true;
@@ -661,7 +628,7 @@
             // 
             AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            ClientSize = new System.Drawing.Size(486, 598);
+            ClientSize = new System.Drawing.Size(486, 632);
             Controls.Add(RotateLabel);
             Controls.Add(TreatAsOneCheckbox);
             Controls.Add(RotMinus180Button);
@@ -675,11 +642,8 @@
             Controls.Add(ResetButton);
             Controls.Add(RightClickActionButton);
             Controls.Add(LeftClickActionButton);
-            Controls.Add(RecentTextureListPanel);
-            Controls.Add(SelectedTextureListPanel);
+            Controls.Add(TextureViewerPanel);
             Controls.Add(HideMaskCheckbox);
-            Controls.Add(RecentFilterTextbox);
-            Controls.Add(FilterRecentLabel);
             Controls.Add(AlignGroup);
             Controls.Add(JustifyGroup);
             Controls.Add(ApplyButton);
@@ -715,8 +679,6 @@
 
         #endregion
         private System.Windows.Forms.CheckBox HideMaskCheckbox;
-        private System.Windows.Forms.TextBox RecentFilterTextbox;
-        private System.Windows.Forms.Label FilterRecentLabel;
         private System.Windows.Forms.Button SmoothingGroupsButton;
         private System.Windows.Forms.GroupBox AlignGroup;
         private System.Windows.Forms.GroupBox JustifyGroup;
@@ -747,8 +709,7 @@
         private System.Windows.Forms.ToolTip HoverTip;
         private System.Windows.Forms.CheckBox AlignToFaceCheckbox;
         private System.Windows.Forms.CheckBox AlignToWorldCheckbox;
-        private System.Windows.Forms.Panel SelectedTextureListPanel;
-        private System.Windows.Forms.Panel RecentTextureListPanel;
+        private System.Windows.Forms.Panel TextureViewerPanel;
         private Shell.Controls.DropdownButton LeftClickActionButton;
         private Shell.Controls.DropdownButton RightClickActionButton;
         private System.Windows.Forms.ContextMenuStrip LeftClickActionMenu;
