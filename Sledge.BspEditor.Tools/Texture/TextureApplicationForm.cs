@@ -444,7 +444,7 @@ namespace Sledge.BspEditor.Tools.Texture
             return key == Keys.Z || key == Keys.Y;
         }
 
-        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        protected override bool ProcessCmdKey(ref System.Windows.Forms.Message msg, Keys keyData)
         {
             // A change still inside the debounce window is committed first, so undo/redo sees it in the history
             if (IsUndoRedoKey(keyData)) CommitPendingChanges();
