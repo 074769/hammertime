@@ -31,8 +31,8 @@ namespace Sledge.BspEditor.Tools.Widgets
 	///    func_door_rotating, func_platrot, momentary_rot_button, ...). When the entity
 	///    has a finite rotation ("distance" or "rotation" keyvalue, in degrees) the arc
 	///    runs from the start angle to the end angle exactly - the arrowhead's apex sits
-	///    on the end radial line, not past it - with a thin radial line at the start and
-	///    a bold radial line at the end. Entities that spin continuously get an open arc
+	///    on the end radial line, not past it - with a straight line from the pivot to
+	///    the arc's start, which lies on the entity's own rest direction. Entities that spin continuously get an open arc
 	///    with only the arrow head.
 	///
 	/// Both helpers also draw a second, smaller arrow at their midpoint so the direction
@@ -143,7 +143,8 @@ namespace Sledge.BspEditor.Tools.Widgets
 						var radius = max * RotateArrowScale; // object-size only - never grows with camera distance
 						var reversed = IsReversed(cls, data);
 						var sweep = GetSweepDegrees(cls, data);
-						DrawRotation3D(camera, im, pivot, rotateAxis.Value, radius, color, reversed, sweep);
+						var startDir = GetRotationStartDirection(box, pivot, rotateAxis.Value);
+						DrawRotation3D(camera, im, pivot, rotateAxis.Value, startDir, radius, color, reversed, sweep);
 					}
 				}
 			}
@@ -248,6 +249,37 @@ namespace Sledge.BspEditor.Tools.Widgets
 			return originBrush?.BoundingBox?.Center ?? fallback;
 		}
 
+		/// <summary>
+		/// The direction (perpendicular to the rotation axis) from the pivot toward where the
+		/// entity currently sits - i.e. its rest position, which is where the swing starts.
+		/// Uses the bounding box center when it is off the axis (doors, gates, arms hinged at
+		/// one edge); otherwise falls back to the bounding box corner farthest from the axis.
+		/// Null when the entity is perfectly symmetric around the axis (any start is as good
+		/// as any other).
+		/// </summary>
+		private static Vector3? GetRotationStartDirection(Box box, Vector3 pivot, Vector3 axis)
+		{
+			axis = Vector3.Normalize(axis);
+			Vector3 PerpToAxis(Vector3 d) => d - axis * Vector3.Dot(d, axis);
+
+			var toCenter = PerpToAxis(box.Center - pivot);
+			if (toCenter.Length() > 0.5f) return Vector3.Normalize(toCenter);
+
+			Vector3? best = null;
+			var bestLength = 0.5f;
+			foreach (var corner in box.GetBoxPoints())
+			{
+				var d = PerpToAxis(corner - pivot);
+				var len = d.Length();
+				if (len > bestLength)
+				{
+					bestLength = len;
+					best = d / len;
+				}
+			}
+			return best;
+		}
+
 		private static Property FindProperty(GameDataObject cls, string name)
 		{
 			return cls.Properties.FirstOrDefault(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
@@ -318,15 +350,22 @@ namespace Sledge.BspEditor.Tools.Widgets
 		/// A 3D arc around the rotation axis. With a finite sweep it runs from the start
 		/// angle to the end angle exactly - the arc is trimmed just short of the end so
 		/// the arrowhead's apex lands precisely on the end radial line rather than past
-		/// it - marked by a thin radial line at the start and a bold one at the end (both
-		/// on the same radius as the arc, so they meet it cleanly). A second, smaller
+		/// it - starting on the entity's rest direction (see GetRotationStartDirection) and
+		/// joined to the pivot by a straight radial line of the same radius as the arc. A second, smaller
 		/// arrow sits at the arc's midpoint. Entities without a finite sweep get an open
 		/// arc with just the arrow head.
 		/// </summary>
-		private static void DrawRotation3D(PerspectiveCamera camera, I2DRenderer im, Vector3 pivot, Vector3 axis, float radius, Color color, bool reversed, float? sweepDegrees)
+		private static void DrawRotation3D(PerspectiveCamera camera, I2DRenderer im, Vector3 pivot, Vector3 axis, Vector3? startDirection, float radius, Color color, bool reversed, float? sweepDegrees)
 		{
 			axis = Vector3.Normalize(axis);
 			BuildBasis(axis, out var u, out var v);
+			if (startDirection.HasValue)
+			{
+				// Start the arc on the entity's own rest direction so the swing begins where
+				// the entity actually is (u x v is still +axis, so the sweep sense is unchanged).
+				u = startDirection.Value;
+				v = Vector3.Cross(axis, u);
+			}
 
 			var finite = sweepDegrees.HasValue;
 			var sweepMagnitude = (finite ? Math.Abs(sweepDegrees.Value) : ContinuousArcDegrees) * Math.PI / 180.0;
@@ -368,9 +407,9 @@ namespace Sledge.BspEditor.Tools.Widgets
 
 			if (finite)
 			{
-				// start of the swing: thin; end of the swing: bold - both on the arc's own radius
-				DrawLine3D(camera, im, pivot, PointAt(0, radius), Color.FromArgb(150, color), 1f);
-				DrawLine3D(camera, im, pivot, tip, color, StrokeWidth * 1.5f);
+				// Straight line from the pivot out to where the swing starts (the entity's rest
+				// direction); the arc leaves from its far end and the arrowhead marks the end angle.
+				DrawLine3D(camera, im, pivot, PointAt(0, radius), color, StrokeWidth * 1.5f);
 
 				var label = Math.Abs(sweepDegrees.Value).ToString("0.##", CultureInfo.InvariantCulture) + "\u00B0";
 				var mid = PointAt(sweep / 2, radius * 1.25f);
