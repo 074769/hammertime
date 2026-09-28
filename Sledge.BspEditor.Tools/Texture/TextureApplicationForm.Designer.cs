@@ -192,10 +192,10 @@
             // 
             // JustifyTopButton
             // 
-            JustifyTopButton.Location = new System.Drawing.Point(38, 18);
+            JustifyTopButton.Location = new System.Drawing.Point(44, 18);
             JustifyTopButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             JustifyTopButton.Name = "JustifyTopButton";
-            JustifyTopButton.Size = new System.Drawing.Size(23, 23);
+            JustifyTopButton.Size = new System.Drawing.Size(32, 23);
             JustifyTopButton.TabIndex = 3;
             JustifyTopButton.Text = "T";
             JustifyTopButton.UseVisualStyleBackColor = true;
@@ -203,10 +203,10 @@
             // 
             // JustifyFitButton
             // 
-            JustifyFitButton.Location = new System.Drawing.Point(10, 18);
+            JustifyFitButton.Location = new System.Drawing.Point(8, 18);
             JustifyFitButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             JustifyFitButton.Name = "JustifyFitButton";
-            JustifyFitButton.Size = new System.Drawing.Size(23, 23);
+            JustifyFitButton.Size = new System.Drawing.Size(32, 23);
             JustifyFitButton.TabIndex = 4;
             JustifyFitButton.Text = "Fit";
             JustifyFitButton.UseVisualStyleBackColor = true;
@@ -225,10 +225,10 @@
             // 
             // JustifyRightButton
             // 
-            JustifyRightButton.Location = new System.Drawing.Point(66, 46);
+            JustifyRightButton.Location = new System.Drawing.Point(80, 46);
             JustifyRightButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             JustifyRightButton.Name = "JustifyRightButton";
-            JustifyRightButton.Size = new System.Drawing.Size(23, 23);
+            JustifyRightButton.Size = new System.Drawing.Size(32, 23);
             JustifyRightButton.TabIndex = 3;
             JustifyRightButton.Text = "R";
             JustifyRightButton.UseVisualStyleBackColor = true;
@@ -236,10 +236,10 @@
             // 
             // JustifyBottomButton
             // 
-            JustifyBottomButton.Location = new System.Drawing.Point(38, 74);
+            JustifyBottomButton.Location = new System.Drawing.Point(44, 74);
             JustifyBottomButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             JustifyBottomButton.Name = "JustifyBottomButton";
-            JustifyBottomButton.Size = new System.Drawing.Size(23, 23);
+            JustifyBottomButton.Size = new System.Drawing.Size(32, 23);
             JustifyBottomButton.TabIndex = 3;
             JustifyBottomButton.Text = "B";
             JustifyBottomButton.UseVisualStyleBackColor = true;
@@ -247,10 +247,10 @@
             // 
             // JustifyCenterButton
             // 
-            JustifyCenterButton.Location = new System.Drawing.Point(38, 46);
+            JustifyCenterButton.Location = new System.Drawing.Point(44, 46);
             JustifyCenterButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             JustifyCenterButton.Name = "JustifyCenterButton";
-            JustifyCenterButton.Size = new System.Drawing.Size(23, 23);
+            JustifyCenterButton.Size = new System.Drawing.Size(32, 23);
             JustifyCenterButton.TabIndex = 3;
             JustifyCenterButton.Text = "C";
             JustifyCenterButton.UseVisualStyleBackColor = true;
@@ -258,10 +258,10 @@
             // 
             // JustifyLeftButton
             // 
-            JustifyLeftButton.Location = new System.Drawing.Point(10, 46);
+            JustifyLeftButton.Location = new System.Drawing.Point(8, 46);
             JustifyLeftButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             JustifyLeftButton.Name = "JustifyLeftButton";
-            JustifyLeftButton.Size = new System.Drawing.Size(23, 23);
+            JustifyLeftButton.Size = new System.Drawing.Size(32, 23);
             JustifyLeftButton.TabIndex = 3;
             JustifyLeftButton.Text = "L";
             JustifyLeftButton.UseVisualStyleBackColor = true;
