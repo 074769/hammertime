@@ -676,6 +676,28 @@ namespace Sledge.BspEditor.Tools.Texture
             // Nothing required here
         }
 
+        private void MarkButtonClicked(object sender, EventArgs e)
+        {
+            var doc = Document;
+            if (doc == null) return;
+
+            // Use the texture highlighted in the viewer, falling back to the active texture
+            var name = GetFirstSelectedTexture() ?? doc.Map.Data.GetOne<ActiveTexture>()?.Name;
+            if (String.IsNullOrWhiteSpace(name)) return;
+
+            bool Matches(Face f) => String.Equals(f.Texture.Name, name, StringComparison.InvariantCultureIgnoreCase);
+
+            // Mark (face-select) every face in the map that uses this texture
+            var sel = GetFaceSelection();
+            sel.Clear();
+            foreach (var obj in doc.Map.Root.Find(x => x.Data.OfType<Face>().Any(Matches)).ToList())
+            {
+                sel.Add(obj, obj.Data.OfType<Face>().Where(Matches).ToArray());
+            }
+
+            Oy.Publish("TextureTool:SelectionChanged", sel);
+        }
+
         private void ReplaceButtonClicked(object sender, EventArgs e)
         {
             Oy.Publish("Command:Run", new CommandMessage("BspEditor:ReplaceTextures"));

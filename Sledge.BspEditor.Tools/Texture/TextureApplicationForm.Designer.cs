@@ -61,6 +61,7 @@
             LightmapValue = new Sledge.Shell.Controls.NumericUpDownEx();
             HoverTip = new System.Windows.Forms.ToolTip(components);
             TextureViewerPanel = new System.Windows.Forms.Panel();
+            MarkButton = new System.Windows.Forms.Button();
             LeftClickActionButton = new Sledge.Shell.Controls.DropdownButton();
             LeftClickActionMenu = new System.Windows.Forms.ContextMenuStrip(components);
             RightClickActionButton = new Sledge.Shell.Controls.DropdownButton();
@@ -468,6 +469,17 @@
             HoverTip.IsBalloon = true;
             HoverTip.ReshowDelay = 100;
             // 
+            // MarkButton
+            // 
+            MarkButton.Location = new System.Drawing.Point(371, 417);
+            MarkButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
+            MarkButton.Name = "MarkButton";
+            MarkButton.Size = new System.Drawing.Size(102, 27);
+            MarkButton.TabIndex = 47;
+            MarkButton.Text = "Mark";
+            MarkButton.UseVisualStyleBackColor = true;
+            MarkButton.Click += MarkButtonClicked;
+            // 
             // TextureViewerPanel
             // 
             TextureViewerPanel.Location = new System.Drawing.Point(14, 318);
@@ -642,6 +654,7 @@
             Controls.Add(ResetButton);
             Controls.Add(RightClickActionButton);
             Controls.Add(LeftClickActionButton);
+            Controls.Add(MarkButton);
             Controls.Add(TextureViewerPanel);
             Controls.Add(HideMaskCheckbox);
             Controls.Add(AlignGroup);
@@ -710,6 +723,7 @@
         private System.Windows.Forms.CheckBox AlignToFaceCheckbox;
         private System.Windows.Forms.CheckBox AlignToWorldCheckbox;
         private System.Windows.Forms.Panel TextureViewerPanel;
+        private System.Windows.Forms.Button MarkButton;
         private Shell.Controls.DropdownButton LeftClickActionButton;
         private Shell.Controls.DropdownButton RightClickActionButton;
         private System.Windows.Forms.ContextMenuStrip LeftClickActionMenu;

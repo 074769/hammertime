@@ -19,6 +19,7 @@ using Sledge.Common.Translations;
 using Sledge.QuickForms;
 using Sledge.Shell;
 using Sledge.Shell.Commands;
+using Face = Sledge.BspEditor.Primitives.MapObjectData.Face;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement.TextBox;
 
 namespace Sledge.BspEditor.Tools.Texture
@@ -479,6 +480,30 @@ namespace Sledge.BspEditor.Tools.Texture
 
 			var transaction = new Transaction(new Select(sel), new Deselect(des));
 			MapDocumentOperation.Perform(_document, transaction);
+
+			Close();
+		}
+
+		private void MarkButtonClicked(object sender, EventArgs e)
+		{
+			var textures = _textureList.GetHighlightedTextures().ToHashSet(StringComparer.InvariantCultureIgnoreCase);
+			if (!textures.Any()) return;
+
+			var fs = _document.Map.Data.GetOne<FaceSelection>();
+			if (fs == null)
+			{
+				fs = new FaceSelection();
+				_document.Map.Data.Add(fs);
+			}
+
+			// Mark (face-select) every face in the map that uses one of the highlighted textures
+			fs.Clear();
+			foreach (var obj in _document.Map.Root.Find(x => x.Data.OfType<Face>().Any(f => textures.Contains(f.Texture.Name))).ToList())
+			{
+				fs.Add(obj, obj.Data.OfType<Face>().Where(f => textures.Contains(f.Texture.Name)).ToArray());
+			}
+
+			Oy.Publish("TextureTool:SelectionChanged", fs);
 
 			Close();
 		}

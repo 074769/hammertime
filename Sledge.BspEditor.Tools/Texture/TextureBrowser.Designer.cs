@@ -38,6 +38,7 @@
             this.TextureSizeLabel = new System.Windows.Forms.Label();
             this.TextureNameLabel = new System.Windows.Forms.Label();
             this.SelectButton = new System.Windows.Forms.Button();
+            this.MarkButton = new System.Windows.Forms.Button();
             this.UsedTexturesOnlyBox = new System.Windows.Forms.CheckBox();
             this.SizeLabel = new System.Windows.Forms.Label();
             this.FilterTextbox = new System.Windows.Forms.TextBox();
@@ -85,6 +86,7 @@
             this.panel1.Controls.Add(this.TextureSizeLabel);
             this.panel1.Controls.Add(this.TextureNameLabel);
             this.panel1.Controls.Add(this.SelectButton);
+            this.panel1.Controls.Add(this.MarkButton);
             this.panel1.Controls.Add(this.UsedTexturesOnlyBox);
             this.panel1.Controls.Add(this.SizeLabel);
             this.panel1.Controls.Add(this.FilterTextbox);
@@ -170,6 +172,16 @@
             this.SelectButton.Text = "Select";
             this.SelectButton.UseVisualStyleBackColor = true;
             this.SelectButton.Click += new System.EventHandler(this.SelectButtonClicked);
+            // 
+            // MarkButton
+            // 
+            this.MarkButton.Location = new System.Drawing.Point(368, 34);
+            this.MarkButton.Name = "MarkButton";
+            this.MarkButton.Size = new System.Drawing.Size(53, 20);
+            this.MarkButton.TabIndex = 11;
+            this.MarkButton.Text = "Mark";
+            this.MarkButton.UseVisualStyleBackColor = true;
+            this.MarkButton.Click += new System.EventHandler(this.MarkButtonClicked);
             // 
             // UsedTexturesOnlyBox
             // 
@@ -338,6 +350,7 @@
         private System.Windows.Forms.Label TextureSizeLabel;
         private System.Windows.Forms.Label TextureNameLabel;
         private System.Windows.Forms.Button SelectButton;
+        private System.Windows.Forms.Button MarkButton;
         private System.Windows.Forms.CheckBox UsedTexturesOnlyBox;
         private System.Windows.Forms.Label SizeLabel;
         private System.Windows.Forms.TextBox FilterTextbox;
