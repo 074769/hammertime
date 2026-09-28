@@ -22,6 +22,7 @@ namespace Sledge.BspEditor.Tools.Selection
 		public object Control => this;
 
 		private WeakReference<MapDocument> _activeDocument;
+		private bool _updatingWidgetToggles;
 
 		public SelectToolSidebarPanel()
 		{
@@ -39,6 +40,22 @@ namespace Sledge.BspEditor.Tools.Selection
 			{
 				Show3DWidgetsCheckbox.Checked = x == "1";
 			});
+
+			Oy.Subscribe<String>("SelectTool:SetWidgetToggles", x =>
+			{
+				if (string.IsNullOrEmpty(x) || x.Length < 3) return;
+				_updatingWidgetToggles = true;
+				try
+				{
+					MoveWidgetCheckbox.Checked = x[0] == '1';
+					RotateWidgetCheckbox.Checked = x[1] == '1';
+					EntityMotionWidgetCheckbox.Checked = x[2] == '1';
+				}
+				finally
+				{
+					_updatingWidgetToggles = false;
+				}
+			});
 			Oy.Subscribe<IDocument>("Document:Activated", DocumentActivated);
 		}
 
@@ -54,6 +71,9 @@ namespace Sledge.BspEditor.Tools.Selection
 				RotateModeCheckbox.Text = strings.GetString(prefix, "Rotate");
 				SkewModeCheckbox.Text = strings.GetString(prefix, "Skew");
 				Show3DWidgetsCheckbox.Text = strings.GetString(prefix, "Show3DWidgets");
+				MoveWidgetCheckbox.Text = strings.GetString(prefix, "MoveWidget") ?? MoveWidgetCheckbox.Text;
+				RotateWidgetCheckbox.Text = strings.GetString(prefix, "RotateWidget") ?? RotateWidgetCheckbox.Text;
+				EntityMotionWidgetCheckbox.Text = strings.GetString(prefix, "EntityMotionWidget") ?? EntityMotionWidgetCheckbox.Text;
 				lblActions.Text = strings.GetString(prefix, "Actions");
 				MoveToWorldButton.Text = strings.GetString(prefix, "MoveToWorld");
 				MoveToEntityButton.Text = strings.GetString(prefix, "TieToEntity");
@@ -135,6 +155,18 @@ namespace Sledge.BspEditor.Tools.Selection
 		private void Show3DWidgetsChecked(object sender, EventArgs e)
 		{
 			Oy.Publish("SelectTool:Show3DWidgetsChanged", Show3DWidgetsCheckbox.Checked ? "1" : "0");
+
+			// The individual widget toggles only make sense while 3D widgets are on
+			MoveWidgetCheckbox.Enabled = RotateWidgetCheckbox.Enabled = EntityMotionWidgetCheckbox.Enabled = Show3DWidgetsCheckbox.Checked;
+		}
+
+		private void WidgetToggleChecked(object sender, EventArgs e)
+		{
+			if (_updatingWidgetToggles) return;
+			Oy.Publish("SelectTool:WidgetTogglesChanged",
+				(MoveWidgetCheckbox.Checked ? "1" : "0") +
+				(RotateWidgetCheckbox.Checked ? "1" : "0") +
+				(EntityMotionWidgetCheckbox.Checked ? "1" : "0"));
 		}
 
 		private void MoveToWorldButtonClicked(object sender, EventArgs e)

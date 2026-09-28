@@ -43,6 +43,9 @@ namespace Sledge.BspEditor.Tools.Selection
             flowLayoutPanel1 = new System.Windows.Forms.FlowLayoutPanel();
             flowLayoutPanel2 = new System.Windows.Forms.FlowLayoutPanel();
             keepEntityAngle = new System.Windows.Forms.CheckBox();
+            MoveWidgetCheckbox = new System.Windows.Forms.CheckBox();
+            RotateWidgetCheckbox = new System.Windows.Forms.CheckBox();
+            EntityMotionWidgetCheckbox = new System.Windows.Forms.CheckBox();
             flowLayoutPanel1.SuspendLayout();
             flowLayoutPanel2.SuspendLayout();
             SuspendLayout();
@@ -58,6 +61,51 @@ namespace Sledge.BspEditor.Tools.Selection
             Show3DWidgetsCheckbox.Text = "Show 3D Widgets";
             Show3DWidgetsCheckbox.UseVisualStyleBackColor = true;
             Show3DWidgetsCheckbox.CheckedChanged += Show3DWidgetsChecked;
+            // 
+            // MoveWidgetCheckbox
+            // 
+            MoveWidgetCheckbox.AutoSize = true;
+            MoveWidgetCheckbox.Checked = true;
+            MoveWidgetCheckbox.CheckState = System.Windows.Forms.CheckState.Checked;
+            MoveWidgetCheckbox.Enabled = false;
+            MoveWidgetCheckbox.Location = new System.Drawing.Point(26, 84);
+            MoveWidgetCheckbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
+            MoveWidgetCheckbox.Name = "MoveWidgetCheckbox";
+            MoveWidgetCheckbox.Size = new System.Drawing.Size(100, 19);
+            MoveWidgetCheckbox.TabIndex = 13;
+            MoveWidgetCheckbox.Text = "Move widget";
+            MoveWidgetCheckbox.UseVisualStyleBackColor = true;
+            MoveWidgetCheckbox.CheckedChanged += WidgetToggleChecked;
+            // 
+            // RotateWidgetCheckbox
+            // 
+            RotateWidgetCheckbox.AutoSize = true;
+            RotateWidgetCheckbox.Checked = true;
+            RotateWidgetCheckbox.CheckState = System.Windows.Forms.CheckState.Checked;
+            RotateWidgetCheckbox.Enabled = false;
+            RotateWidgetCheckbox.Location = new System.Drawing.Point(26, 105);
+            RotateWidgetCheckbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
+            RotateWidgetCheckbox.Name = "RotateWidgetCheckbox";
+            RotateWidgetCheckbox.Size = new System.Drawing.Size(100, 19);
+            RotateWidgetCheckbox.TabIndex = 14;
+            RotateWidgetCheckbox.Text = "Rotate widget";
+            RotateWidgetCheckbox.UseVisualStyleBackColor = true;
+            RotateWidgetCheckbox.CheckedChanged += WidgetToggleChecked;
+            // 
+            // EntityMotionWidgetCheckbox
+            // 
+            EntityMotionWidgetCheckbox.AutoSize = true;
+            EntityMotionWidgetCheckbox.Checked = true;
+            EntityMotionWidgetCheckbox.CheckState = System.Windows.Forms.CheckState.Checked;
+            EntityMotionWidgetCheckbox.Enabled = false;
+            EntityMotionWidgetCheckbox.Location = new System.Drawing.Point(26, 126);
+            EntityMotionWidgetCheckbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
+            EntityMotionWidgetCheckbox.Name = "EntityMotionWidgetCheckbox";
+            EntityMotionWidgetCheckbox.Size = new System.Drawing.Size(140, 19);
+            EntityMotionWidgetCheckbox.TabIndex = 15;
+            EntityMotionWidgetCheckbox.Text = "Entity motion arrows";
+            EntityMotionWidgetCheckbox.UseVisualStyleBackColor = true;
+            EntityMotionWidgetCheckbox.CheckedChanged += WidgetToggleChecked;
             // 
             // lblMode
             // 
@@ -136,7 +184,7 @@ namespace Sledge.BspEditor.Tools.Selection
             // lblActions
             // 
             lblActions.AutoSize = true;
-            lblActions.Location = new System.Drawing.Point(4, 113);
+            lblActions.Location = new System.Drawing.Point(4, 176);
             lblActions.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
             lblActions.Name = "lblActions";
             lblActions.Size = new System.Drawing.Size(50, 15);
@@ -163,7 +211,7 @@ namespace Sledge.BspEditor.Tools.Selection
             flowLayoutPanel2.Controls.Add(MoveToWorldButton);
             flowLayoutPanel2.Controls.Add(MoveToEntityButton);
             flowLayoutPanel2.FlowDirection = System.Windows.Forms.FlowDirection.TopDown;
-            flowLayoutPanel2.Location = new System.Drawing.Point(4, 131);
+            flowLayoutPanel2.Location = new System.Drawing.Point(4, 194);
             flowLayoutPanel2.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             flowLayoutPanel2.Name = "flowLayoutPanel2";
             flowLayoutPanel2.Size = new System.Drawing.Size(257, 61);
@@ -172,7 +220,7 @@ namespace Sledge.BspEditor.Tools.Selection
             // 
             // keepEntityAngle
             // 
-            keepEntityAngle.Location = new System.Drawing.Point(8, 87);
+            keepEntityAngle.Location = new System.Drawing.Point(8, 150);
             keepEntityAngle.Name = "keepEntityAngle";
             keepEntityAngle.Size = new System.Drawing.Size(122, 26);
             keepEntityAngle.TabIndex = 12;
@@ -192,9 +240,12 @@ namespace Sledge.BspEditor.Tools.Selection
             Controls.Add(lblActions);
             Controls.Add(lblMode);
             Controls.Add(Show3DWidgetsCheckbox);
+            Controls.Add(MoveWidgetCheckbox);
+            Controls.Add(RotateWidgetCheckbox);
+            Controls.Add(EntityMotionWidgetCheckbox);
             Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             Padding = new System.Windows.Forms.Padding(6, 6, 6, 6);
-            Size = new System.Drawing.Size(271, 201);
+            Size = new System.Drawing.Size(271, 264);
             flowLayoutPanel1.ResumeLayout(false);
             flowLayoutPanel1.PerformLayout();
             flowLayoutPanel2.ResumeLayout(false);
@@ -208,6 +259,9 @@ namespace Sledge.BspEditor.Tools.Selection
         #endregion
 
         private System.Windows.Forms.CheckBox Show3DWidgetsCheckbox;
+        private System.Windows.Forms.CheckBox MoveWidgetCheckbox;
+        private System.Windows.Forms.CheckBox RotateWidgetCheckbox;
+        private System.Windows.Forms.CheckBox EntityMotionWidgetCheckbox;
         private System.Windows.Forms.Label lblMode;
         private System.Windows.Forms.CheckBox TranslateModeCheckbox;
         private System.Windows.Forms.CheckBox RotateModeCheckbox;

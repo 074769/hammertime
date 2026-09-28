@@ -172,6 +172,9 @@
             "Rotate": "Rotate",
             "Skew": "Skew",
             "Show3DWidgets": "Show 3D widgets",
+            "MoveWidget": "Move widget",
+            "RotateWidget": "Rotate widget",
+            "EntityMotionWidget": "Entity motion arrows",
             "Actions": "Actions:",
             "MoveToWorld": "Move to world",
             "TieToEntity": "Tie to entity"

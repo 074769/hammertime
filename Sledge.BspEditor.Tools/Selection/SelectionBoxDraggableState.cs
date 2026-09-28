@@ -56,6 +56,22 @@ namespace Sledge.BspEditor.Tools.Selection
 		private readonly MoveWidget _scaleWidget;
 		private readonly RotationWidget _rotationWidget;
 
+		/// <summary>Draws movement/rotation arrows for selected entities (movedir, rotators) in the 3D view.</summary>
+		public EntityMotionWidget MotionWidget { get; private set; }
+
+		// Which of the individual widgets are enabled (only relevant while ShowWidgets is on)
+		public bool ShowMoveWidget { get; private set; } = true;
+		public bool ShowRotateWidget { get; private set; } = true;
+		public bool ShowEntityMotionWidget { get; private set; } = true;
+
+		public void SetWidgetToggles(bool move, bool rotate, bool entityMotion)
+		{
+			ShowMoveWidget = move;
+			ShowRotateWidget = rotate;
+			ShowEntityMotionWidget = entityMotion;
+			Update();
+		}
+
 		public SelectionBoxDraggableState(SelectTool tool) : base(tool)
 		{
 			_tool = tool;
@@ -64,6 +80,7 @@ namespace Sledge.BspEditor.Tools.Selection
 				(_rotationWidget = new RotationWidget(tool.GetDocument()) { Active = false }),
 				(_scaleWidget = new MoveWidget(tool.GetDocument()) {Active = false})
 			};
+			MotionWidget = new EntityMotionWidget { Active = false };
 			BindWidgets();
 		}
 
@@ -174,10 +191,15 @@ namespace Sledge.BspEditor.Tools.Selection
 		{
 			foreach (var widget in Widgets)
 			{
-				widget.Active = State.Action != BoxAction.Idle && CurrentTransformationMode == widget.WidgetTransformationMode && ShowWidgets;
+				var enabled = widget is RotationWidget ? ShowRotateWidget : !(widget is MoveWidget) || ShowMoveWidget;
+				widget.Active = State.Action != BoxAction.Idle && CurrentTransformationMode == widget.WidgetTransformationMode && ShowWidgets && enabled;
 				widget.SetPivotPoint(_rotationOrigin.Position);
 				widget.State = State;
 			}
+
+			// The motion arrows are informational (not tied to a transformation mode),
+			// so they show whenever 3D widgets are on and something can be selected.
+			if (MotionWidget != null) MotionWidget.Active = ShowWidgets && ShowEntityMotionWidget;
 		}
 
 		protected override void CreateBoxHandles()
