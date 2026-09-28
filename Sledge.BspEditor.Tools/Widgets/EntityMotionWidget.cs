@@ -87,7 +87,7 @@ namespace Sledge.BspEditor.Tools.Widgets
 			base.Render(document, viewport, camera, im);
 		}
 
-		private static void RenderSelection(MapDocument document, PerspectiveCamera camera, I2DRenderer im)
+		private void RenderSelection(MapDocument document, PerspectiveCamera camera, I2DRenderer im)
 		{
 			GameData gameData;
 			try
