@@ -858,9 +858,9 @@ namespace Sledge.BspEditor.Tools.Texture
             });
         }
 
-        private async void RRightButton_Click(object sender, EventArgs e)
+        private async void RotateButton_Click(object sender, EventArgs e)
         {
-            await RotateFaceTexture(90);
+            if (sender is Button b && b.Tag is float degrees) await RotateFaceTexture(degrees);
         }
 
         private async Task RotateFaceTexture(float degree)
@@ -877,11 +877,6 @@ namespace Sledge.BspEditor.Tools.Texture
                 return Task.FromResult(true);
             });
         }
-
-		private void RLeftButton_Click(object sender, EventArgs e)
-		{
-			RotateFaceTexture(-90);
-		}
 
 		private async void apply_null_Click(object sender, EventArgs e)
 		{
