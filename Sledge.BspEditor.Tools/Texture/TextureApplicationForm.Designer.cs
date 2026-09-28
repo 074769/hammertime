@@ -69,6 +69,7 @@
             RightClickActionButton = new Sledge.Shell.Controls.DropdownButton();
             RightClickActionMenu = new System.Windows.Forms.ContextMenuStrip(components);
             ResetButton = new System.Windows.Forms.Button();
+            RotateLabel = new System.Windows.Forms.Label();
             RotPlus45Button = new System.Windows.Forms.Button();
             RotPlus90Button = new System.Windows.Forms.Button();
             RotPlus180Button = new System.Windows.Forms.Button();
@@ -92,7 +93,7 @@
             // HideMaskCheckbox
             // 
             HideMaskCheckbox.Appearance = System.Windows.Forms.Appearance.Button;
-            HideMaskCheckbox.Location = new System.Drawing.Point(354, 227);
+            HideMaskCheckbox.Location = new System.Drawing.Point(354, 145);
             HideMaskCheckbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             HideMaskCheckbox.Name = "HideMaskCheckbox";
             HideMaskCheckbox.Size = new System.Drawing.Size(119, 27);
@@ -105,7 +106,7 @@
             // RecentFilterTextbox
             // 
             RecentFilterTextbox.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
-            RecentFilterTextbox.Location = new System.Drawing.Point(371, 502);
+            RecentFilterTextbox.Location = new System.Drawing.Point(371, 550);
             RecentFilterTextbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             RecentFilterTextbox.Name = "RecentFilterTextbox";
             RecentFilterTextbox.Size = new System.Drawing.Size(101, 23);
@@ -115,7 +116,7 @@
             // FilterRecentLabel
             // 
             FilterRecentLabel.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
-            FilterRecentLabel.Location = new System.Drawing.Point(371, 467);
+            FilterRecentLabel.Location = new System.Drawing.Point(371, 515);
             FilterRecentLabel.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
             FilterRecentLabel.Name = "FilterRecentLabel";
             FilterRecentLabel.Size = new System.Drawing.Size(102, 28);
@@ -139,7 +140,7 @@
             // 
             AlignGroup.Controls.Add(AlignToFaceCheckbox);
             AlignGroup.Controls.Add(AlignToWorldCheckbox);
-            AlignGroup.Location = new System.Drawing.Point(203, 164);
+            AlignGroup.Location = new System.Drawing.Point(140, 140);
             AlignGroup.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             AlignGroup.Name = "AlignGroup";
             AlignGroup.Padding = new System.Windows.Forms.Padding(4, 3, 4, 3);
@@ -176,23 +177,22 @@
             // 
             JustifyGroup.Controls.Add(JustifyTopButton);
             JustifyGroup.Controls.Add(JustifyFitButton);
-            JustifyGroup.Controls.Add(TreatAsOneCheckbox);
             JustifyGroup.Controls.Add(JustifyRightButton);
             JustifyGroup.Controls.Add(JustifyBottomButton);
             JustifyGroup.Controls.Add(JustifyCenterButton);
             JustifyGroup.Controls.Add(JustifyLeftButton);
-            JustifyGroup.Location = new System.Drawing.Point(354, 14);
+            JustifyGroup.Location = new System.Drawing.Point(14, 112);
             JustifyGroup.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             JustifyGroup.Name = "JustifyGroup";
             JustifyGroup.Padding = new System.Windows.Forms.Padding(4, 3, 4, 3);
-            JustifyGroup.Size = new System.Drawing.Size(119, 158);
+            JustifyGroup.Size = new System.Drawing.Size(119, 106);
             JustifyGroup.TabIndex = 29;
             JustifyGroup.TabStop = false;
             JustifyGroup.Text = "Justify";
             // 
             // JustifyTopButton
             // 
-            JustifyTopButton.Location = new System.Drawing.Point(47, 17);
+            JustifyTopButton.Location = new System.Drawing.Point(38, 18);
             JustifyTopButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             JustifyTopButton.Name = "JustifyTopButton";
             JustifyTopButton.Size = new System.Drawing.Size(23, 23);
@@ -203,10 +203,10 @@
             // 
             // JustifyFitButton
             // 
-            JustifyFitButton.Location = new System.Drawing.Point(19, 100);
+            JustifyFitButton.Location = new System.Drawing.Point(10, 18);
             JustifyFitButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             JustifyFitButton.Name = "JustifyFitButton";
-            JustifyFitButton.Size = new System.Drawing.Size(79, 23);
+            JustifyFitButton.Size = new System.Drawing.Size(23, 23);
             JustifyFitButton.TabIndex = 4;
             JustifyFitButton.Text = "Fit";
             JustifyFitButton.UseVisualStyleBackColor = true;
@@ -214,10 +214,10 @@
             // 
             // TreatAsOneCheckbox
             // 
-            TreatAsOneCheckbox.Location = new System.Drawing.Point(7, 130);
+            TreatAsOneCheckbox.Location = new System.Drawing.Point(144, 114);
             TreatAsOneCheckbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             TreatAsOneCheckbox.Name = "TreatAsOneCheckbox";
-            TreatAsOneCheckbox.Size = new System.Drawing.Size(105, 24);
+            TreatAsOneCheckbox.Size = new System.Drawing.Size(134, 24);
             TreatAsOneCheckbox.TabIndex = 5;
             TreatAsOneCheckbox.Text = "Treat as One";
             TreatAsOneCheckbox.UseVisualStyleBackColor = true;
@@ -225,7 +225,7 @@
             // 
             // JustifyRightButton
             // 
-            JustifyRightButton.Location = new System.Drawing.Point(75, 45);
+            JustifyRightButton.Location = new System.Drawing.Point(66, 46);
             JustifyRightButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             JustifyRightButton.Name = "JustifyRightButton";
             JustifyRightButton.Size = new System.Drawing.Size(23, 23);
@@ -236,7 +236,7 @@
             // 
             // JustifyBottomButton
             // 
-            JustifyBottomButton.Location = new System.Drawing.Point(47, 73);
+            JustifyBottomButton.Location = new System.Drawing.Point(38, 74);
             JustifyBottomButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             JustifyBottomButton.Name = "JustifyBottomButton";
             JustifyBottomButton.Size = new System.Drawing.Size(23, 23);
@@ -247,7 +247,7 @@
             // 
             // JustifyCenterButton
             // 
-            JustifyCenterButton.Location = new System.Drawing.Point(47, 45);
+            JustifyCenterButton.Location = new System.Drawing.Point(38, 46);
             JustifyCenterButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             JustifyCenterButton.Name = "JustifyCenterButton";
             JustifyCenterButton.Size = new System.Drawing.Size(23, 23);
@@ -258,7 +258,7 @@
             // 
             // JustifyLeftButton
             // 
-            JustifyLeftButton.Location = new System.Drawing.Point(19, 45);
+            JustifyLeftButton.Location = new System.Drawing.Point(10, 46);
             JustifyLeftButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             JustifyLeftButton.Name = "JustifyLeftButton";
             JustifyLeftButton.Size = new System.Drawing.Size(23, 23);
@@ -269,10 +269,10 @@
             // 
             // ApplyButton
             // 
-            ApplyButton.Location = new System.Drawing.Point(108, 145);
+            ApplyButton.Location = new System.Drawing.Point(354, 80);
             ApplyButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             ApplyButton.Name = "ApplyButton";
-            ApplyButton.Size = new System.Drawing.Size(88, 27);
+            ApplyButton.Size = new System.Drawing.Size(119, 27);
             ApplyButton.TabIndex = 22;
             ApplyButton.Text = "Apply";
             ApplyButton.UseVisualStyleBackColor = true;
@@ -294,10 +294,10 @@
             // 
             // ReplaceButton
             // 
-            ReplaceButton.Location = new System.Drawing.Point(14, 145);
+            ReplaceButton.Location = new System.Drawing.Point(354, 47);
             ReplaceButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             ReplaceButton.Name = "ReplaceButton";
-            ReplaceButton.Size = new System.Drawing.Size(88, 27);
+            ReplaceButton.Size = new System.Drawing.Size(119, 27);
             ReplaceButton.TabIndex = 24;
             ReplaceButton.Text = "Replace...";
             ReplaceButton.UseVisualStyleBackColor = true;
@@ -305,10 +305,10 @@
             // 
             // BrowseButton
             // 
-            BrowseButton.Location = new System.Drawing.Point(14, 112);
+            BrowseButton.Location = new System.Drawing.Point(354, 14);
             BrowseButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             BrowseButton.Name = "BrowseButton";
-            BrowseButton.Size = new System.Drawing.Size(88, 27);
+            BrowseButton.Size = new System.Drawing.Size(119, 27);
             BrowseButton.TabIndex = 23;
             BrowseButton.Text = "Browse...";
             BrowseButton.UseVisualStyleBackColor = true;
@@ -326,10 +326,10 @@
             // 
             // TextureDetailsLabel
             // 
-            TextureDetailsLabel.Location = new System.Drawing.Point(14, 227);
+            TextureDetailsLabel.Location = new System.Drawing.Point(14, 297);
             TextureDetailsLabel.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
             TextureDetailsLabel.Name = "TextureDetailsLabel";
-            TextureDetailsLabel.Size = new System.Drawing.Size(458, 27);
+            TextureDetailsLabel.Size = new System.Drawing.Size(458, 8);
             TextureDetailsLabel.TabIndex = 21;
             TextureDetailsLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
@@ -494,7 +494,7 @@
             // 
             // SelectedTextureListPanel
             // 
-            SelectedTextureListPanel.Location = new System.Drawing.Point(14, 257);
+            SelectedTextureListPanel.Location = new System.Drawing.Point(14, 305);
             SelectedTextureListPanel.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             SelectedTextureListPanel.Name = "SelectedTextureListPanel";
             SelectedTextureListPanel.Size = new System.Drawing.Size(350, 238);
@@ -503,7 +503,7 @@
             // RecentTextureListPanel
             // 
             RecentTextureListPanel.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
-            RecentTextureListPanel.Location = new System.Drawing.Point(371, 257);
+            RecentTextureListPanel.Location = new System.Drawing.Point(371, 305);
             RecentTextureListPanel.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             RecentTextureListPanel.Name = "RecentTextureListPanel";
             RecentTextureListPanel.Size = new System.Drawing.Size(102, 207);
@@ -511,7 +511,7 @@
             // 
             // LeftClickActionButton
             // 
-            LeftClickActionButton.Location = new System.Drawing.Point(14, 502);
+            LeftClickActionButton.Location = new System.Drawing.Point(14, 550);
             LeftClickActionButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             LeftClickActionButton.Menu = LeftClickActionMenu;
             LeftClickActionButton.Name = "LeftClickActionButton";
@@ -528,7 +528,7 @@
             // 
             // RightClickActionButton
             // 
-            RightClickActionButton.Location = new System.Drawing.Point(191, 502);
+            RightClickActionButton.Location = new System.Drawing.Point(191, 550);
             RightClickActionButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             RightClickActionButton.Menu = RightClickActionMenu;
             RightClickActionButton.Name = "RightClickActionButton";
@@ -545,10 +545,10 @@
             // 
             // ResetButton
             // 
-            ResetButton.Location = new System.Drawing.Point(108, 112);
+            ResetButton.Location = new System.Drawing.Point(279, 47);
             ResetButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             ResetButton.Name = "ResetButton";
-            ResetButton.Size = new System.Drawing.Size(88, 27);
+            ResetButton.Size = new System.Drawing.Size(66, 27);
             ResetButton.TabIndex = 38;
             ResetButton.Text = "Reset";
             ResetButton.UseVisualStyleBackColor = true;
@@ -556,17 +556,27 @@
             // 
             // apply_null
             // 
-            apply_null.Location = new System.Drawing.Point(272, 227);
+            apply_null.Location = new System.Drawing.Point(354, 112);
             apply_null.Name = "apply_null";
-            apply_null.Size = new System.Drawing.Size(75, 27);
+            apply_null.Size = new System.Drawing.Size(119, 27);
             apply_null.TabIndex = 39;
             apply_null.Text = "NULL";
             apply_null.UseVisualStyleBackColor = true;
             apply_null.Click += apply_null_Click;
             // 
+            // RotateLabel
+            // 
+            RotateLabel.Location = new System.Drawing.Point(14, 224);
+            RotateLabel.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
+            RotateLabel.Name = "RotateLabel";
+            RotateLabel.Size = new System.Drawing.Size(80, 18);
+            RotateLabel.TabIndex = 46;
+            RotateLabel.Text = "Rotate:";
+            RotateLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
             // RotPlus45Button
             // 
-            RotPlus45Button.Location = new System.Drawing.Point(203, 47);
+            RotPlus45Button.Location = new System.Drawing.Point(14, 246);
             RotPlus45Button.Margin = new System.Windows.Forms.Padding(0);
             RotPlus45Button.Name = "RotPlus45Button";
             RotPlus45Button.Size = new System.Drawing.Size(44, 23);
@@ -578,7 +588,7 @@
             // 
             // RotPlus90Button
             // 
-            RotPlus90Button.Location = new System.Drawing.Point(252, 47);
+            RotPlus90Button.Location = new System.Drawing.Point(63, 246);
             RotPlus90Button.Margin = new System.Windows.Forms.Padding(0);
             RotPlus90Button.Name = "RotPlus90Button";
             RotPlus90Button.Size = new System.Drawing.Size(44, 23);
@@ -590,7 +600,7 @@
             // 
             // RotPlus180Button
             // 
-            RotPlus180Button.Location = new System.Drawing.Point(301, 47);
+            RotPlus180Button.Location = new System.Drawing.Point(112, 246);
             RotPlus180Button.Margin = new System.Windows.Forms.Padding(0);
             RotPlus180Button.Name = "RotPlus180Button";
             RotPlus180Button.Size = new System.Drawing.Size(44, 23);
@@ -602,7 +612,7 @@
             // 
             // RotMinus45Button
             // 
-            RotMinus45Button.Location = new System.Drawing.Point(203, 73);
+            RotMinus45Button.Location = new System.Drawing.Point(14, 272);
             RotMinus45Button.Margin = new System.Windows.Forms.Padding(0);
             RotMinus45Button.Name = "RotMinus45Button";
             RotMinus45Button.Size = new System.Drawing.Size(44, 23);
@@ -614,7 +624,7 @@
             // 
             // RotMinus90Button
             // 
-            RotMinus90Button.Location = new System.Drawing.Point(252, 73);
+            RotMinus90Button.Location = new System.Drawing.Point(63, 272);
             RotMinus90Button.Margin = new System.Windows.Forms.Padding(0);
             RotMinus90Button.Name = "RotMinus90Button";
             RotMinus90Button.Size = new System.Drawing.Size(44, 23);
@@ -626,7 +636,7 @@
             // 
             // RotMinus180Button
             // 
-            RotMinus180Button.Location = new System.Drawing.Point(301, 73);
+            RotMinus180Button.Location = new System.Drawing.Point(112, 272);
             RotMinus180Button.Margin = new System.Windows.Forms.Padding(0);
             RotMinus180Button.Name = "RotMinus180Button";
             RotMinus180Button.Size = new System.Drawing.Size(44, 23);
@@ -641,7 +651,7 @@
             lightmapGrp.Controls.Add(SmoothingGroupsButton);
             lightmapGrp.Controls.Add(LightmapValue);
             lightmapGrp.Controls.Add(LightmapLabel);
-            lightmapGrp.Location = new System.Drawing.Point(205, 101);
+            lightmapGrp.Location = new System.Drawing.Point(205, 224);
             lightmapGrp.Name = "lightmapGrp";
             lightmapGrp.Size = new System.Drawing.Size(140, 61);
             lightmapGrp.TabIndex = 39;
@@ -651,7 +661,9 @@
             // 
             AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            ClientSize = new System.Drawing.Size(486, 537);
+            ClientSize = new System.Drawing.Size(486, 585);
+            Controls.Add(RotateLabel);
+            Controls.Add(TreatAsOneCheckbox);
             Controls.Add(RotMinus180Button);
             Controls.Add(RotMinus90Button);
             Controls.Add(RotMinus45Button);
@@ -742,6 +754,7 @@
         private System.Windows.Forms.ContextMenuStrip LeftClickActionMenu;
         private System.Windows.Forms.ContextMenuStrip RightClickActionMenu;
 		private System.Windows.Forms.Button ResetButton;
+		private System.Windows.Forms.Label RotateLabel;
 		private System.Windows.Forms.Button RotPlus45Button;
 		private System.Windows.Forms.Button RotPlus90Button;
 		private System.Windows.Forms.Button RotPlus180Button;
