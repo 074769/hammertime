@@ -34,6 +34,7 @@ namespace Sledge.BspEditor.Tools.Texture
             using (var tb = new TextureBrowser(md))
             {
                 await tb.Initialise(_translation.Value);
+                await tb.GoToTexture(md.Map.Data.GetOne<ActiveTexture>()?.Name);
                 if (tb.ShowDialog() == DialogResult.OK && !String.IsNullOrWhiteSpace(tb.SelectedTexture))
                 {
                     var tex = tb.SelectedTexture;

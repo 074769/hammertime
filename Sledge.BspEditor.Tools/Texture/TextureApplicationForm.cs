@@ -47,6 +47,8 @@ namespace Sledge.BspEditor.Tools.Texture
         private WeakReference<MapDocument> _document = new WeakReference<MapDocument>(null);
 
         private event EventHandler DebouncedPropertiesChanged;
+        // 1 while a property change is waiting for its debounced (undoable) commit
+        private int _pendingCommit;
         private IDisposable _saveChanges;
 
         // One combined viewer: textures on the selected faces first, then the recently used ones
@@ -89,10 +91,7 @@ namespace Sledge.BspEditor.Tools.Texture
             // Throttle property changes so they only apply after 500 ms, this should keep the undo stack clear
             _saveChanges = Observable.FromEventPattern(x => DebouncedPropertiesChanged += x, x => DebouncedPropertiesChanged -= x)
                 .Throttle(TimeSpan.FromMilliseconds(500))
-                .Subscribe(x =>
-                {
-                    ApplyPropertyChanges(false);
-                });
+                .Subscribe(x => CommitPendingChanges());
         }
 
         public string LeftClick { get; set; }
@@ -425,7 +424,39 @@ namespace Sledge.BspEditor.Tools.Texture
             if (!_currentTextureProperties.DifferentLightmapValues) _currentTextureProperties.LightmapScale = (float)LightmapValue.Value;
 
             ApplyPropertyChanges(true);
+            System.Threading.Interlocked.Exchange(ref _pendingCommit, 1);
             DebouncedPropertiesChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>
+        /// Commits the pending scale/shift/rotation change to the undo history (once).
+        /// </summary>
+        private void CommitPendingChanges()
+        {
+            if (System.Threading.Interlocked.Exchange(ref _pendingCommit, 0) == 0) return;
+            ApplyPropertyChanges(false);
+        }
+
+        private static bool IsUndoRedoKey(Keys keyData)
+        {
+            if (!keyData.HasFlag(Keys.Control) || keyData.HasFlag(Keys.Alt)) return false;
+            var key = keyData & Keys.KeyCode;
+            return key == Keys.Z || key == Keys.Y;
+        }
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            // A change still inside the debounce window is committed first, so undo/redo sees it in the history
+            if (IsUndoRedoKey(keyData)) CommitPendingChanges();
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
+
+        protected override bool CheckIgnoreHotkey(Control source, Keys keyData)
+        {
+            // The numeric fields are text boxes, which normally keep Ctrl+Z / Ctrl+Y for their own text undo.
+            // Here they should act on the map's undo history instead, without having to click outside first.
+            if (IsUndoRedoKey(keyData)) return false;
+            return base.CheckIgnoreHotkey(source, keyData);
         }
 
         private void ApplyFaceValues(Face target)

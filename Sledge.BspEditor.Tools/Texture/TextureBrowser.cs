@@ -123,6 +123,53 @@ namespace Sledge.BspEditor.Tools.Texture
 			translation.Translate(this);
 		}
 
+		private string _goToTexture;
+
+		/// <summary>
+		/// Jump to a texture: switch to a view that contains it, then highlight it and scroll it into view.
+		/// </summary>
+		public async Task GoToTexture(string name)
+		{
+			if (String.IsNullOrWhiteSpace(name)) return;
+
+			var tex = _textures.FirstOrDefault(x => String.Equals(x, name, StringComparison.InvariantCultureIgnoreCase));
+			if (tex == null) return;
+
+			bool IsListed() => _textureList.GetTextureList().Any(x => String.Equals(x, tex, StringComparison.InvariantCultureIgnoreCase));
+
+			if (!IsListed())
+			{
+				// Leave the favourites view and go to the package the texture lives in
+				FavouritesTree.SelectedNode = null;
+				var pkg = _textureList.Collection.Packages.FirstOrDefault(p => p.HasTexture(tex));
+				var root = PackageTree.Nodes.Cast<TreeNode>().FirstOrDefault();
+				var node = pkg == null || root == null ? null : root.Nodes.Cast<TreeNode>().FirstOrDefault(n => n.Name == pkg.ToString());
+				PackageTree.SelectedNode = node ?? root;
+				await UpdateTextureList();
+			}
+
+			if (!IsListed())
+			{
+				// A filter is hiding it - the selected texture wins
+				FilterTextbox.Text = "";
+				SetMemory("Filter", "");
+				UsedTexturesOnlyBox.Checked = false;
+				await UpdateTextureList();
+			}
+
+			_goToTexture = tex;
+			_textureList.SetHighlightedTextures(new[] { tex });
+			_textureList.ScrollToTexture(tex);
+		}
+
+		protected override void OnShown(EventArgs e)
+		{
+			base.OnShown(e);
+
+			// The list has no size until the dialog is visible, so scroll again now that it has been laid out
+			if (_goToTexture != null) _textureList.ScrollToTexture(_goToTexture);
+		}
+
 		protected override void OnLoad(EventArgs e)
 		{
 			FilterTextbox.SelectAll();
