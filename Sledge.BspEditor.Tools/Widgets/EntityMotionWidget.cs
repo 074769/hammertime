@@ -13,6 +13,7 @@ using Sledge.DataStructures.Geometric;
 using Sledge.Rendering.Cameras;
 using Sledge.Rendering.Overlay;
 using Sledge.Rendering.Viewports;
+using MapEntity = Sledge.BspEditor.Primitives.MapObjects.Entity;
 
 namespace Sledge.BspEditor.Tools.Widgets
 {
@@ -85,7 +86,7 @@ namespace Sledge.BspEditor.Tools.Widgets
 			}
 			if (gameData == null) return;
 
-			var entities = document.Selection.OfType<Entity>()
+			var entities = document.Selection.OfType<MapEntity>()
 				.Where(x => x.EntityData != null)
 				.Where(x => !x.Data.OfType<IObjectVisibility>().Any(v => v.IsHidden))
 				.Distinct();
@@ -187,7 +188,7 @@ namespace Sledge.BspEditor.Tools.Widgets
 		/// Rotating brush entities turn around their origin brush, not their bounding box
 		/// center, so use the origin brush when there is one.
 		/// </summary>
-		private static Vector3 GetRotationPivot(Entity entity, Vector3 fallback)
+		private static Vector3 GetRotationPivot(MapEntity entity, Vector3 fallback)
 		{
 			var originBrush = entity.FindAll().OfType<Solid>()
 				.FirstOrDefault(s => s.Faces.Any() && s.Faces.All(f => string.Equals(f.Texture.Name, "origin", StringComparison.InvariantCultureIgnoreCase)));
