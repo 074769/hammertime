@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Numerics;
 using Sledge.BspEditor.Documents;
@@ -33,6 +34,16 @@ namespace Sledge.BspEditor.Tools.Widgets
 	{
 		public static readonly Capability EntityMoveArrowWidgetCapability = Capability.Create("EntityMoveArrowWidget");
 		public override Capability ToolCapability => EntityMoveArrowWidgetCapability;
+
+		/// <summary>
+		/// GoldSrc linear movers that take their travel direction from "angles"/"angle" (the engine's
+		/// SetMovedir), whether or not the loaded FGD labels that key as a direction. Many FGDs (e.g.
+		/// the CS 1.6 ones) just label it "Pitch Yaw Roll", which the FGD heuristic below can't recognise.
+		/// </summary>
+		private static readonly HashSet<string> AngleDrivenMovers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+		{
+			"func_door", "func_water", "func_button", "momentary_door", "trigger_push", "func_conveyor"
+		};
 
 		private const float FallbackScale = 0.5f;        // fallback shaft length (x smallest entity dimension)
 		private const float HeadLengthFraction = 0.3f;   // of the shaft length
@@ -96,7 +107,8 @@ namespace Sledge.BspEditor.Tools.Widgets
 
 			// Legacy single-value "angle" key: -1 = up, -2 = down, otherwise a yaw.
 			var angle = data.Get("angle", float.NaN);
-			if (float.IsNaN(angle)) return null;
+			// No direction set at all: the engine treats that as angles 0 0 0, i.e. +X.
+			if (float.IsNaN(angle)) return AngleDrivenMovers.Contains(cls.Name) ? Vector3.UnitX : (Vector3?) null;
 			if (Math.Abs(angle - -1f) < 0.01f) return Vector3.UnitZ;
 			if (Math.Abs(angle - -2f) < 0.01f) return -Vector3.UnitZ;
 			return DirectionFromAngles(new Vector3(0, angle, 0));
@@ -110,6 +122,7 @@ namespace Sledge.BspEditor.Tools.Widgets
 		private static bool UsesAnglesForMovement(GameDataObject cls)
 		{
 			if (FindProperty(cls, "movedir") != null) return true;
+			if (AngleDrivenMovers.Contains(cls.Name)) return true;
 
 			foreach (var key in new[] { "angles", "angle" })
 			{

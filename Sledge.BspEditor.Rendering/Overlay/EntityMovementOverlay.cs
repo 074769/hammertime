@@ -87,7 +87,7 @@ namespace Sledge.BspEditor.Rendering.Overlay
                 var min = Math.Min(ed.BoundingBox.Width, Math.Min(ed.BoundingBox.Height, ed.BoundingBox.Length));
                 if (min <= 0) continue;
 
-                var moveDir = GetMoveDirection(data);
+                var moveDir = GetMoveDirection(cls, data);
                 if (moveDir.HasValue)
                 {
                     DrawMoveArrow(camera, im, origin, moveDir.Value, min * MoveArrowScale, color);
@@ -103,11 +103,47 @@ namespace Sledge.BspEditor.Rendering.Overlay
 
         // --- Movement (translate) helper ------------------------------------
 
-        private static Vector3? GetMoveDirection(EntityData data)
+        // GoldSrc linear movers that take their travel direction from "angles"/"angle" (the
+        // engine's SetMovedir). Listed by name because many FGDs only label that key
+        // "Pitch Yaw Roll", so it can't be recognised from the FGD alone. Keep in sync with
+        // EntityMoveArrowWidget in Sledge.BspEditor.Tools.
+        private static readonly HashSet<string> AngleDrivenMovers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "func_door", "func_water", "func_button", "momentary_door", "trigger_push", "func_conveyor"
+        };
+
+        private static Vector3? GetMoveDirection(GameDataObject cls, EntityData data)
         {
             var md = data.GetVector3("movedir");
-            if (!md.HasValue) return null;
-            var dir = AngleToDirection(md.Value);
+            if (md.HasValue)
+            {
+                var mdir = AngleToDirection(md.Value);
+                return mdir.LengthSquared() < 0.0001f ? (Vector3?) null : mdir;
+            }
+
+            if (!AngleDrivenMovers.Contains(cls.Name)) return null;
+
+            var angles = data.GetVector3("angles");
+            if (angles.HasValue) return DirectionFromAngles(angles.Value);
+
+            // Legacy single-value "angle" key: -1 = up, -2 = down, otherwise a yaw.
+            var angle = data.Get("angle", float.NaN);
+            // Nothing set at all: the engine treats that as angles 0 0 0, i.e. +X.
+            if (float.IsNaN(angle)) return Vector3.UnitX;
+            if (Math.Abs(angle - -1f) < 0.01f) return Vector3.UnitZ;
+            if (Math.Abs(angle - -2f) < 0.01f) return -Vector3.UnitZ;
+            return DirectionFromAngles(new Vector3(0, angle, 0));
+        }
+
+        // Same conventions as EntityMoveArrowWidget so the 2D and 3D arrows always agree.
+        private static Vector3? DirectionFromAngles(Vector3 pitchYawRoll)
+        {
+            if (Math.Abs(pitchYawRoll.X - 90f) < 0.5f) return Vector3.UnitZ;     // up
+            if (Math.Abs(pitchYawRoll.X - -90f) < 0.5f) return -Vector3.UnitZ;  // down
+            if (Math.Abs(pitchYawRoll.Y - -1f) < 0.01f) return Vector3.UnitZ;
+            if (Math.Abs(pitchYawRoll.Y - -2f) < 0.01f) return -Vector3.UnitZ;
+
+            var dir = AngleToDirection(pitchYawRoll);
             return dir.LengthSquared() < 0.0001f ? (Vector3?) null : dir;
         }
 

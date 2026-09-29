@@ -92,6 +92,25 @@ namespace Sledge.BspEditor.Rendering.Viewport
 
 				await Oy.Publish("Command:Run", new CommandMessage("BspEditor:Tools:Rotate", new { Axis = axis, Angle = angle }));
 			});
+
+			// Flip the current selection horizontally/vertically as seen in whichever 2D viewport
+			// is currently focused. Only fires for the focused viewport, and only when it is 2D.
+			Oy.Subscribe<string>("BspEditor:Viewport:FlipSelection", async (direction) =>
+			{
+				if (!viewport.IsFocused) return;
+				if (!(Viewport.Camera is OrthographicCamera camera)) return;
+
+				// Same mapping as the 2D viewport's right-click Flip menu (SelectTool).
+				var f = camera.Flatten(new Vector3(1, 2, 3));
+				var flatX = (int) f.X;
+				var flatY = (int) f.Y;
+
+				var flip = direction == "Vertical"
+					? (flatY == 2 ? "FlipY" : (flatY == 3 ? "FlipZ" : "FlipX"))
+					: (flatX == 1 ? "FlipX" : (flatX == 2 ? "FlipY" : "FlipZ"));
+
+				await Oy.Publish("Command:Run", new CommandMessage("BspEditor:Tools:" + flip));
+			});
 		}
 
 		#region Listeners
