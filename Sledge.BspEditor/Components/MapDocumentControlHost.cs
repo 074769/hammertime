@@ -412,6 +412,9 @@ namespace Sledge.BspEditor.Components
 					case "Wireframe":
 						tl.Wireframe = !tl.Wireframe;
 						break;
+					case "Unshaded":
+						tl.Unshaded = !tl.Unshaded;
+						break;
 					case "View": break;
 					default:
 

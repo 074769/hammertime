@@ -15,6 +15,7 @@ namespace Sledge.BspEditor.Primitives.MapData
 		public bool HideDisplacementSolids { get; set; } = false;
 		public bool HideClipTextures { get; set; } = false;
 		public bool Wireframe { get; set; } = false;
+		public bool Unshaded { get; set; } = false;
 		public bool ToggleSkybox { get; set; } = false;
 		public bool ToggleEntityRelations { get; set; } = true;
 
@@ -55,7 +56,8 @@ namespace Sledge.BspEditor.Primitives.MapData
 			return new DisplayFlags
 			{
 				HideNullTextures = HideNullTextures,
-				HideDisplacementSolids = HideDisplacementSolids
+				HideDisplacementSolids = HideDisplacementSolids,
+				Unshaded = Unshaded
 			};
 		}
 	}

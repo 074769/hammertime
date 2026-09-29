@@ -22,6 +22,7 @@ namespace Sledge.BspEditor.Rendering.Viewport
 		public string OrthographicFront { get; set; }
 		public string OrthographicSide { get; set; }
 		public string PerspectiveWf { get; set; }
+		public string PerspectiveUnshaded { get; set; }
 		public string PerspectiveSky { get; set; }
 
 		public string Type => "MapViewport";
@@ -53,6 +54,7 @@ namespace Sledge.BspEditor.Rendering.Viewport
 
 				{"PerspectiveCamera/View", Perspective},
 				{"PerspectiveCamera/Wireframe", PerspectiveWf},
+				{"PerspectiveCamera/Unshaded", PerspectiveUnshaded},
 				{"PerspectiveCamera/Skybox", PerspectiveSky },
 				{"OrthographicCamera/Top", OrthographicTop},
 				{"OrthographicCamera/Front", OrthographicFront},
@@ -72,6 +74,8 @@ namespace Sledge.BspEditor.Rendering.Viewport
 				{
 					case "Wireframe":
 						return displayFlags.Wireframe;
+					case "Unshaded":
+						return displayFlags.Unshaded;
 					case "Skybox":
 						return displayFlags.ToggleSkybox;
 				}

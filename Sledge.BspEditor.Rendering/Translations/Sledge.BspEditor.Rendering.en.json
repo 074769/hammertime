@@ -71,6 +71,7 @@
         "MapViewportControlFactory": {
             "Perspective": "3D View",
             "PerspectiveWf": "3D Wireframe",
+            "PerspectiveUnshaded": "3D Textured (No Shade)",
             "PerspectiveSky": "Skybox",
             "OrthographicTop": "2D Top",
             "OrthographicFront": "2D Front",

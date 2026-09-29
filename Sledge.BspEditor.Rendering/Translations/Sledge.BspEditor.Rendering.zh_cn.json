@@ -37,6 +37,7 @@
   "Components.ViewportZoomStatusItem.Zoom": "缩放",
   "Viewport.MapViewportControlFactory.Perspective": "3D 视图",
   "Viewport.MapViewportControlFactory.PerspectiveWf": "3D 线框视图",
+  "Viewport.MapViewportControlFactory.PerspectiveUnshaded": "3D 纹理视图（无阴影）",
   "Viewport.MapViewportControlFactory.PerspectiveSky": "天空盒",
   "Viewport.MapViewportControlFactory.OrthographicTop": "2D 顶部视图",
   "Viewport.MapViewportControlFactory.OrthographicFront": "2D 前视图",

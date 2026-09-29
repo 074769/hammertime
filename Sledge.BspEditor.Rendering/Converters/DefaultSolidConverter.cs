@@ -47,6 +47,7 @@ namespace Sledge.BspEditor.Rendering.Converters
 			var hideNull = displayFlags?.HideNullTextures == true;
 			var hideClip = displayFlags?.HideClipTextures == true;
 			var wireframe = displayFlags?.Wireframe == true;
+			var unshaded = displayFlags?.Unshaded == true;
 			var skybox = displayFlags?.ToggleSkybox == true;
 
 			// Pack the vertices like this [ f1v1 ... f1vn ] ... [ fnv1 ... fnvn ]
@@ -69,6 +70,10 @@ namespace Sledge.BspEditor.Rendering.Converters
 
 			var tint = Vector4.One;
 
+			// Unshaded: the textured shaders compute lighting = 0.5 * dot(normal, lightDir) + 0.8.
+			// A zero normal makes that a constant 0.8, and scaling the tint rgb by 1 / 0.8 brings it back to exactly 1 (full bright).
+			const float UnshadedTintScale = 1f / 0.8f;
+
 			var tc = await document.Environment.GetTextureCollection();
 
 			var pipeline = PipelineType.TexturedOpaque;
@@ -78,7 +83,8 @@ namespace Sledge.BspEditor.Rendering.Converters
 			// try and find the parent entity for render flags
 			// TODO: this code is extremely specific to Goldsource and should be abstracted away
 			var parentEntity = obj.FindClosestParent(x => x is Entity) as Entity;
-			if (parentEntity?.EntityData != null)
+			// Unshaded mode ignores entity render effects (rendermode / renderamt / rendercolor)
+			if (!unshaded && parentEntity?.EntityData != null)
 			{
 				const int renderModeColor = 1;
 				const int renderModeTexture = 2;
@@ -128,6 +134,7 @@ namespace Sledge.BspEditor.Rendering.Converters
 			}
 
 			if (obj.IsSelected) tint *= new Vector4(1, 0.5f, 0.5f, 1);
+			if (unshaded) tint *= new Vector4(UnshadedTintScale, UnshadedTintScale, UnshadedTintScale, 1);
 
 			var vi = 0u;
 			var si = 0u;
@@ -147,12 +154,12 @@ namespace Sledge.BspEditor.Rendering.Converters
 
 				var textureCoords = face.GetTextureCoordinates(w, h).ToList();
 
-				var normal = face.Plane.Normal;
+				var normal = unshaded ? Vector3.Zero : face.Plane.Normal;
 				for (var i = 0; i < face.Vertices.Count; i++)
 				{
 
 					var v = face.Vertices[i];
-					if (face.Uv1 != null)
+					if (face.Uv1 != null && !unshaded)
 					{
 						shadowPoints[vi] = new VertexStandard
 						{
@@ -222,7 +229,7 @@ namespace Sledge.BspEditor.Rendering.Converters
 
 				groups.Add(group);
 
-				if (f.Uv1 != null)
+				if (f.Uv1 != null && !unshaded)
 				{
 					group = new BufferGroup(
 						PipelineType.ShadowOverlay,
