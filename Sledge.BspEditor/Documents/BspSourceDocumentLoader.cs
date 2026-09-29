@@ -7,10 +7,12 @@ using System.Runtime;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using LogicAndTrick.Oy;
+using Sledge.BspEditor.Components;
 using Sledge.BspEditor.Environment;
 using Sledge.BspEditor.Environment.Controls;
 using Sledge.BspEditor.Environment.Empty;
 using Sledge.BspEditor.Primitives;
+using Sledge.BspEditor.Primitives.MapData;
 using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.BspEditor.Providers;
 using Sledge.BspEditor.Providers.Processors;
@@ -256,6 +258,14 @@ namespace Sledge.BspEditor.Documents
 			foreach (var p in _processors.Select(x => x.Value).OrderBy(x => x.OrderHint))
 			{
 				await p.AfterLoad(document);
+			}
+
+			// Re-apply the remembered "3D Textured (No Shade)" display mode
+			if (ViewportRenderSettings.GetInstance()?.Unshaded3D == true)
+			{
+				var flags = document.Map.Data.GetOne<DisplayFlags>() ?? new DisplayFlags();
+				flags.Unshaded = true;
+				document.Map.Data.Replace(flags);
 			}
 
 			if (result.InvalidObjects.Any() || result.Messages.Any())

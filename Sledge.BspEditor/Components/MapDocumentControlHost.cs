@@ -424,6 +424,18 @@ namespace Sledge.BspEditor.Components
 				_activeDocument.Map.Data.Replace(dd);
 				_activeDocument.Map.Data.Replace(tl);
 				Oy.Publish("SettingsChanged", new object());
+
+				if (tags[1] == "Unshaded")
+				{
+					// Remember the choice across restarts
+					var rs = ViewportRenderSettings.GetInstance();
+					if (rs != null) rs.Unshaded3D = tl.Unshaded;
+					Oy.Publish("Settings:Save");
+				}
+
+				// Display toggles only change the map's display flags. Don't fall through to
+				// UpdateControl, which would replace the camera with a default one (origin).
+				if (tags[1] != "View") return;
 			}
 
 			_shell.InvokeSync(() =>
