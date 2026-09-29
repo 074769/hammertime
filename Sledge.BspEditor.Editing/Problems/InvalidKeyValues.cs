@@ -22,6 +22,12 @@ namespace Sledge.BspEditor.Editing.Problems
         public Uri Url => null;
         public bool CanFix => true;
 
+        // 'angles' is commonly present (often "0 0 0") on entities whose FGD class doesn't declare it
+        private static readonly string[] AllowedEverywhere = { "angles" };
+
+        // Keys any func_* entity can use (zhlt_usemodel, sequence, framerate)
+        private static readonly string[] AllowedOnFuncs = { "zhlt_usemodel", "sequence", "framerate" };
+
         public async Task<List<Problem>> Check(MapDocument document, Predicate<IMapObject> filter)
         {
             var gamedata = await document.Environment.GetGameData();
@@ -43,10 +49,13 @@ namespace Sledge.BspEditor.Editing.Problems
             var cls = gamedata.GetClass(data.Name);
             if (cls == null) return new string[0];
 
-            // 'angles' is commonly present (often "0 0 0") on entities whose FGD class doesn't declare it,
-            // e.g. func_detail in sdhlt.fgd, so don't report it as invalid
+            // Keys that are valid for the compile tools but not declared by the FGD classes
+            var allowed = new List<string>(AllowedEverywhere);
+            if (data.Name.StartsWith("func_", StringComparison.InvariantCultureIgnoreCase)) allowed.AddRange(AllowedOnFuncs);
+            if (string.Equals(data.Name, "cycler_sprite", StringComparison.InvariantCultureIgnoreCase)) allowed.Add("scale");
+
             return data.Properties.Select(x => x.Key)
-                .Where(x => !string.Equals(x, "angles", StringComparison.InvariantCultureIgnoreCase))
+                .Where(x => !allowed.Contains(x, StringComparer.InvariantCultureIgnoreCase))
                 .Except(cls.Properties.Select(x => x.Name), StringComparer.CurrentCultureIgnoreCase);
         }
 
