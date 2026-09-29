@@ -49,6 +49,9 @@ namespace Sledge.BspEditor.Tools.Texture
         private event EventHandler DebouncedPropertiesChanged;
         // 1 while a property change is waiting for its debounced (undoable) commit
         private int _pendingCommit;
+        // Face replacement (remove old Face + add clone with the same ID) must never overlap, otherwise the second
+        // one can't find the face the first already replaced and both clones end up in the solid (duplicate face IDs)
+        private readonly System.Threading.SemaphoreSlim _applyLock = new System.Threading.SemaphoreSlim(1, 1);
         private IDisposable _saveChanges;
 
         // One combined viewer: textures on the selected faces first, then the recently used ones
@@ -474,6 +477,20 @@ namespace Sledge.BspEditor.Tools.Texture
 
         private async void ApplyPropertyChanges(bool trivial)
         {
+            await _applyLock.WaitAsync();
+            try
+            {
+                await ApplyPropertyChangesCore(trivial);
+            }
+            finally
+            {
+                _applyLock.Release();
+            }
+        }
+
+        // Caller must hold _applyLock
+        private async Task ApplyPropertyChangesCore(bool trivial)
+        {
             var edit = new Transaction();
 
             var sel = GetFaceSelection();
@@ -534,28 +551,44 @@ namespace Sledge.BspEditor.Tools.Texture
 
         private async Task ApplyChanges(Func<IMapObject, Face, Task<bool>> apply)
         {
-            var sel = GetFaceSelection();
-
-            var edit = new Transaction();
             var found = false;
 
-            foreach (var it in sel.GetSelectedFaces())
+            await _applyLock.WaitAsync();
+            try
             {
-                var clone = (Face)it.Value.Clone();
-                var result = await apply(it.Key, clone);
-                if (!result) continue;
+                // Commit any pending (debounced) property edit first so it can't run on top of this change later
+                if (System.Threading.Interlocked.Exchange(ref _pendingCommit, 0) == 1)
+                {
+                    await ApplyPropertyChangesCore(false);
+                }
 
-                found = true;
+                var sel = GetFaceSelection();
+                var edit = new Transaction();
 
-                edit.Add(new RemoveMapObjectData(it.Key.ID, it.Value));
-                edit.Add(new AddMapObjectData(it.Key.ID, clone));
+                // Materialise now: the faces are looked up by ID, so this must see the current (post-commit) faces
+                foreach (var it in sel.GetSelectedFaces().ToList())
+                {
+                    var clone = (Face)it.Value.Clone();
+                    var result = await apply(it.Key, clone);
+                    if (!result) continue;
+
+                    found = true;
+
+                    edit.Add(new RemoveMapObjectData(it.Key.ID, it.Value));
+                    edit.Add(new AddMapObjectData(it.Key.ID, clone));
+                }
+
+                if (found)
+                {
+                    await MapDocumentOperation.Perform(Document, edit);
+                }
+            }
+            finally
+            {
+                _applyLock.Release();
             }
 
-            if (found)
-            {
-                await MapDocumentOperation.Perform(Document, edit);
-                await FaceSelectionChanged();
-            }
+            if (found) await FaceSelectionChanged();
         }
 
         private async Task ApplyTexture(string item)
@@ -854,21 +887,18 @@ namespace Sledge.BspEditor.Tools.Texture
 
         private async void ResetButton_Click(object sender, EventArgs e)
         {
+            // Frozen so setting the controls doesn't fire five PropertiesChanged events (and a second debounced commit)
+            var wasFrozen = _freeze;
+            _freeze = true;
             RotationValue.Value = 0;
             ScaleXValue.Value = ScaleYValue.Value = 1;
             ShiftXValue.Value = ShiftYValue.Value = 0;
+            _freeze = wasFrozen;
 
-            var faces = GetFaceSelection();
-
-            _currentTextureProperties.ResetTexture(faces);
-
-            //foreach (var face in faces)
-            //{
-            //    ApplyFaceValues(face);
-            //}
-
+            // Reset only the clones inside ApplyChanges - the live faces are never edited outside an operation
             await ApplyChanges((mo, f) =>
             {
+                _currentTextureProperties.Reset();
                 ApplyFaceValues(f);
                 return Task.FromResult(true);
             });
