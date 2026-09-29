@@ -43,7 +43,10 @@ namespace Sledge.BspEditor.Editing.Problems
             var cls = gamedata.GetClass(data.Name);
             if (cls == null) return new string[0];
 
+            // 'angles' is commonly present (often "0 0 0") on entities whose FGD class doesn't declare it,
+            // e.g. func_detail in sdhlt.fgd, so don't report it as invalid
             return data.Properties.Select(x => x.Key)
+                .Where(x => !string.Equals(x, "angles", StringComparison.InvariantCultureIgnoreCase))
                 .Except(cls.Properties.Select(x => x.Name), StringComparer.CurrentCultureIgnoreCase);
         }
 
