@@ -72,10 +72,27 @@ void main(point GeometryIn input[1], inout TriangleStream<FragmentIn> output)
     float3 camPos     = mul(float4(0, 0, 0, 1), tModel).xyz;
     float3 spritePos  = input[0].gPosition.xyz;
 
+    // The orthographic center-handle "X" is drawn through BillboardOpaquePipeline, which binds
+    // no UVBuffer at all, so every field in it reads as 0. A real sprite always has
+    // FrameCount >= 1. Without this check that all-zero buffer was read as Orientation 0 =
+    // ParallelUpright (which collapses to a flat line in the top view, and never gets the
+    // camera's 1/zoom scale, so it was also the wrong size) and FrameCount 0 (NaN UVs).
+    bool hasUV = FrameCount >= 1;
+    float frameCount = hasUV ? FrameCount : 1;
+    float currentFrame = hasUV ? CurrentFrame : 0;
+
     float3 right;
     float3 up;
 
-    if (Orientation == ORIENT_ORIENTED)
+    if (!hasUV)
+    {
+        // Original screen-aligned billboard: offsets are taken from the camera's own axes
+        // WITHOUT normalizing, so the orthographic view's zoom scale is preserved and the
+        // quad keeps a constant size in screen pixels at any zoom.
+        right = mul(float4(1, 0, 0, 0), tModel).xyz;
+        up    = mul(float4(0, 1, 0, 0), tModel).xyz;
+    }
+    else if (Orientation == ORIENT_ORIENTED)
     {
         // Oriented sprites are a FIXED plane in world space - unlike every other orientation
         // mode here, they must never billboard or otherwise react to the camera at all.
@@ -155,8 +172,8 @@ void main(point GeometryIn input[1], inout TriangleStream<FragmentIn> output)
     verts[2] = -rightV - upV;
     verts[3] = +rightV - upV;
 
-    float column = CurrentFrame % FrameCount;
-    float frameSize = 1.0 / FrameCount;
+    float column = currentFrame % frameCount;
+    float frameSize = 1.0 / frameCount;
     
     float2 texCoords[4];
     texCoords[0] = float2(column * frameSize, 0);
