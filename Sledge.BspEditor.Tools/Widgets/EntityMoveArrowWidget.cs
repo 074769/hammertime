@@ -146,5 +146,6 @@ namespace Sledge.BspEditor.Tools.Widgets
 
 			DrawLine3D(camera, im, origin, tip, color, StrokeWidth);
 			DrawArrowHead(camera, im, tip, direction, headLength, color);
+		}
 	}
 }
