@@ -6,6 +6,7 @@ using System.Numerics;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Primitives.MapObjectData;
 using Sledge.DataStructures.GameData;
+using Sledge.DataStructures.Geometric;
 using Sledge.Rendering.Cameras;
 using Sledge.Rendering.Overlay;
 using MapEntity = Sledge.BspEditor.Primitives.MapObjects.Entity;
