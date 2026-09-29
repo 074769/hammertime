@@ -56,8 +56,11 @@ namespace Sledge.BspEditor.Tools.Selection
 		private readonly MoveWidget _scaleWidget;
 		private readonly RotationWidget _rotationWidget;
 
-		/// <summary>Draws movement/rotation arrows for selected entities (movedir, rotators) in the 3D view.</summary>
+		/// <summary>Draws the rotation arc for selected rotating entities in the 3D view.</summary>
 		public EntityMotionWidget MotionWidget { get; private set; }
+
+		/// <summary>Draws the straight movement arrow (func_door, func_button, ...) in the 3D view. Independent of <see cref="MotionWidget"/>.</summary>
+		public EntityMoveArrowWidget MoveArrowWidget { get; private set; }
 
 		// Which of the individual widgets are enabled (only relevant while ShowWidgets is on)
 		public bool ShowMoveWidget { get; private set; } = true;
@@ -83,6 +86,7 @@ namespace Sledge.BspEditor.Tools.Selection
 				(_scaleWidget = new MoveWidget(tool.GetDocument()) {Active = false})
 			};
 			MotionWidget = new EntityMotionWidget { Active = false };
+			MoveArrowWidget = new EntityMoveArrowWidget { Active = false };
 			BindWidgets();
 		}
 
@@ -199,16 +203,12 @@ namespace Sledge.BspEditor.Tools.Selection
 				widget.State = State;
 			}
 
-			// The motion arrows are informational (not tied to a transformation mode),
+			// The motion widgets are informational (not tied to a transformation mode),
 			// so they show whenever 3D widgets are on and something can be selected. The
-			// two kinds (straight move arrow, rotation arc) are independently toggled so
-			// they don't fight each other visually when only one applies.
-			if (MotionWidget != null)
-			{
-				MotionWidget.Active = ShowWidgets && (ShowMoveArrowWidget || ShowRotationArcWidget);
-				MotionWidget.ShowMoveArrow = ShowMoveArrowWidget;
-				MotionWidget.ShowRotationArc = ShowRotationArcWidget;
-			}
+			// straight move arrow and the rotation arc are separate widgets, each with its
+			// own toggle, so neither depends on the other.
+			if (MoveArrowWidget != null) MoveArrowWidget.Active = ShowWidgets && ShowMoveArrowWidget;
+			if (MotionWidget != null) MotionWidget.Active = ShowWidgets && ShowRotationArcWidget;
 		}
 
 		protected override void CreateBoxHandles()

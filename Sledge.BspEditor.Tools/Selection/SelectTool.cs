@@ -127,6 +127,7 @@ namespace Sledge.BspEditor.Tools.Selection
 			States.Add(_selectionBox);
 			Children.AddRange(_selectionBox.Widgets);
 			Children.Add(_selectionBox.MotionWidget);
+			Children.Add(_selectionBox.MoveArrowWidget);
 
 			_emptyBox = new BoxDraggableState(this);
 			_emptyBox.BoxColour = Color.Yellow;

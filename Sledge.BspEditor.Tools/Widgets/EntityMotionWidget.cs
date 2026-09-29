@@ -13,33 +13,27 @@ using Sledge.DataStructures.Geometric;
 using Sledge.Rendering.Cameras;
 using Sledge.Rendering.Overlay;
 using Sledge.Rendering.Viewports;
+using static Sledge.BspEditor.Tools.Widgets.MotionWidgetDrawing;
 using MapEntity = Sledge.BspEditor.Primitives.MapObjects.Entity;
 
 namespace Sledge.BspEditor.Tools.Widgets
 {
 	/// <summary>
-	/// 3D-viewport counterpart of EntityMovementOverlay. For every selected entity it draws:
+	/// 3D-viewport counterpart of the rotation half of EntityMovementOverlay. For every
+	/// selected entity whose FGD class exposes the "X Axis" / "Y Axis" spawnflag pair
+	/// (func_rotating, func_door_rotating, func_platrot, momentary_rot_button, ...) it
+	/// draws a 3D rotation arrow around the entity's rotation axis. When the entity has a
+	/// finite rotation ("distance" or "rotation" keyvalue, in degrees) the arc runs from the
+	/// start angle to the end angle exactly - the arrowhead's apex sits on the end radial
+	/// line, not past it - with a straight line from the pivot to the arc's start, which
+	/// lies on the entity's own rest direction. Entities that spin continuously get an open
+	/// arc with only the arrow head.
 	///
-	///  - a 3D arrow along the entity's "movedir" keyvalue, for entities that translate
-	///    along a fixed direction (func_door, func_button, trigger_push, ...). The arrow's
-	///    length is the entity's actual travel distance (its size along movedir, minus
-	///    "lip" if the entity has one) so it represents how far it really moves, not just
-	///    a decorative icon;
+	/// The straight movement arrow is a separate widget (<see cref="EntityMoveArrowWidget"/>).
 	///
-	///  - a 3D rotation arrow around the entity's rotation axis, for entities whose FGD
-	///    class exposes the "X Axis" / "Y Axis" spawnflag pair (func_rotating,
-	///    func_door_rotating, func_platrot, momentary_rot_button, ...). When the entity
-	///    has a finite rotation ("distance" or "rotation" keyvalue, in degrees) the arc
-	///    runs from the start angle to the end angle exactly - the arrowhead's apex sits
-	///    on the end radial line, not past it - with a straight line from the pivot to
-	///    the arc's start, which lies on the entity's own rest direction. Entities that spin continuously get an open arc
-	///    with only the arrow head.
-	///
-	/// Both helpers also draw a second, smaller arrow at their midpoint so the direction
-	/// still reads when the tip/end is occluded or off-screen.
-	///
-	/// Widget size always tracks the entity's own bounding box - it does not grow with
-	/// camera distance like a screen-space sprite/gizmo.
+	/// A second, smaller arrow sits at the arc's midpoint so the direction still reads when
+	/// the end is occluded or off-screen. Widget size always tracks the entity's own
+	/// bounding box - it does not grow with camera distance.
 	///
 	/// Everything is driven by the FGD and the entity's own keyvalues, nothing is
 	/// hardcoded to classnames. Lines are projected and drawn as an overlay (like the
@@ -51,23 +45,8 @@ namespace Sledge.BspEditor.Tools.Widgets
 		public static readonly Capability EntityMotionWidgetCapability = Capability.Create("EntityMotionWidget");
 		public override Capability ToolCapability => EntityMotionWidgetCapability;
 
-		private const float MoveArrowScale = 0.5f;   // fallback shaft length (x entity size) when no real travel distance can be worked out
 		private const float RotateArrowScale = 0.8f; // arc radius, as a multiple of entity size
-		private const float NearPlane = 1f;
-
-		private const float HeadLengthFraction = 0.3f;   // of the shaft/arc length
-		private const float HeadRadiusFraction = 0.45f;  // of the head length
-		private const int HeadSides = 8;
-
 		private const double ContinuousArcDegrees = 300; // open arc for entities that spin forever
-		private const float StrokeWidth = 2f;
-		private const float OutlineExtraWidth = 2f;
-
-		/// <summary>Whether to draw the straight movement arrow (movedir).</summary>
-		public bool ShowMoveArrow { get; set; } = true;
-
-		/// <summary>Whether to draw the rotation arc.</summary>
-		public bool ShowRotationArc { get; set; } = true;
 
 		public EntityMotionWidget()
 		{
@@ -89,24 +68,9 @@ namespace Sledge.BspEditor.Tools.Widgets
 
 		private void RenderSelection(MapDocument document, PerspectiveCamera camera, I2DRenderer im)
 		{
-			GameData gameData;
-			try
-			{
-				// Cached as an already-completed task once loaded, so this doesn't block.
-				gameData = document.Environment.GetGameData().Result;
-			}
-			catch
-			{
-				return;
-			}
-			if (gameData == null) return;
+			if (!TryGetGameData(document, out var gameData)) return;
 
-			var entities = document.Selection.OfType<MapEntity>()
-				.Where(x => x.EntityData != null)
-				.Where(x => !x.Data.OfType<IObjectVisibility>().Any(v => v.IsHidden))
-				.Distinct();
-
-			foreach (var ed in entities)
+			foreach (var ed in GetSelectedEntities(document))
 			{
 				var data = ed.EntityData;
 				var cls = gameData.GetClass(data.Name);
@@ -118,81 +82,23 @@ namespace Sledge.BspEditor.Tools.Widgets
 				var max = Math.Max(box.Width, Math.Max(box.Height, box.Length));
 				if (min <= 0) continue;
 
+				var rotateAxis = GetRotationAxis(cls, data);
+				if (!rotateAxis.HasValue) continue;
+
 				var color = ed.Color?.Color ?? Color.White;
-				var center = box.Center;
-
-				if (ShowMoveArrow)
-				{
-					var moveDir = GetMoveDirection(data);
-					if (moveDir.HasValue)
-					{
-						var length = GetMoveLength(ed, data, moveDir.Value, min);
-						DrawArrow3D(camera, im, center, moveDir.Value, length, color);
-					}
-				}
-
-				if (ShowRotationArc)
-				{
-					var rotateAxis = GetRotationAxis(cls, data);
-					if (rotateAxis.HasValue)
-					{
-						var pivot = GetRotationPivot(ed, center);
-						// Use the entity's largest dimension, not the smallest - a 20x120
-						// block should draw an arc sized off the 120, so it reads as the
-						// actual sweep of the object rather than looking undersized.
-						var radius = max * RotateArrowScale; // object-size only - never grows with camera distance
-						var reversed = IsReversed(cls, data);
-						var sweep = GetSweepDegrees(cls, data);
-						var startDir = GetRotationStartDirection(box, pivot, rotateAxis.Value);
-						DrawRotation3D(camera, im, pivot, rotateAxis.Value, startDir, radius, color, reversed, sweep);
-					}
-				}
+				var pivot = GetRotationPivot(ed, box.Center);
+				// Use the entity's largest dimension, not the smallest - a 20x120
+				// block should draw an arc sized off the 120, so it reads as the
+				// actual sweep of the object rather than looking undersized.
+				var radius = max * RotateArrowScale; // object-size only - never grows with camera distance
+				var reversed = IsReversed(cls, data);
+				var sweep = GetSweepDegrees(cls, data);
+				var startDir = GetRotationStartDirection(box, pivot, rotateAxis.Value);
+				DrawRotation3D(camera, im, pivot, rotateAxis.Value, startDir, radius, color, reversed, sweep);
 			}
 		}
 
-		// --- Motion data (mirrors EntityMovementOverlay) -----------------------
-
-		private static Vector3? GetMoveDirection(EntityData data)
-		{
-			var md = data.GetVector3("movedir");
-			if (!md.HasValue) return null;
-
-			// "movedir" special-cases straight up/down: this build's Hammer direction
-			// control writes pitch = 90 for straight up and pitch = -90 for straight
-			// down. Handled explicitly since the generic pitch/yaw/roll math doesn't
-			// reliably reduce to a clean vertical vector for those two values.
-			if (Math.Abs(md.Value.X - 90f) < 0.5f) return Vector3.UnitZ;    // up
-			if (Math.Abs(md.Value.X - -90f) < 0.5f) return -Vector3.UnitZ; // down
-
-			// Also accept the classic Quake/Source yaw sentinel (-1 up, -2 down), in
-			// case a different FGD/engine convention is in play for some entities.
-			if (Math.Abs(md.Value.Y - -1f) < 0.01f) return Vector3.UnitZ;
-			if (Math.Abs(md.Value.Y - -2f) < 0.01f) return -Vector3.UnitZ;
-
-			var dir = AngleToDirection(md.Value);
-			return dir.LengthSquared() < 0.0001f ? (Vector3?) null : dir;
-		}
-
-		/// <summary>
-		/// The entity's real travel distance: its own size measured along the move
-		/// direction, minus "lip" (the sliver of the entity classic Source movers like
-		/// func_door leave behind instead of moving the full width). Falls back to a
-		/// size-based default when there isn't enough information (e.g. point entities).
-		/// </summary>
-		private static float GetMoveLength(MapEntity entity, EntityData data, Vector3 direction, float entitySize)
-		{
-			var box = entity.BoundingBox;
-			var extent = 0f;
-			if (box != null)
-			{
-				var dim = box.Dimensions; // (Width, Length, Height) along world X, Y, Z
-				extent = Math.Abs(direction.X) * dim.X + Math.Abs(direction.Y) * dim.Y + Math.Abs(direction.Z) * dim.Z;
-			}
-
-			var lip = data.Get("lip", 0f);
-			var travel = extent - lip;
-			return travel > 1f ? travel : entitySize * MoveArrowScale;
-		}
+		// --- Rotation data (mirrors EntityMovementOverlay) ---------------------
 
 		private static Vector3? GetRotationAxis(GameDataObject cls, EntityData data)
 		{
@@ -280,11 +186,6 @@ namespace Sledge.BspEditor.Tools.Widgets
 			return best;
 		}
 
-		private static Property FindProperty(GameDataObject cls, string name)
-		{
-			return cls.Properties.FirstOrDefault(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
-		}
-
 		private static int? FindFlagBit(Property flagsProp, string descriptionContains)
 		{
 			var opt = flagsProp.Options.FirstOrDefault(x => (x.Description ?? "").IndexOf(descriptionContains, StringComparison.OrdinalIgnoreCase) >= 0);
@@ -292,59 +193,7 @@ namespace Sledge.BspEditor.Tools.Widgets
 			return int.TryParse(opt.Key, out var v) ? v : (int?) null;
 		}
 
-		private static Matrix4x4 AngleMatrix(Vector3 pitchYawRoll)
-		{
-			var rad = pitchYawRoll * (float) Math.PI / 180f;
-			return Matrix4x4.CreateFromYawPitchRoll(rad.X, rad.Z, rad.Y);
-		}
-
-		private static Vector3 AngleToDirection(Vector3 pitchYawRoll)
-		{
-			return Vector3.Transform(Vector3.UnitX, AngleMatrix(pitchYawRoll));
-		}
-
 		// --- Drawing ---------------------------------------------------------
-
-		/// <summary>
-		/// A wireframe 3D arrow: shaft plus a cone-shaped head, with a second, smaller
-		/// cone at the midpoint so direction still reads if the tip is occluded.
-		/// </summary>
-		private static void DrawArrow3D(PerspectiveCamera camera, I2DRenderer im, Vector3 origin, Vector3 direction, float length, Color color)
-		{
-			direction = Vector3.Normalize(direction);
-			var tip = origin + direction * length;
-			var headLength = Math.Min(length * HeadLengthFraction, length * 0.5f);
-
-			DrawLine3D(camera, im, origin, tip - direction * headLength, color, StrokeWidth);
-			DrawCone(camera, im, tip, direction, headLength, color);
-
-			if (length > headLength * 2.5f)
-			{
-				var midHeadLength = headLength * 0.7f;
-				var midTip = origin + direction * (length * 0.5f + midHeadLength * 0.5f);
-				DrawCone(camera, im, midTip, direction, midHeadLength, color);
-			}
-		}
-
-		/// <summary>A cone with its apex at <paramref name="tip"/>, opening backwards along -direction.</summary>
-		private static void DrawCone(PerspectiveCamera camera, I2DRenderer im, Vector3 tip, Vector3 direction, float headLength, Color color)
-		{
-			BuildBasis(direction, out var u, out var v);
-
-			var baseCenter = tip - direction * headLength;
-			var radius = headLength * HeadRadiusFraction;
-
-			Vector3 prev = baseCenter + u * radius;
-			for (var i = 1; i <= HeadSides; i++)
-			{
-				var a = 2 * Math.PI * i / HeadSides;
-				var p = baseCenter + (u * (float) Math.Cos(a) + v * (float) Math.Sin(a)) * radius;
-
-				DrawLine3D(camera, im, prev, p, color, StrokeWidth);  // base ring
-				if (i % 2 == 0) DrawLine3D(camera, im, p, tip, color, StrokeWidth); // ribs to the apex
-				prev = p;
-			}
-		}
 
 		/// <summary>
 		/// A 3D arc around the rotation axis. With a finite sweep it runs from the start
@@ -420,35 +269,6 @@ namespace Sledge.BspEditor.Tools.Widgets
 					im.AddText(new Vector2(s.X - size.X / 2, s.Y - size.Y / 2), color, FontType.Bold, label);
 				}
 			}
-		}
-
-		private static void BuildBasis(Vector3 axis, out Vector3 u, out Vector3 v)
-		{
-			var helper = Math.Abs(Vector3.Dot(axis, Vector3.UnitZ)) > 0.9f ? Vector3.UnitX : Vector3.UnitZ;
-			u = Vector3.Normalize(Vector3.Cross(axis, helper));
-			v = Vector3.Cross(axis, u);
-		}
-
-		/// <summary>
-		/// Clips the segment against the camera near plane (so points behind the camera never
-		/// get projected), projects it, and draws it with a dark outline underneath.
-		/// </summary>
-		private static void DrawLine3D(PerspectiveCamera camera, I2DRenderer im, Vector3 a, Vector3 b, Color color, float width)
-		{
-			var eye = camera.EyeLocation;
-			var fwd = camera.Direction;
-
-			var da = Vector3.Dot(a - eye, fwd) - NearPlane;
-			var db = Vector3.Dot(b - eye, fwd) - NearPlane;
-			if (da < 0 && db < 0) return;
-			if (da < 0) a = a + (b - a) * (da / (da - db));
-			else if (db < 0) b = b + (a - b) * (db / (db - da));
-
-			var sa = camera.WorldToScreen(a).ToVector2();
-			var sb = camera.WorldToScreen(b).ToVector2();
-
-			im.AddLine(sa, sb, Color.FromArgb(color.A, Color.Black), width + OutlineExtraWidth);
-			im.AddLine(sa, sb, color, width);
 		}
 	}
 }
