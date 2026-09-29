@@ -27,8 +27,7 @@ namespace Sledge.BspEditor.Tools.Widgets
 	///
 	/// The arrow's length is the entity's own size measured along the direction of
 	/// travel (falling back to half its smallest dimension when that can't be worked out).
-	/// A second, smaller arrowhead sits at the midpoint so the direction still reads when
-	/// the tip is occluded or off-screen.
+	/// The head is an open 45-degree "V" (no cone).
 	/// </summary>
 	public class EntityMoveArrowWidget : BaseTool
 	{
@@ -138,25 +137,14 @@ namespace Sledge.BspEditor.Tools.Widgets
 			return dir.LengthSquared() < 0.0001f ? (Vector3?) null : dir;
 		}
 
-		/// <summary>
-		/// A wireframe 3D arrow: shaft plus a cone-shaped head, with a second, smaller
-		/// cone at the midpoint so direction still reads if the tip is occluded.
-		/// </summary>
+		/// <summary>A wireframe 3D arrow: a shaft ending in an open 45-degree arrowhead.</summary>
 		private static void DrawArrow3D(PerspectiveCamera camera, I2DRenderer im, Vector3 origin, Vector3 direction, float length, Color color)
 		{
 			direction = Vector3.Normalize(direction);
 			var tip = origin + direction * length;
 			var headLength = Math.Min(length * HeadLengthFraction, length * 0.5f);
 
-			DrawLine3D(camera, im, origin, tip - direction * headLength, color, StrokeWidth);
-			DrawCone(camera, im, tip, direction, headLength, color);
-
-			if (length > headLength * 2.5f)
-			{
-				var midHeadLength = headLength * 0.7f;
-				var midTip = origin + direction * (length * 0.5f + midHeadLength * 0.5f);
-				DrawCone(camera, im, midTip, direction, midHeadLength, color);
-			}
-		}
+			DrawLine3D(camera, im, origin, tip, color, StrokeWidth);
+			DrawArrowHead(camera, im, tip, direction, headLength, color);
 	}
 }

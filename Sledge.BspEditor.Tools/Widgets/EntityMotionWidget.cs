@@ -31,9 +31,8 @@ namespace Sledge.BspEditor.Tools.Widgets
 	///
 	/// The straight movement arrow is a separate widget (<see cref="EntityMoveArrowWidget"/>).
 	///
-	/// A second, smaller arrow sits at the arc's midpoint so the direction still reads when
-	/// the end is occluded or off-screen. Widget size always tracks the entity's own
-	/// bounding box - it does not grow with camera distance.
+	/// The arrowhead is an open 45-degree "V" (no cone). Widget size always tracks the
+	/// entity's own bounding box - it does not grow with camera distance.
 	///
 	/// Everything is driven by the FGD and the entity's own keyvalues, nothing is
 	/// hardcoded to classnames. Lines are projected and drawn as an overlay (like the
@@ -200,8 +199,7 @@ namespace Sledge.BspEditor.Tools.Widgets
 		/// angle to the end angle exactly - the arc is trimmed just short of the end so
 		/// the arrowhead's apex lands precisely on the end radial line rather than past
 		/// it - starting on the entity's rest direction (see GetRotationStartDirection) and
-		/// joined to the pivot by a straight radial line of the same radius as the arc. A second, smaller
-		/// arrow sits at the arc's midpoint. Entities without a finite sweep get an open
+		/// joined to the pivot by a straight radial line of the same radius as the arc. Entities without a finite sweep get an open
 		/// arc with just the arrow head.
 		/// </summary>
 		private static void DrawRotation3D(PerspectiveCamera camera, I2DRenderer im, Vector3 pivot, Vector3 axis, Vector3? startDirection, float radius, Color color, bool reversed, float? sweepDegrees)
@@ -225,31 +223,24 @@ namespace Sledge.BspEditor.Tools.Widgets
 			Vector3 TangentAt(double t) => Vector3.Normalize((-u * (float) Math.Sin(t) + v * (float) Math.Cos(t)) * (float) sign);
 
 			var headLength = radius * 0.3f;
-			// Trim the arc short by the head's length (in angle terms) so it meets the
-			// cone's base instead of the cone overshooting past the true end angle.
-			var trimAngle = Math.Min(Math.Abs(sweep) * 0.5, radius > 0.001f ? headLength / radius : 0.0);
-			var arcEnd = sweep - sign * trimAngle;
 
-			var segments = Math.Max(6, Math.Min(64, (int) Math.Ceiling(Math.Abs(arcEnd) * 180 / Math.PI / 8)));
+			// The arc runs all the way to the arrowhead's apex (an open head has no base to stop at).
+			var segments = Math.Max(6, Math.Min(64, (int) Math.Ceiling(Math.Abs(sweep) * 180 / Math.PI / 8)));
 			var prev = PointAt(0, radius);
 			for (var i = 1; i <= segments; i++)
 			{
-				var t = arcEnd * i / segments;
+				var t = sweep * i / segments;
 				var p = PointAt(t, radius);
 				DrawLine3D(camera, im, prev, p, color, StrokeWidth * 1.5f);
 				prev = p;
 			}
 
 			// Arrowhead apex sits exactly on the true end angle, at the same radius as the arc.
+			// Barbs lie in the arc's plane (radial) and out of it (along the axis), so the head
+			// reads as a "V" from the top (looking down the axis) and from the side (edge-on).
 			var tip = PointAt(sweep, radius);
-			DrawCone(camera, im, tip, TangentAt(sweep), headLength, color);
-
-			// Mid-arc arrow, so direction reads even when the end is occluded or off-screen.
-			if (Math.Abs(sweep) > 0.01)
-			{
-				var midT = sweep * 0.5;
-				DrawCone(camera, im, PointAt(midT, radius), TangentAt(midT), headLength * 0.7f, color);
-			}
+			var radial = Vector3.Normalize(tip - pivot);
+			DrawArrowHead(camera, im, tip, TangentAt(sweep), radial, axis, headLength, color);
 
 			// Rotation axis, so the plane the arc lives in is unambiguous
 			DrawLine3D(camera, im, pivot - axis * radius * 0.5f, pivot + axis * radius * 0.5f, Color.FromArgb(150, color), 1f);

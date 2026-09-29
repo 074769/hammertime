@@ -16,13 +16,12 @@ namespace Sledge.BspEditor.Tools.Widgets
 	/// <summary>
 	/// Drawing and lookup helpers shared by <see cref="EntityMoveArrowWidget"/> and
 	/// <see cref="EntityMotionWidget"/> (the rotation arc), so the two widgets stay
-	/// independent of each other without duplicating the projection/cone code.
+	/// independent of each other without duplicating the projection/arrowhead code.
 	/// </summary>
 	internal static class MotionWidgetDrawing
 	{
 		public const float NearPlane = 1f;
-		public const float HeadRadiusFraction = 0.45f;  // of the head length
-		public const int HeadSides = 8;
+		public const double HeadAngleDegrees = 45;  // angle between each arrowhead barb and the shaft
 		public const float StrokeWidth = 2f;
 		public const float OutlineExtraWidth = 2f;
 
@@ -64,24 +63,30 @@ namespace Sledge.BspEditor.Tools.Widgets
 			return Vector3.Transform(Vector3.UnitX, AngleMatrix(pitchYawRoll));
 		}
 
-		/// <summary>A cone with its apex at <paramref name="tip"/>, opening backwards along -direction.</summary>
-		public static void DrawCone(PerspectiveCamera camera, I2DRenderer im, Vector3 tip, Vector3 direction, float headLength, Color color)
+		/// <summary>
+		/// An open, wireframe arrowhead (no cone): four barbs of length <paramref name="barbLength"/>
+		/// running back from <paramref name="tip"/> at 45 degrees to the shaft. Two barbs lie along
+		/// <paramref name="sideA"/> and two along <paramref name="sideB"/> (unit vectors perpendicular
+		/// to <paramref name="direction"/> and to each other), so the head reads as a "V" from either
+		/// the top or the side and as an "X" when looked at along the shaft at an angle.
+		/// </summary>
+		public static void DrawArrowHead(PerspectiveCamera camera, I2DRenderer im, Vector3 tip, Vector3 direction, Vector3 sideA, Vector3 sideB, float barbLength, Color color)
+		{
+			var angle = HeadAngleDegrees * Math.PI / 180.0;
+			var back = -direction * (float) Math.Cos(angle) * barbLength;
+			var spread = (float) Math.Sin(angle) * barbLength;
+
+			DrawLine3D(camera, im, tip, tip + back + sideA * spread, color, StrokeWidth);
+			DrawLine3D(camera, im, tip, tip + back - sideA * spread, color, StrokeWidth);
+			DrawLine3D(camera, im, tip, tip + back + sideB * spread, color, StrokeWidth);
+			DrawLine3D(camera, im, tip, tip + back - sideB * spread, color, StrokeWidth);
+		}
+
+		/// <summary>Arrowhead whose barb planes are picked from the direction alone (horizontal + vertical for a horizontal direction).</summary>
+		public static void DrawArrowHead(PerspectiveCamera camera, I2DRenderer im, Vector3 tip, Vector3 direction, float barbLength, Color color)
 		{
 			BuildBasis(direction, out var u, out var v);
-
-			var baseCenter = tip - direction * headLength;
-			var radius = headLength * HeadRadiusFraction;
-
-			Vector3 prev = baseCenter + u * radius;
-			for (var i = 1; i <= HeadSides; i++)
-			{
-				var a = 2 * Math.PI * i / HeadSides;
-				var p = baseCenter + (u * (float) Math.Cos(a) + v * (float) Math.Sin(a)) * radius;
-
-				DrawLine3D(camera, im, prev, p, color, StrokeWidth);  // base ring
-				if (i % 2 == 0) DrawLine3D(camera, im, p, tip, color, StrokeWidth); // ribs to the apex
-				prev = p;
-			}
+			DrawArrowHead(camera, im, tip, direction, u, v, barbLength, color);
 		}
 
 		public static void BuildBasis(Vector3 axis, out Vector3 u, out Vector3 v)
