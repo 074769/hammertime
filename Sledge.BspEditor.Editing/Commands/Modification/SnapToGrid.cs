@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel.Composition;
 using System.Numerics;
 using System.Threading.Tasks;
+using LogicAndTrick.Oy;
 using Sledge.BspEditor.Commands;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Editing.Properties;
@@ -9,15 +10,26 @@ using Sledge.BspEditor.Modification.Operations.Mutation;
 using Sledge.BspEditor.Primitives.MapData;
 using Sledge.Common.Shell.Commands;
 using Sledge.Common.Shell.Context;
+using Sledge.Common.Shell.Hotkeys;
 using Sledge.Common.Shell.Menu;
 using Sledge.Common.Translations;
 
 namespace Sledge.BspEditor.Editing.Commands.Modification
 {
+    /// <summary>
+    /// Published before "Snap to grid" runs. A tool that wants to handle the command itself
+    /// (instead of snapping the selected objects) sets <see cref="Handled"/> to true.
+    /// </summary>
+    public class SnapToGridRequest
+    {
+        public bool Handled { get; set; }
+    }
+
     [AutoTranslate]
     [Export(typeof(ICommand))]
     [MenuItem("Tools", "", "Snap", "B")]
     [CommandID("BspEditor:Tools:SnapToGrid")]
+    [DefaultHotkey("Ctrl+B")]
     [MenuImage(typeof(Resources), nameof(Resources.Menu_SnapSelection))]
     public class SnapToGrid : BaseCommand
     {
@@ -31,6 +43,12 @@ namespace Sledge.BspEditor.Editing.Commands.Modification
 
         protected override async Task Invoke(MapDocument document, CommandParameters parameters)
         {
+            // Give the active tool a chance to handle this first (e.g. the vertex tool
+            // snaps the selected vertices instead of the whole selection).
+            var request = new SnapToGridRequest();
+            await Oy.Publish("BspEditor:SnapToGrid:Request", request);
+            if (request.Handled) return;
+
             var selBox = document.Selection.GetSelectionBoundingBox();
             var grid = document.Map.Data.GetOne<GridData>();
             if (grid == null) return;

@@ -9,6 +9,8 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using LogicAndTrick.Oy;
 using Sledge.BspEditor.Documents;
+using Sledge.BspEditor.Editing.Commands.Modification;
+using Sledge.BspEditor.Primitives.MapData;
 using Sledge.BspEditor.Rendering.Viewport;
 using Sledge.BspEditor.Tools.Draggable;
 using Sledge.BspEditor.Tools.Vertex.Controls;
@@ -85,6 +87,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 			yield return Oy.Subscribe<string>("VertexPointTool:SetVisiblePoints", v => SetVisiblePoints(v));
 			yield return Oy.Subscribe<object>("VertexPointTool:Split", _ => Split());
 			yield return Oy.Subscribe<object>("VertexPointTool:Merge", _ => Merge());
+			yield return Oy.Subscribe<SnapToGridRequest>("BspEditor:SnapToGrid:Request", r => SnapSelectedPointsToGrid(r));
 			yield return Oy.Subscribe<object>("VertexTool:DeselectAll", _ => DeselectAll());
 			yield return Oy.Subscribe("VertexTool:Triangulate", async _ =>
 			{
@@ -406,6 +409,47 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 
 			return Task.CompletedTask;
 		}
+
+		#region Snap to grid
+
+		/// <summary>
+		/// Snap each selected vertex to the grid. Runs instead of "snap selection to grid"
+		/// while the point manipulation tool is active.
+		/// </summary>
+		private void SnapSelectedPointsToGrid(SnapToGridRequest request)
+		{
+			// Being in this tool means the command is ours, even if nothing is selected
+			request.Handled = true;
+
+			var grid = GetDocument()?.Map.Data.GetOne<GridData>()?.Grid;
+			if (grid == null) return;
+
+			var pts = GetVisiblePoints().Where(x => x.IsSelected).Distinct().SelectMany(x => x.GetStandardPointList()).Distinct().ToList();
+			if (!pts.Any()) return;
+
+			var moved = false;
+			foreach (var point in pts)
+			{
+				var delta = grid.Snap(point.Position) - point.Position;
+				if (delta == Vector3.Zero) continue;
+				point.Move(delta);
+				moved = true;
+			}
+			if (!moved) return;
+
+			foreach (var midpoint in pts.Select(x => x.Solid).Distinct().SelectMany(x => _vertices.TryGetValue(x, out var l) ? l.Points.Where(p => p.IsMidpoint) : new List<VertexPoint>()))
+			{
+				midpoint.DraggingPosition = midpoint.Position = (midpoint.MidpointStart.Position + midpoint.MidpointEnd.Position) / 2;
+			}
+
+			// Merge points if required
+			if (AutomaticallyMerge()) CheckMergedVertices();
+			else if (CanMerge() && ConfirmMerge()) CheckMergedVertices();
+
+			UpdateSolids(pts.Select(x => x.Solid).Distinct().ToList());
+		}
+
+		#endregion
 
 		#region Merging vertices
 
