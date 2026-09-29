@@ -81,7 +81,10 @@ namespace Sledge.BspEditor.Tools.Widgets
 				var min = Math.Min(box.Width, Math.Min(box.Height, box.Length));
 				if (min <= 0) continue;
 
-				var dir = GetMoveDirection(cls, data);
+				// Point entities (no brush geometry) that carry "angles" get the arrow too, showing
+				// the direction they face - this replaces the old 2D angles line.
+				var isPoint = !ed.Hierarchy.HasChildren && cls.ClassType != ClassType.Solid;
+				var dir = GetMoveDirection(cls, data, isPoint);
 				if (!dir.HasValue) continue;
 
 				var color = ed.Color?.Color ?? Color.White;
@@ -95,12 +98,18 @@ namespace Sledge.BspEditor.Tools.Widgets
 			}
 		}
 
-		private static Vector3? GetMoveDirection(GameDataObject cls, EntityData data)
+		private static Vector3? GetMoveDirection(GameDataObject cls, EntityData data, bool isPoint)
 		{
 			var movedir = data.GetVector3("movedir");
 			if (movedir.HasValue) return DirectionFromAngles(movedir.Value);
 
-			if (!UsesAnglesForMovement(cls)) return null;
+			var isMover = UsesAnglesForMovement(cls);
+			if (!isMover)
+			{
+				// Not a mover: only point entities that actually have an angle set (facing direction).
+				if (!isPoint) return null;
+				if (!data.GetVector3("angles").HasValue && float.IsNaN(data.Get("angle", float.NaN))) return null;
+			}
 
 			var angles = data.GetVector3("angles");
 			if (angles.HasValue) return DirectionFromAngles(angles.Value);
