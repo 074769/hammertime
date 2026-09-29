@@ -22,6 +22,7 @@ namespace Sledge.BspEditor.Tools.Widgets
 	{
 		public const float NearPlane = 1f;
 		public const double HeadAngleDegrees = 45;  // angle between each arrowhead barb and the shaft
+		public const float HeadScale = 0.25f;         // arrowhead barbs are drawn at 25% of the requested length (75% smaller)
 		public const float StrokeWidth = 2f;
 		public const float OutlineExtraWidth = 2f;
 
@@ -72,6 +73,7 @@ namespace Sledge.BspEditor.Tools.Widgets
 		/// </summary>
 		public static void DrawArrowHead(PerspectiveCamera camera, I2DRenderer im, Vector3 tip, Vector3 direction, Vector3 sideA, Vector3 sideB, float barbLength, Color color)
 		{
+			barbLength *= HeadScale;
 			var angle = HeadAngleDegrees * Math.PI / 180.0;
 			var back = -direction * (float) Math.Cos(angle) * barbLength;
 			var spread = (float) Math.Sin(angle) * barbLength;

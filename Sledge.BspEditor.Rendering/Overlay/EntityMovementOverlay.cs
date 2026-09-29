@@ -19,14 +19,11 @@ namespace Sledge.BspEditor.Rendering.Overlay
     /// Draws helper arrows in the 2D viewports showing how an entity will move
     /// and/or rotate once the map is running.
     ///
-    /// Two independent helpers can be shown for any entity, entirely driven by
-    /// its FGD definition and its own keyvalues - nothing is hardcoded to
-    /// specific classnames:
+    /// Draws a rotation helper for entities that rotate, driven by its FGD
+    /// definition and the entity's own keyvalues:
     ///
-    ///  - A straight arrow along the entity's "movedir" keyvalue, for entities
-    ///    that translate along a fixed direction (func_door, func_button,
-    ///    trigger_push, momentary_door, etc). This is driven purely by the
-    ///    entity property - if "movedir" isn't set, no arrow is drawn.
+    ///  - (The straight movement arrow is not drawn in 2D; it is a 3D-only widget,
+    ///    EntityMoveArrowWidget in Sledge.BspEditor.Tools.)
     ///
     ///  - A rotating arrow around the entity's rotation axis, for entities
     ///    whose FGD class exposes the classic "X Axis" / "Y Axis" spawnflag
@@ -36,15 +33,10 @@ namespace Sledge.BspEditor.Rendering.Overlay
     ///    oriented using the entity's own "angles" property - so this helper
     ///    is driven by a mix of flags and entity property.
     ///
-    /// An entity that both moves and rotates (func_platrot, for example) shows
-    /// both helpers at once, centered on the same point. The rotation helper
-    /// is intentionally drawn larger than the movement arrow so it reads
-    /// clearly and isn't lost underneath it.
     /// </summary>
     [Export(typeof(IMapObject2DOverlay))]
     public class EntityMovementOverlay : IMapObject2DOverlay
     {
-        private const float MoveArrowScale = 0.45f;
         private const float RotateArrowScale = 0.75f;
         private const int RotateArcSegments = 28;
         private const double RotateArcDegrees = 300; // leave a gap so the hooked head reads clearly
@@ -87,64 +79,12 @@ namespace Sledge.BspEditor.Rendering.Overlay
                 var min = Math.Min(ed.BoundingBox.Width, Math.Min(ed.BoundingBox.Height, ed.BoundingBox.Length));
                 if (min <= 0) continue;
 
-                var moveDir = GetMoveDirection(cls, data);
-                if (moveDir.HasValue)
-                {
-                    DrawMoveArrow(camera, im, origin, moveDir.Value, min * MoveArrowScale, color);
-                }
-
                 var rotateAxis = GetRotationAxis(cls, data);
                 if (rotateAxis.HasValue)
                 {
                     DrawRotateArrow(camera, im, origin, rotateAxis.Value, min * RotateArrowScale, color, IsReversed(cls, data));
                 }
             }
-        }
-
-        // --- Movement (translate) helper ------------------------------------
-
-        // GoldSrc linear movers that take their travel direction from "angles"/"angle" (the
-        // engine's SetMovedir). Listed by name because many FGDs only label that key
-        // "Pitch Yaw Roll", so it can't be recognised from the FGD alone. Keep in sync with
-        // EntityMoveArrowWidget in Sledge.BspEditor.Tools.
-        private static readonly HashSet<string> AngleDrivenMovers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "func_door", "func_water", "func_button", "momentary_door", "trigger_push", "func_conveyor"
-        };
-
-        private static Vector3? GetMoveDirection(GameDataObject cls, EntityData data)
-        {
-            var md = data.GetVector3("movedir");
-            if (md.HasValue)
-            {
-                var mdir = AngleToDirection(md.Value);
-                return mdir.LengthSquared() < 0.0001f ? (Vector3?) null : mdir;
-            }
-
-            if (!AngleDrivenMovers.Contains(cls.Name)) return null;
-
-            var angles = data.GetVector3("angles");
-            if (angles.HasValue) return DirectionFromAngles(angles.Value);
-
-            // Legacy single-value "angle" key: -1 = up, -2 = down, otherwise a yaw.
-            var angle = data.Get("angle", float.NaN);
-            // Nothing set at all: the engine treats that as angles 0 0 0, i.e. +X.
-            if (float.IsNaN(angle)) return Vector3.UnitX;
-            if (Math.Abs(angle - -1f) < 0.01f) return Vector3.UnitZ;
-            if (Math.Abs(angle - -2f) < 0.01f) return -Vector3.UnitZ;
-            return DirectionFromAngles(new Vector3(0, angle, 0));
-        }
-
-        // Same conventions as EntityMoveArrowWidget so the 2D and 3D arrows always agree.
-        private static Vector3? DirectionFromAngles(Vector3 pitchYawRoll)
-        {
-            if (Math.Abs(pitchYawRoll.X - 90f) < 0.5f) return Vector3.UnitZ;     // up
-            if (Math.Abs(pitchYawRoll.X - -90f) < 0.5f) return -Vector3.UnitZ;  // down
-            if (Math.Abs(pitchYawRoll.Y - -1f) < 0.01f) return Vector3.UnitZ;
-            if (Math.Abs(pitchYawRoll.Y - -2f) < 0.01f) return -Vector3.UnitZ;
-
-            var dir = AngleToDirection(pitchYawRoll);
-            return dir.LengthSquared() < 0.0001f ? (Vector3?) null : dir;
         }
 
         // --- Rotation helper --------------------------------------------------
@@ -197,36 +137,7 @@ namespace Sledge.BspEditor.Rendering.Overlay
             return Matrix4x4.CreateFromYawPitchRoll(rad.X, rad.Z, rad.Y);
         }
 
-        private static Vector3 AngleToDirection(Vector3 pitchYawRoll)
-        {
-            return Vector3.Transform(Vector3.UnitX, AngleMatrix(pitchYawRoll));
-        }
-
         // --- Drawing -------------------------------------------------------
-
-        /// <summary>
-        /// Straight mover: a hollow block-arrow outline (thin shaft rectangle
-        /// that steps out to a wider flared head, then comes to a point) -
-        /// projecting only the shaft's start/end from 3D and building the icon
-        /// shape directly in screen space is correct in every 2D viewport,
-        /// since the icon is meant to read as a flat overlay glyph regardless
-        /// of which axis is being viewed.
-        /// </summary>
-        private static void DrawMoveArrow(OrthographicCamera camera, I2DRenderer im, Vector3 origin, Vector3 direction, float length, Color color)
-        {
-            direction = Vector3.Normalize(direction);
-
-            var start = camera.WorldToScreen(origin).ToVector2();
-            var end = camera.WorldToScreen(origin + direction * length).ToVector2();
-
-            var dir = end - start;
-            if (dir.LengthSquared() < 1f) return;
-            dir = Vector2.Normalize(dir);
-            var perp = new Vector2(-dir.Y, dir.X);
-
-            var poly = BuildBlockArrowPolygon(start, dir, perp, Vector2.Distance(start, end));
-            DrawPolygonOutline(im, poly, color);
-        }
 
         /// <summary>
         /// Rotator: a looping arc (a true 3D circle around the rotation axis,
@@ -279,30 +190,6 @@ namespace Sledge.BspEditor.Rendering.Overlay
             var baseRight = baseCenter - hookPerp * HeadHalfWidth;
 
             DrawPolygonOutline(im, new[] { apex, baseLeft, baseRight }, color);
-        }
-
-        /// <summary>
-        /// The 7-point hollow block-arrow silhouette (shaft rectangle + a
-        /// stepped-out triangular head), built directly in screen space around
-        /// a unit direction/perpendicular pair.
-        /// </summary>
-        private static Vector2[] BuildBlockArrowPolygon(Vector2 tail, Vector2 dir, Vector2 perp, float totalLength)
-        {
-            var headLength = Math.Min(HeadLength, totalLength);
-            var shaftLength = totalLength - headLength;
-
-            Vector2 P(float along, float across) => tail + dir * along + perp * across;
-
-            return new[]
-            {
-                P(0, ShaftHalfWidth),
-                P(shaftLength, ShaftHalfWidth),
-                P(shaftLength, HeadHalfWidth),
-                P(totalLength, 0),
-                P(shaftLength, -HeadHalfWidth),
-                P(shaftLength, -ShaftHalfWidth),
-                P(0, -ShaftHalfWidth),
-            };
         }
 
         private static void DrawPolygonOutline(I2DRenderer im, IReadOnlyList<Vector2> points, Color color)
