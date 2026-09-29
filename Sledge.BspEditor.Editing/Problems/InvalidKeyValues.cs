@@ -34,8 +34,10 @@ namespace Sledge.BspEditor.Editing.Problems
             return document.Map.Root.FindAll()
                 .Where(x => filter(x))
                 .Select(x => new { Object = x, EntityData = x.Data.GetOne<EntityData>() })
-                .Where(x => x.EntityData != null && GetInvalidKeys(gamedata, x.EntityData).Any())
-                .Select(x => new Problem().Add(x.Object))
+                .Where(x => x.EntityData != null)
+                .Select(x => new { x.Object, x.EntityData, Invalid = GetInvalidKeys(gamedata, x.EntityData).ToList() })
+                .Where(x => x.Invalid.Any())
+                .Select(x => new Problem { Text = x.EntityData.Name + ": " + string.Join(", ", x.Invalid) }.Add(x.Object))
                 .ToList();
         }
 
