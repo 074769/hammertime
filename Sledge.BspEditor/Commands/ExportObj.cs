@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.ComponentModel.Composition;
 using System.IO;
 using System.Linq;
@@ -10,6 +11,7 @@ using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.BspEditor.Providers;
 using Sledge.Common.Shell.Commands;
+using Sledge.Common.Shell.Context;
 using Sledge.Common.Shell.Menu;
 using Sledge.Common.Shell.Settings;
 
@@ -17,13 +19,14 @@ namespace Sledge.BspEditor.Commands
 {
     /// <summary>
     /// File > Export as OBJ...
-    /// Clicking it pops up a small menu of export options; "Export..." then asks for a file name.
+    /// Clicking the entry exports straight away (asks for a file name) using the remembered options.
+    /// The handle on the right of the entry opens a popup to choose the options.
     /// </summary>
     [Export(typeof(ISettingsContainer))]
     [Export(typeof(ICommand))]
     [CommandID("BspEditor:File:ExportObj")]
     [MenuItem("File", "", "File", "M")]
-    public class ExportObj : BaseCommand, ISettingsContainer
+    public class ExportObj : BaseCommand, IMenuItemOptions, ISettingsContainer
     {
         public override string Name { get; set; } = "Export as OBJ...";
         public override string Details { get; set; } = "Export the map (or the selection) to a Wavefront OBJ file";
@@ -40,12 +43,18 @@ namespace Sledge.BspEditor.Commands
         {
             var hasSelection = document.Selection.GetSelectedParents().Any();
 
-            var options = await ShowOptionsMenu(hasSelection);
-            if (options == null) return;
+            if (_selectedOnly && !hasSelection)
+            {
+                MessageBox.Show("\"Export selected object(s) only\" is turned on but nothing is selected.\nSelect something, or turn the option off with the handle on the right of the menu entry.", "Export as OBJ", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
 
-            _selectedOnly = options.SelectedOnly;
-            _zeroOrigin = options.ZeroOrigin;
-            _axis = options.Axis;
+            var options = new ObjExportOptions
+            {
+                SelectedOnly = _selectedOnly,
+                ZeroOrigin = _zeroOrigin,
+                Axis = _axis
+            };
 
             IEnumerable<IMapObject> roots = options.SelectedOnly
                 ? document.Selection.GetSelectedParents().ToList()
@@ -101,28 +110,27 @@ namespace Sledge.BspEditor.Commands
         }
 
         /// <summary>
-        /// Shows the options popup at the mouse cursor. Toggling an option keeps the popup open;
-        /// clicking "Export..." completes the task with the chosen options. Anything else that closes
-        /// the popup (Esc, clicking away) completes it with null.
+        /// Shows the options popup next to the menu entry. Toggling an option keeps the popup open
+        /// (radio behaviour for the axis choices); Esc or clicking away closes it.
+        /// The options are remembered and used the next time the entry is clicked.
         /// </summary>
-        private Task<ObjExportOptions> ShowOptionsMenu(bool hasSelection)
+        public void ShowOptions(IContext context, Point screenLocation)
         {
-            var tcs = new TaskCompletionSource<ObjExportOptions>();
-            var exportClicked = false;
-
             var menu = new ContextMenuStrip { ShowCheckMargin = true, ShowImageMargin = false };
 
             var selectedOnly = new ToolStripMenuItem("Export selected object(s) only")
             {
                 CheckOnClick = true,
-                Enabled = hasSelection,
-                Checked = hasSelection && _selectedOnly
+                Checked = _selectedOnly
             };
+            selectedOnly.CheckedChanged += (s, e) => _selectedOnly = selectedOnly.Checked;
+
             var zeroOrigin = new ToolStripMenuItem("Zero out origin (centre on 0,0,0)")
             {
                 CheckOnClick = true,
                 Checked = _zeroOrigin
             };
+            zeroOrigin.CheckedChanged += (s, e) => _zeroOrigin = zeroOrigin.Checked;
 
             var axisHeader = new ToolStripLabel("Axis") { Enabled = false };
             var axisItems = new Dictionary<ObjAxisPreset, ToolStripMenuItem>
@@ -137,50 +145,27 @@ namespace Sledge.BspEditor.Commands
                 kv.Value.Checked = preset == _axis;
                 kv.Value.Click += (s, e) =>
                 {
-                    // Radio behaviour
+                    _axis = preset;
                     foreach (var other in axisItems) other.Value.Checked = other.Key == preset;
                 };
             }
-
-            var export = new ToolStripMenuItem("Export...") { Font = new System.Drawing.Font(menu.Font, System.Drawing.FontStyle.Bold) };
-            export.Click += (s, e) => exportClicked = true;
 
             menu.Items.Add(selectedOnly);
             menu.Items.Add(zeroOrigin);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(axisHeader);
             foreach (var item in axisItems.Values) menu.Items.Add(item);
-            menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add(export);
 
             menu.Closing += (s, e) =>
             {
                 // Keep the popup open while the user toggles options
-                if (e.CloseReason == ToolStripDropDownCloseReason.ItemClicked && !exportClicked)
+                if (e.CloseReason == ToolStripDropDownCloseReason.ItemClicked)
                 {
                     e.Cancel = true;
                 }
             };
 
-            menu.Closed += (s, e) =>
-            {
-                if (!exportClicked)
-                {
-                    tcs.TrySetResult(null);
-                    return;
-                }
-
-                tcs.TrySetResult(new ObjExportOptions
-                {
-                    SelectedOnly = selectedOnly.Enabled && selectedOnly.Checked,
-                    ZeroOrigin = zeroOrigin.Checked,
-                    Axis = axisItems.First(x => x.Value.Checked).Key
-                });
-            };
-
-            menu.Show(Control.MousePosition);
-
-            return tcs.Task;
+            menu.Show(screenLocation);
         }
 
         #region Settings

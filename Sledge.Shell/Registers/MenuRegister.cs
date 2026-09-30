@@ -578,12 +578,25 @@ namespace Sledge.Shell.Registers
 
 				MenuItem = menuItem;
 
-				MenuMenuItem = new ToolStripMenuItem(menuItem.Name, menuItem.Icon)
+				if (menuItem is CommandMenuItem cmi && cmi.HasOptions)
 				{
-					Tag = this,
-					ShortcutKeyDisplayString = menuItem.ShortcutText,
-					Enabled = en
-				};
+					// Clicking the entry runs the command, clicking the handle on the right opens its options popup
+					MenuMenuItem = new OptionsMenuItem(menuItem.Name, menuItem.Icon, p => cmi.ShowOptions(Context, p))
+					{
+						Tag = this,
+						ShortcutKeyDisplayString = menuItem.ShortcutText,
+						Enabled = en
+					};
+				}
+				else
+				{
+					MenuMenuItem = new ToolStripMenuItem(menuItem.Name, menuItem.Icon)
+					{
+						Tag = this,
+						ShortcutKeyDisplayString = menuItem.ShortcutText,
+						Enabled = en
+					};
+				}
 				MenuMenuItem.Click += Fire;
 				MenuMenuItem.MouseEnter += (s, a) => { Oy.Publish("Status:Information", menuItem.Description); };
 				MenuMenuItem.MouseLeave += (s, a) => { Oy.Publish("Status:Information", ""); };
@@ -625,6 +638,103 @@ namespace Sledge.Shell.Registers
 					if (ToolbarButton != null) ToolbarButton.CheckState = MenuMenuItem.CheckState;
 				}
 				base.Update();
+			}
+		}
+
+		/// <summary>
+		/// A menu entry with an options handle on the right. Clicking the entry itself behaves like a normal
+		/// menu item; clicking the handle calls the options callback with the screen position of the entry's right edge.
+		/// </summary>
+		private class OptionsMenuItem : ToolStripMenuItem
+		{
+			private const int HandleWidth = 28;
+
+			private readonly Action<Point> _showOptions;
+			private bool _overHandle;
+
+			public OptionsMenuItem(string text, Image image, Action<Point> showOptions) : base(text, image)
+			{
+				_showOptions = showOptions;
+			}
+
+			private bool InHandle(Point itemPoint)
+			{
+				return itemPoint.X >= Bounds.Width - HandleWidth;
+			}
+
+			protected override void OnMouseMove(MouseEventArgs mea)
+			{
+				base.OnMouseMove(mea);
+				var over = InHandle(mea.Location);
+				if (over != _overHandle)
+				{
+					_overHandle = over;
+					Invalidate();
+				}
+			}
+
+			protected override void OnMouseLeave(EventArgs e)
+			{
+				base.OnMouseLeave(e);
+				if (_overHandle)
+				{
+					_overHandle = false;
+					Invalidate();
+				}
+			}
+
+			protected override void OnPaint(PaintEventArgs e)
+			{
+				base.OnPaint(e);
+
+				var r = new Rectangle(Bounds.Width - HandleWidth, 0, HandleWidth, Bounds.Height);
+				var col = Enabled ? Color.Black : Color.Gray;
+
+				if (_overHandle && Enabled)
+				{
+					using (var hb = new SolidBrush(Color.FromArgb(70, Color.Gray)))
+					{
+						e.Graphics.FillRectangle(hb, r);
+					}
+				}
+
+				using (var pen = new Pen(Color.FromArgb(120, Color.Gray)))
+				{
+					e.Graphics.DrawLine(pen, r.Left, r.Top + 3, r.Left, r.Bottom - 4);
+				}
+
+				// Right-pointing chevron
+				var cx = r.Left + r.Width / 2;
+				var cy = r.Top + r.Height / 2;
+				using (var brush = new SolidBrush(col))
+				{
+					e.Graphics.FillPolygon(brush, new[]
+					{
+						new Point(cx - 2, cy - 4),
+						new Point(cx + 3, cy),
+						new Point(cx - 2, cy + 4)
+					});
+				}
+			}
+
+			protected override void OnClick(EventArgs e)
+			{
+				if (Enabled && Owner != null)
+				{
+					var local = Owner.PointToClient(Control.MousePosition);
+					local.Offset(-Bounds.X, -Bounds.Y);
+					if (InHandle(local))
+					{
+						var screen = Owner.PointToScreen(new Point(Bounds.Right, Bounds.Top));
+						var sync = System.Threading.SynchronizationContext.Current;
+
+						// Let the File menu finish closing first, otherwise it would take the popup down with it
+						if (sync != null) sync.Post(_ => _showOptions(screen), null);
+						else _showOptions(screen);
+						return;
+					}
+				}
+				base.OnClick(e);
 			}
 		}
 

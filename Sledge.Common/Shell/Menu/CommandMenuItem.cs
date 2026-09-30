@@ -9,7 +9,7 @@ namespace Sledge.Common.Shell.Menu
     /// <summary>
     /// A menu item that invokes a command.
     /// </summary>
-    public class CommandMenuItem : IMenuItem
+    public class CommandMenuItem : IMenuItem, IMenuItemOptions
     {
         private readonly ICommand _command;
 
@@ -45,6 +45,16 @@ namespace Sledge.Common.Shell.Menu
         public async Task Invoke(IContext context)
         {
             await Oy.Publish("Command:Run", new CommandMessage(_command.GetID()));
+        }
+
+        /// <summary>
+        /// True if the underlying command wants an options handle in the menu.
+        /// </summary>
+        public bool HasOptions => _command is IMenuItemOptions;
+
+        public void ShowOptions(IContext context, Point screenLocation)
+        {
+            (_command as IMenuItemOptions)?.ShowOptions(context, screenLocation);
         }
 
         public bool GetToggleState(IContext context)
