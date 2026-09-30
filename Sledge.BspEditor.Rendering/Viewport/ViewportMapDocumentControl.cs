@@ -196,6 +196,7 @@ namespace Sledge.BspEditor.Rendering.Viewport
 		public void Dispose()
 		{
 			Oy.Publish<IHotkeyFilter>("Hotkeys:RemoveFilter", this);
+			Oy.Publish("MapViewport:Destroyed", _mapViewport);
 
 			_mapViewport.Listeners.ForEach(x => x.Dispose());
 			_mapViewport.Listeners.Clear();
