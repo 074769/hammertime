@@ -176,6 +176,7 @@
             "RotateWidget": "Rotate widget",
             "MoveArrowWidget": "Move arrow",
             "RotationArcWidget": "Rotation arc",
+            "CameraWidget": "Camera widget (2D)",
             "Actions": "Actions:",
             "MoveToWorld": "Move to world",
             "TieToEntity": "Tie to entity"

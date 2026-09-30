@@ -67,6 +67,7 @@ namespace Sledge.BspEditor.Tools.Selection
 		[Setting] public bool ShowRotateWidget { get; set; } = true;
 		[Setting] public bool ShowMoveArrowWidget { get; set; } = true;
 		[Setting] public bool ShowRotationArcWidget { get; set; } = true;
+		[Setting] public bool ShowCameraWidget { get; set; } = true;
 		[Setting] public bool SelectByCenterHandles { get; set; } = true;
 		[Setting] public bool OnlySelectByCenterHandles { get; set; } = false;
 		[Setting] public bool SelectionBoxOnlySelectsByCenterHandles { get; set; } = false;
@@ -86,6 +87,7 @@ namespace Sledge.BspEditor.Tools.Selection
 			yield return new SettingKey("Tools/Selection", "ShowRotateWidget", typeof(bool));
 			yield return new SettingKey("Tools/Selection", "ShowMoveArrowWidget", typeof(bool));
 			yield return new SettingKey("Tools/Selection", "ShowRotationArcWidget", typeof(bool));
+			yield return new SettingKey("Tools/Selection", "ShowCameraWidget", typeof(bool));
 			yield return new SettingKey("Tools/Selection", "SelectByCenterHandles", typeof(bool));
 			yield return new SettingKey("Tools/Selection", "OnlySelectByCenterHandles", typeof(bool));
 			yield return new SettingKey("Tools/Selection", "SelectionBoxOnlySelectsByCenterHandles", typeof(bool));
@@ -98,6 +100,7 @@ namespace Sledge.BspEditor.Tools.Selection
 			store.LoadInstance(this);
 			Oy.Publish("SelectTool:SetShow3DWidgets", Show3DWidgets ? "1" : "0");
 			_selectionBox.SetWidgetToggles(ShowMoveWidget, ShowRotateWidget, ShowMoveArrowWidget, ShowRotationArcWidget);
+			Sledge.BspEditor.Rendering.Overlay.Camera2DOverlay.ShowCameraWidget = ShowCameraWidget;
 			Oy.Publish("SelectTool:SetWidgetToggles", WidgetTogglesToString());
 			ValuesLoaded = true;
 		}
@@ -157,7 +160,7 @@ namespace Sledge.BspEditor.Tools.Selection
 				_selectionBox.ShowWidgets = Show3DWidgets;
 				_selectionBox.Update();
 			});
-			// Format: four chars, "1"/"0" each, in the order Move, Rotate, MoveArrow, RotationArc
+			// Format: five chars, "1"/"0" each, in the order Move, Rotate, MoveArrow, RotationArc, CameraWidget (2D)
 			Oy.Subscribe<string>("SelectTool:WidgetTogglesChanged", x =>
 			{
 				if (string.IsNullOrEmpty(x) || x.Length < 4) return;
@@ -166,12 +169,17 @@ namespace Sledge.BspEditor.Tools.Selection
 				ShowMoveArrowWidget = x[2] == '1';
 				ShowRotationArcWidget = x[3] == '1';
 				_selectionBox.SetWidgetToggles(ShowMoveWidget, ShowRotateWidget, ShowMoveArrowWidget, ShowRotationArcWidget);
+				if (x.Length > 4)
+				{
+					ShowCameraWidget = x[4] == '1';
+					Sledge.BspEditor.Rendering.Overlay.Camera2DOverlay.ShowCameraWidget = ShowCameraWidget;
+				}
 			});
 		}
 
 		private string WidgetTogglesToString()
 		{
-			return (ShowMoveWidget ? "1" : "0") + (ShowRotateWidget ? "1" : "0") + (ShowMoveArrowWidget ? "1" : "0") + (ShowRotationArcWidget ? "1" : "0");
+			return (ShowMoveWidget ? "1" : "0") + (ShowRotateWidget ? "1" : "0") + (ShowMoveArrowWidget ? "1" : "0") + (ShowRotationArcWidget ? "1" : "0") + (ShowCameraWidget ? "1" : "0");
 		}
 
 		public void TransformationModeChanged(SelectionBoxDraggableState.TransformationMode mode)

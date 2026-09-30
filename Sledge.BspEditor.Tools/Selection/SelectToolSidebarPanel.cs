@@ -51,6 +51,7 @@ namespace Sledge.BspEditor.Tools.Selection
 					RotateWidgetCheckbox.Checked = x[1] == '1';
 					MoveArrowWidgetCheckbox.Checked = x[2] == '1';
 					RotationArcWidgetCheckbox.Checked = x[3] == '1';
+					if (x.Length > 4) CameraWidgetCheckbox.Checked = x[4] == '1';
 				}
 				finally
 				{
@@ -76,6 +77,7 @@ namespace Sledge.BspEditor.Tools.Selection
 				RotateWidgetCheckbox.Text = strings.GetString(prefix, "RotateWidget") ?? RotateWidgetCheckbox.Text;
 				MoveArrowWidgetCheckbox.Text = strings.GetString(prefix, "MoveArrowWidget") ?? MoveArrowWidgetCheckbox.Text;
 				RotationArcWidgetCheckbox.Text = strings.GetString(prefix, "RotationArcWidget") ?? RotationArcWidgetCheckbox.Text;
+				CameraWidgetCheckbox.Text = strings.GetString(prefix, "CameraWidget") ?? CameraWidgetCheckbox.Text;
 				lblActions.Text = strings.GetString(prefix, "Actions");
 				MoveToWorldButton.Text = strings.GetString(prefix, "MoveToWorld");
 				MoveToEntityButton.Text = strings.GetString(prefix, "TieToEntity");
@@ -159,6 +161,7 @@ namespace Sledge.BspEditor.Tools.Selection
 			Oy.Publish("SelectTool:Show3DWidgetsChanged", Show3DWidgetsCheckbox.Checked ? "1" : "0");
 
 			// The individual widget toggles only make sense while 3D widgets are on
+			// (the camera widget is drawn in the 2D views, so it is independent of this checkbox)
 			MoveWidgetCheckbox.Enabled = RotateWidgetCheckbox.Enabled =
 				MoveArrowWidgetCheckbox.Enabled = RotationArcWidgetCheckbox.Enabled = Show3DWidgetsCheckbox.Checked;
 		}
@@ -170,7 +173,8 @@ namespace Sledge.BspEditor.Tools.Selection
 				(MoveWidgetCheckbox.Checked ? "1" : "0") +
 				(RotateWidgetCheckbox.Checked ? "1" : "0") +
 				(MoveArrowWidgetCheckbox.Checked ? "1" : "0") +
-				(RotationArcWidgetCheckbox.Checked ? "1" : "0"));
+				(RotationArcWidgetCheckbox.Checked ? "1" : "0") +
+				(CameraWidgetCheckbox.Checked ? "1" : "0"));
 		}
 
 		private void MoveToWorldButtonClicked(object sender, EventArgs e)
