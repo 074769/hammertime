@@ -417,7 +417,22 @@ namespace Sledge.BspEditor.Documents
 		public IDocument UpdateEnvironment(IDocument document)
 		{
 			if (document is not MapDocument md) return null;
-			md.Environment = _environments.Value.GetEnvironment(md.Environment.ID);
+
+			// Pressing OK in Settings calls this for every open document. Only rebuild the
+			// environment (FGDs, WADs, models...) if its settings actually changed.
+			if (_environments.Value.IsUpToDate(md.Environment)) return md;
+
+			var env = _environments.Value.GetEnvironment(md.Environment.ID);
+			if (env == null) return md;
+
+			// A rebuilt environment starts with every WAD enabled: re-apply the per-map choice.
+			if (env is ITexturePackageManager packageManager && !String.IsNullOrWhiteSpace(md.FileName))
+			{
+				var disabled = MapTexturePackageSettingsManager.GetInstance()?.GetDisabledPackages(md.FileName);
+				if (disabled != null && disabled.Count > 0) packageManager.SetManuallyDisabledTexturePackages(disabled);
+			}
+
+			md.Environment = env;
 			return md;
 		}
 	}

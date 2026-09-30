@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using Sledge.BspEditor.Environment.Controls;
 using Sledge.Common.Shell.Settings;
 
@@ -29,6 +30,16 @@ namespace Sledge.BspEditor.Environment
             return _environments;
         }
 
+        // Remembers the saved configuration each live environment instance was built from,
+        // so we can tell later whether the settings for it actually changed.
+        private readonly ConditionalWeakTable<IEnvironment, string> _signatures = new ConditionalWeakTable<IEnvironment, string>();
+
+        private static string GetSignature(SerialisedEnvironment env)
+        {
+            var props = string.Join("\n", env.Properties.OrderBy(x => x.Key, StringComparer.Ordinal).Select(x => x.Key + "=" + x.Value));
+            return env.ID + "|" + env.Name + "|" + env.Type + "|" + props;
+        }
+
         public IEnvironment GetEnvironment(string id)
         {
             var env = _environments.FirstOrDefault(x => x.ID == id);
@@ -37,7 +48,25 @@ namespace Sledge.BspEditor.Environment
             var fac = _factories.FirstOrDefault(x => x.Value.TypeName == env.Type);
             if (fac == null) return null;
 
-            return fac.Value.Deserialise(env);
+            var result = fac.Value.Deserialise(env);
+            if (result != null)
+            {
+                _signatures.Remove(result);
+                _signatures.Add(result, GetSignature(env));
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// True if the given environment instance was built from the environment settings as
+        /// they are right now, i.e. nothing about it needs to be rebuilt.
+        /// </summary>
+        public bool IsUpToDate(IEnvironment environment)
+        {
+            if (environment == null) return false;
+            var current = _environments.FirstOrDefault(x => x.ID == environment.ID);
+            if (current == null) return false;
+            return _signatures.TryGetValue(environment, out var sig) && sig == GetSignature(current);
         }
 
         public bool Supports(SettingKey key)

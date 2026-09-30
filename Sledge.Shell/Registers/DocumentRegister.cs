@@ -52,9 +52,8 @@ namespace Sledge.Shell.Registers
 		{
 			foreach (var document in _openDocuments)
 			{
-				var loader = _loaders.First(x => x.CanLoad(document.FileName));
-				if (loader == null) loader = _loaders.First();
-				loader.UpdateEnvironment(document);
+				var loader = _loaders.FirstOrDefault(x => x.CanLoad(document.FileName)) ?? _loaders.FirstOrDefault();
+				loader?.UpdateEnvironment(document);
 			}
 		}
 
