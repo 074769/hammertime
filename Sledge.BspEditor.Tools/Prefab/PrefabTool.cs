@@ -11,6 +11,7 @@ using Sledge.BspEditor.Rendering.Resources;
 using Sledge.BspEditor.Rendering.Viewport;
 using Sledge.BspEditor.Tools.Draggable;
 using Sledge.BspEditor.Tools.Properties;
+using Sledge.Common.Shell;
 using Sledge.Common.Shell.Components;
 using Sledge.Common.Translations;
 using Sledge.DataStructures.Geometric;
@@ -56,7 +57,7 @@ namespace Sledge.BspEditor.Tools.Prefab
 
 		private MapDocument _previewDocument = null;
 
-		public override Image GetIcon() => Resources.Tool_Prefab;
+		public override Image GetIcon() => IconLoader.Load(typeof(Resources), nameof(Resources.Tool_Prefab));
 
 		public override string GetName() => "PrefabTool";
 		public override Capability ToolCapability => PrefabToolCapability;

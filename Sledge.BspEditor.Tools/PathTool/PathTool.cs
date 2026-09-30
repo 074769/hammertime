@@ -6,6 +6,7 @@ using Sledge.BspEditor.Primitives.MapObjectData;
 using Sledge.BspEditor.Rendering.Viewport;
 using Sledge.BspEditor.Tools.Draggable;
 using Sledge.BspEditor.Tools.Properties;
+using Sledge.Common.Shell;
 using Sledge.Common.Shell.Commands;
 using Sledge.Common.Shell.Components;
 using Sledge.Common.Shell.Documents;
@@ -40,7 +41,7 @@ namespace Sledge.BspEditor.Tools.PathTool
 		private bool _shiftPressed;
 		private bool _controlPressed;
 		private MapDocument _lastDocument;
-		public override Image GetIcon() => Resources.Tool_Path;
+		public override Image GetIcon() => IconLoader.Load(typeof(Resources), nameof(Resources.Tool_Path));
 		public override string GetName() => "Path Tool";
 		public override Capability ToolCapability => PathToolCapability;
 

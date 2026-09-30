@@ -7,6 +7,7 @@ using Sledge.BspEditor.Modification.Operations;
 using Sledge.BspEditor.Primitives.MapData;
 using Sledge.BspEditor.Tools.Draggable;
 using Sledge.BspEditor.Tools.Properties;
+using Sledge.Common.Shell;
 using Sledge.Common.Shell.Components;
 using Sledge.Common.Shell.Documents;
 using Sledge.Common.Shell.Hotkeys;
@@ -35,7 +36,7 @@ namespace Sledge.BspEditor.Tools.Cordon
 
         public override Image GetIcon()
         {
-            return Resources.Tool_Cordon;
+            return IconLoader.Load(typeof(Resources), nameof(Resources.Tool_Cordon));
         }
 
         public override string GetName()

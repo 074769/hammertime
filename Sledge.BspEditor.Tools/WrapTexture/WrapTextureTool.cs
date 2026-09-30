@@ -3,6 +3,7 @@ using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.BspEditor.Tools.Draggable;
 using Sledge.BspEditor.Tools.Properties;
 using Sledge.BspEditor.Tools.Selection;
+using Sledge.Common.Shell;
 using Sledge.Common.Shell.Commands;
 using Sledge.Common.Shell.Components;
 using Sledge.Common.Shell.Documents;
@@ -28,7 +29,7 @@ namespace Sledge.BspEditor.Tools.WrapTexture
 		public static readonly Capability WrapTextureToolCapability = Capability.Create("WrapTextureTool");
 		public override Image GetIcon()
 		{
-			return Resources.Tool_Wrap;
+			return IconLoader.Load(typeof(Resources), nameof(Resources.Tool_Wrap));
 		}
 
 		public IEnumerable<SettingKey> GetKeys()

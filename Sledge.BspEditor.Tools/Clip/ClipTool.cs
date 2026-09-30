@@ -14,6 +14,7 @@ using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.BspEditor.Rendering.Resources;
 using Sledge.BspEditor.Rendering.Viewport;
 using Sledge.BspEditor.Tools.Properties;
+using Sledge.Common.Shell;
 using Sledge.Common.Shell.Components;
 using Sledge.Common.Shell.Hotkeys;
 using Sledge.Rendering.Cameras;
@@ -70,7 +71,7 @@ namespace Sledge.BspEditor.Tools.Clip
 
         public override Image GetIcon()
         {
-            return Resources.Tool_Clip;
+            return IconLoader.Load(typeof(Resources), nameof(Resources.Tool_Clip));
         }
 
         public override string GetName()

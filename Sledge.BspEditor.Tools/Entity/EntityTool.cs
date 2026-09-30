@@ -17,6 +17,7 @@ using Sledge.BspEditor.Rendering.Resources;
 using Sledge.BspEditor.Rendering.Viewport;
 using Sledge.BspEditor.Tools.Properties;
 using Sledge.Common;
+using Sledge.Common.Shell;
 using Sledge.Common.Shell.Components;
 using Sledge.Common.Shell.Context;
 using Sledge.Common.Shell.Documents;
@@ -143,7 +144,7 @@ namespace Sledge.BspEditor.Tools.Entity
 
 		public override System.Drawing.Image GetIcon()
 		{
-			return Resources.Tool_Entity;
+			return IconLoader.Load(typeof(Resources), nameof(Resources.Tool_Entity));
 		}
 
 		public override string GetName()

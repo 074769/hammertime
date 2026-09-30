@@ -14,6 +14,7 @@ using Sledge.BspEditor.Tools.Draggable;
 using Sledge.BspEditor.Tools.Properties;
 using Sledge.BspEditor.Tools.Selection.TransformationHandles;
 using Sledge.BspEditor.Tools.Widgets;
+using Sledge.Common.Shell;
 using Sledge.Common.Shell.Components;
 using Sledge.Common.Shell.Context;
 using Sledge.Common.Shell.Documents;
@@ -180,7 +181,7 @@ namespace Sledge.BspEditor.Tools.Selection
 
 		public override Image GetIcon()
 		{
-			return Resources.Tool_Select;
+			return IconLoader.Load(typeof(Resources), nameof(Resources.Tool_Select));
 		}
 
 		public override string GetName()

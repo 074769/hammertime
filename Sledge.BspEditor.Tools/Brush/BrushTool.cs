@@ -19,6 +19,7 @@ using Sledge.BspEditor.Rendering.Resources;
 using Sledge.BspEditor.Rendering.Viewport;
 using Sledge.BspEditor.Tools.Draggable;
 using Sledge.BspEditor.Tools.Properties;
+using Sledge.Common.Shell;
 using Sledge.Common.Shell.Components;
 using Sledge.Common.Shell.Context;
 using Sledge.Common.Shell.Documents;
@@ -168,7 +169,7 @@ namespace Sledge.BspEditor.Tools.Brush
 
 		public override Image GetIcon()
 		{
-			return Resources.Tool_Brush;
+			return IconLoader.Load(typeof(Resources), nameof(Resources.Tool_Brush));
 		}
 
 		public override string GetName()

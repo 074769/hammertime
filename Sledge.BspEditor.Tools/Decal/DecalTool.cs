@@ -13,6 +13,7 @@ using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.BspEditor.Rendering.Viewport;
 using Sledge.BspEditor.Tools.Properties;
 using Sledge.Common;
+using Sledge.Common.Shell;
 using Sledge.Common.Shell.Components;
 using Sledge.Common.Shell.Documents;
 using Sledge.Common.Shell.Hotkeys;
@@ -38,7 +39,7 @@ namespace Sledge.BspEditor.Tools.Decal
 
         public override Image GetIcon()
         {
-            return Resources.Tool_Decal;
+            return IconLoader.Load(typeof(Resources), nameof(Resources.Tool_Decal));
         }
 
         public override string GetName()

@@ -1,0 +1,11 @@
+<Project>
+  <!--
+    Any *.svg placed in <Project>/Resources/Svg/ is embedded in that project's assembly.
+    Logical name: Svg.<FileName>.svg  (looked up by Sledge.Common.Shell.IconLoader).
+    The file name must match the PNG resource name, e.g. Resources/Svg/Menu_UVLock.svg
+    replaces Resources.Menu_UVLock. If there is no SVG, the PNG is used as before.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\Svg\*.svg" LogicalName="Svg.%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

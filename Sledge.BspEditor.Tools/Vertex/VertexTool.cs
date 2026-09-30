@@ -23,6 +23,7 @@ using Sledge.BspEditor.Tools.Properties;
 using Sledge.BspEditor.Tools.Selection.TransformationHandles;
 using Sledge.BspEditor.Tools.Vertex.Selection;
 using Sledge.BspEditor.Tools.Vertex.Tools;
+using Sledge.Common.Shell;
 using Sledge.Common.Shell.Components;
 using Sledge.Common.Shell.Documents;
 using Sledge.Common.Shell.Hooks;
@@ -78,7 +79,7 @@ namespace Sledge.BspEditor.Tools.Vertex
 		}
 		public override Image GetIcon()
 		{
-			return Resources.Tool_VM;
+			return IconLoader.Load(typeof(Resources), nameof(Resources.Tool_VM));
 		}
 
 		public override string GetName()

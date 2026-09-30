@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Threading.Tasks;
 using Sledge.BspEditor.Environment;
 using Sledge.BspEditor.Properties;
+using Sledge.Common.Shell;
 using Sledge.Common.Shell.Settings;
 using Sledge.Common.Translations;
 
@@ -20,7 +21,7 @@ namespace Sledge.BspEditor.Grid
 	{
 		public string Name { get; set; }
 		public string Details { get; set; }
-		public virtual Image Icon => Resources.SquareGrid;
+		public virtual Image Icon => IconLoader.Load(typeof(Resources), nameof(Resources.SquareGrid));
 
 		[Setting] public static int GridHideSmallerThan { get; set; } = 4;
 		[Setting] public static int GridHideFactor { get; set; } = 8;
