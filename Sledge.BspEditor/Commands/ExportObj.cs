@@ -76,11 +76,13 @@ namespace Sledge.BspEditor.Commands
                 filename = sfd.FileName;
             }
 
+            var sizes = await ObjExporter.GetTextureSizes(document, solids);
+
             await Task.Run(() =>
             {
                 using (var writer = new StreamWriter(filename, false, new UTF8Encoding(false)))
                 {
-                    ObjExporter.Write(solids, options, writer);
+                    ObjExporter.Write(solids, options, writer, sizes);
                 }
             });
         }

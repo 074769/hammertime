@@ -49,9 +49,9 @@ namespace Sledge.BspEditor.Providers
 
 			var axisLabel = new Label { Text = "Axis conversion:", AutoSize = true, Margin = new Padding(3, 3, 3, 2) };
 			_axis = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 320, Margin = new Padding(3, 0, 3, 8) };
-			_axis.Items.Add("None (keep editor axes, Z-up)");
-			_axis.Items.Add("Blender (Y-up, -Z forward: default OBJ import)");
-			_axis.Items.Add("3ds Max (Z-up: import with \"Flip ZY-axis\" off)");
+			_axis.Items.Add("Source (Z-up, as-is)");
+			_axis.Items.Add("Blender (Y-up, -Z forward)");
+			_axis.Items.Add("3ds Max (Z-up)");
 			_axis.SelectedIndex = (int) Last.Axis;
 
 			_zeroOrigin = new CheckBox
@@ -93,7 +93,7 @@ namespace Sledge.BspEditor.Providers
 				Options = new ObjExportOptions
 				{
 					SelectedOnly = _selectedOnly.Enabled && _selectedOnly.Checked,
-					Axis = (ObjAxisMode) Math.Max(0, _axis.SelectedIndex),
+					Axis = (ObjAxisPreset) Math.Max(0, _axis.SelectedIndex),
 					ZeroOrigin = _zeroOrigin.Checked
 				};
 

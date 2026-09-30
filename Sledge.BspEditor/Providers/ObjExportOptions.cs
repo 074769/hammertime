@@ -4,16 +4,16 @@ namespace Sledge.BspEditor.Providers
 	/// Axis conventions the OBJ exporter can convert to.
 	/// The editor itself is Z-up, right-handed.
 	/// </summary>
-	public enum ObjAxisMode
+	public enum ObjAxisPreset
 	{
-		/// <summary>Keep the editor's axes (Z-up).</summary>
-		None,
+		/// <summary>No conversion: Z-up, right-handed (the editor's own space).</summary>
+		Source,
 
-		/// <summary>Blender's default OBJ import convention: Y-up, -Z forward.</summary>
+		/// <summary>Y-up, -Z forward. Imports upright with Blender's default OBJ importer settings.</summary>
 		Blender,
 
-		/// <summary>3ds Max: Z-up, right-handed (import with "Flip ZY-axis" off).</summary>
-		Max3ds
+		/// <summary>Z-up, right-handed. Same as the editor's space, so no rotation is needed.</summary>
+		Max
 	}
 
 	public class ObjExportOptions
@@ -21,10 +21,10 @@ namespace Sledge.BspEditor.Providers
 		/// <summary>Only export the solids that are selected (or inside a selected entity/group).</summary>
 		public bool SelectedOnly { get; set; }
 
-		/// <summary>Axis convention of the target application.</summary>
-		public ObjAxisMode Axis { get; set; } = ObjAxisMode.None;
-
 		/// <summary>Move the exported geometry so the centre of its bounding box sits at (0, 0, 0).</summary>
 		public bool ZeroOrigin { get; set; }
+
+		/// <summary>Axis convention of the target application.</summary>
+		public ObjAxisPreset Axis { get; set; } = ObjAxisPreset.Source;
 	}
 }
