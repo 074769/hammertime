@@ -9,6 +9,7 @@ using Sledge.Common.Shell.Settings;
 using Sledge.Shell.Forms;
 using Sledge.Shell.Input;
 using Sledge.Shell.Registers;
+using Sledge.Shell.Settings;
 
 namespace Sledge.Shell.Settings.Editors
 {
@@ -27,6 +28,7 @@ namespace Sledge.Shell.Settings.Editors
 			set
 			{
 				_bindings = ((HotkeyRegister.HotkeyBindings)value).Clone();
+				ApplySavedColumnWidths();
 				UpdateHotkeyList();
 			}
 		}
@@ -37,6 +39,12 @@ namespace Sledge.Shell.Settings.Editors
 		public HotkeysEditor()
 		{
 			InitializeComponent();
+
+			// Action and Description use the user's saved widths, Hotkey always fills the remaining space
+			ApplySavedColumnWidths();
+			HotkeyList.ColumnWidthChanged += HotkeyList_ColumnWidthChanged;
+			HotkeyList.SizeChanged += (s, e) => FitLastColumn();
+
 			Anchor = AnchorStyles.Top | AnchorStyles.Bottom;
 			Oy.Subscribe<bool>("Theme:Changed", (useDark) => UseDarkTheme(useDark));
 
@@ -94,8 +102,6 @@ namespace Sledge.Shell.Settings.Editors
 					HotkeyList.Items.Add(new ListViewItem(new[] { hotkey.Name ?? "", hotkey.Description ?? "", GetBinding(hotkey) ?? "" }) { Tag = hotkey });
 				}
 
-				ResizeColumns();
-
 				if (HotkeyList.Items.Count > 0)
 				{
 					ListViewItem toSelect = null;
@@ -108,24 +114,6 @@ namespace Sledge.Shell.Settings.Editors
 			{
 				HotkeyList.EndUpdate();
 				_updating = false;
-			}
-		}
-
-		/// <summary>
-		/// Size each column to the wider of its content and its header, so columns never collapse
-		/// (which is what happened when the filtered list was empty or had short content).
-		/// </summary>
-		private void ResizeColumns()
-		{
-			for (var i = 0; i < HotkeyList.Columns.Count; i++)
-			{
-				HotkeyList.AutoResizeColumn(i, ColumnHeaderAutoResizeStyle.HeaderSize);
-				var headerWidth = HotkeyList.Columns[i].Width;
-				if (HotkeyList.Items.Count > 0)
-				{
-					HotkeyList.AutoResizeColumn(i, ColumnHeaderAutoResizeStyle.ColumnContent);
-					if (HotkeyList.Columns[i].Width < headerWidth) HotkeyList.Columns[i].Width = headerWidth;
-				}
 			}
 		}
 
@@ -300,6 +288,53 @@ namespace Sledge.Shell.Settings.Editors
 			HotkeyList.ForeColor = Color.Black;
 
 			DialogRegister.ColorControlsRecursively(this, dark);
+		}
+
+		private bool _fittingColumns;
+
+		private void ApplySavedColumnWidths()
+		{
+			_fittingColumns = true;
+			try
+			{
+				chAction.Width = HotkeyColumnSettings.ActionWidth;
+				chDescription.Width = HotkeyColumnSettings.DescriptionWidth;
+			}
+			finally
+			{
+				_fittingColumns = false;
+			}
+			FitLastColumn();
+		}
+
+		/// <summary>
+		/// Stretch the last column to the right edge of the list so it never ends before the border
+		/// </summary>
+		private void FitLastColumn()
+		{
+			if (_fittingColumns || HotkeyList.Columns.Count == 0) return;
+			_fittingColumns = true;
+			try
+			{
+				var used = 0;
+				for (var i = 0; i < HotkeyList.Columns.Count - 1; i++) used += HotkeyList.Columns[i].Width;
+				var last = HotkeyList.Columns[HotkeyList.Columns.Count - 1];
+				last.Width = Math.Max(80, HotkeyList.ClientSize.Width - used);
+			}
+			finally
+			{
+				_fittingColumns = false;
+			}
+		}
+
+		private void HotkeyList_ColumnWidthChanged(object sender, ColumnWidthChangedEventArgs e)
+		{
+			if (_fittingColumns) return;
+
+			// The user dragged a column: remember it (written to disk with the rest of the settings)
+			HotkeyColumnSettings.ActionWidth = Math.Max(HotkeyColumnSettings.MinWidth, chAction.Width);
+			HotkeyColumnSettings.DescriptionWidth = Math.Max(HotkeyColumnSettings.MinWidth, chDescription.Width);
+			FitLastColumn();
 		}
 
 		private void HotkeyList_DrawColumnHeader(object sender, DrawListViewColumnHeaderEventArgs e)
