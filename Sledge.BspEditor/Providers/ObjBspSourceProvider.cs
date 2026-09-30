@@ -58,13 +58,38 @@ namespace Sledge.BspEditor.Providers
 
 		public Task Save(Stream stream, Map map, MapDocument document = null)
 		{
-			return Task.Run(() =>
+			return Save(stream, map, document, new ObjExportOptions());
+		}
+
+		public async Task Save(Stream stream, Map map, MapDocument document, ObjExportOptions options)
+		{
+			options = options ?? new ObjExportOptions();
+
+			var solids = GetSolidsToExport(map, options);
+
+			// Texture sizes are needed to produce the same UVs the viewport shows
+			var sizes = new Dictionary<string, (int Width, int Height)>(StringComparer.OrdinalIgnoreCase);
+			if (document?.Environment != null)
 			{
-				using (var writer = new StreamWriter(stream, Encoding.ASCII, 1024, true))
+				var tc = await document.Environment.GetTextureCollection();
+				if (tc != null)
 				{
-					Write(map, writer);
+					var names = solids.SelectMany(x => x.Faces).Select(x => x.Texture.Name).Where(x => !String.IsNullOrEmpty(x)).Distinct(StringComparer.OrdinalIgnoreCase);
+					foreach (var name in names)
+					{
+						var item = await tc.GetTextureItem(name);
+						if (item != null && item.Width > 0 && item.Height > 0)
+						{
+							sizes[name] = (item.Width, item.Height);
+						}
+					}
 				}
-			});
+			}
+
+			using (var writer = new StreamWriter(stream, Encoding.ASCII, 1024, true))
+			{
+				Write(solids, sizes, options, writer);
+			}
 		}
 
 		#region Reading
@@ -357,69 +382,141 @@ namespace Sledge.BspEditor.Providers
 
 		#region Writing
 
-		private void Write(Map map, StreamWriter writer)
+		// Used when a texture's size can't be found (missing texture); keeps UVs sensible instead of collapsing to 0,0
+		private const int FallbackTextureSize = 64;
+
+		private static List<Solid> GetSolidsToExport(Map map, ObjExportOptions options)
+		{
+			var solids = map.Root.Find(x => x is Solid).OfType<Solid>();
+			if (options.SelectedOnly)
+			{
+				// A solid counts as selected if it, or something it's inside of (entity/group), is selected
+				solids = solids.Where(IsSelectedOrInsideSelected);
+			}
+			return solids.ToList();
+		}
+
+		private static bool IsSelectedOrInsideSelected(IMapObject obj)
+		{
+			for (var o = obj; o != null; o = o.Hierarchy.Parent)
+			{
+				if (o.IsSelected) return true;
+			}
+			return false;
+		}
+
+		/// <summary>
+		/// Convert a point from editor space (Z-up) to the target application's axes.
+		/// Both conversions are proper rotations (no mirroring), so face winding is unaffected.
+		/// </summary>
+		private static Vector3 ToExportSpace(Vector3 v, ObjAxisMode axis)
+		{
+			switch (axis)
+			{
+				case ObjAxisMode.Blender:
+					// Z-up -> Y-up, -Z forward: (x, y, z) -> (x, z, -y)
+					return new Vector3(v.X, v.Z, -v.Y);
+				case ObjAxisMode.Max3ds:
+				case ObjAxisMode.None:
+				default:
+					// 3ds Max is Z-up right-handed like the editor
+					return v;
+			}
+		}
+
+		private static string F(float value, string format)
+		{
+			return value.ToString(format, CultureInfo.InvariantCulture);
+		}
+
+		private static void Write(List<Solid> solids, Dictionary<string, (int Width, int Height)> sizes, ObjExportOptions options, StreamWriter writer)
 		{
 			writer.WriteLine("# Sledge Object Export");
 			writer.WriteLine("# Scale: 1");
+			writer.WriteLine("# Axis: " + options.Axis);
 			writer.WriteLine();
 
-			var solids = map.Root.Find(x => x is Solid).OfType<Solid>();
+			// Zero origin: shift so the centre of the exported geometry's bounding box is at 0,0,0.
+			// This is applied to positions only; UVs are computed from the original positions below,
+			// because texture coordinates depend on where the face is in the world.
+			var offset = Vector3.Zero;
+			if (options.ZeroOrigin)
+			{
+				var points = solids.SelectMany(x => x.Faces).SelectMany(x => x.Vertices).ToList();
+				if (points.Count > 0)
+				{
+					var min = points[0];
+					var max = points[0];
+					foreach (var p in points)
+					{
+						min = Vector3.Min(min, p);
+						max = Vector3.Max(max, p);
+					}
+					offset = (min + max) / 2f;
+				}
+			}
+
+			// OBJ indices are 1-based and global to the file
+			var vertexIndex = 1;
+			var uvIndex = 1;
+			var normalIndex = 1;
 
 			foreach (var solid in solids)
 			{
-				writer.Write("o solid_");
-				writer.Write(solid.ID);
-				writer.WriteLine();
+				writer.WriteLine("o solid_" + solid.ID);
+				// The importer above rebuilds solids from groups, so keep one group per solid
+				writer.WriteLine("g solid_" + solid.ID);
 
 				foreach (var face in solid.Faces)
 				{
-					writer.Write("g mtl_");
-					writer.Write(solid.ID);
-					writer.WriteLine();
-					writer.Write($"usemtl {face.Texture.Name}");
-					writer.WriteLine();
-					var uvs = new List<Vector2>();
+					var count = face.Vertices.Count;
+					if (count < 3) continue;
 
-					foreach (var v in face.Vertices)
+					var name = face.Texture.Name;
+					var w = FallbackTextureSize;
+					var h = FallbackTextureSize;
+					if (!String.IsNullOrEmpty(name) && sizes.TryGetValue(name, out var size))
 					{
-						writer.Write("v ");
-						writer.Write(v.X.ToString("0.0000", CultureInfo.InvariantCulture));
-						writer.Write(' ');
-						writer.Write(v.Y.ToString("0.0000", CultureInfo.InvariantCulture));
-						writer.Write(' ');
-						writer.Write(v.Z.ToString("0.0000", CultureInfo.InvariantCulture));
-						writer.WriteLine();
-						uvs.Add(ProjectVertex(v, face.Plane.Normal));
-					}
-					foreach (var uv in uvs)
-					{
-						writer.Write("vt ");
-						writer.Write(uv.X.ToString("0.0000", CultureInfo.InvariantCulture));
-						writer.Write(' ');
-						writer.Write(uv.Y.ToString("0.0000", CultureInfo.InvariantCulture));
-						writer.WriteLine();
+						w = size.Width;
+						h = size.Height;
 					}
 
-					writer.Write("f ");
-					for (var i = 1; i <= face.Vertices.Count; i++)
+					// Same texture math the 3D viewport uses (UAxis/VAxis, scale, shift, texture size)
+					var coords = face.GetTextureCoordinates(w, h).ToList();
+
+					var material = String.IsNullOrWhiteSpace(name) ? "none" : String.Concat(name.Select(c => Char.IsWhiteSpace(c) ? '_' : c));
+					writer.WriteLine("usemtl " + material);
+
+					// The editor stores face vertices clockwise when viewed from outside;
+					// OBJ wants counter-clockwise, so write them in reverse order.
+					for (var i = count - 1; i >= 0; i--)
 					{
-						writer.Write($"{-i}/{-i}");
-						writer.Write(' ');
+						var v = ToExportSpace(face.Vertices[i] - offset, options.Axis);
+						writer.WriteLine("v " + F(v.X, "0.0000") + " " + F(v.Y, "0.0000") + " " + F(v.Z, "0.0000"));
 					}
 
+					for (var i = count - 1; i >= 0; i--)
+					{
+						// The viewport's V runs top-down; OBJ's V runs bottom-up, so flip it
+						writer.WriteLine("vt " + F(coords[i].Item2, "0.000000") + " " + F(1f - coords[i].Item3, "0.000000"));
+					}
+
+					var n = ToExportSpace(face.Plane.Normal, options.Axis);
+					writer.WriteLine("vn " + F(n.X, "0.000000") + " " + F(n.Y, "0.000000") + " " + F(n.Z, "0.000000"));
+
+					writer.Write("f");
+					for (var i = 0; i < count; i++)
+					{
+						writer.Write(" " + (vertexIndex + i) + "/" + (uvIndex + i) + "/" + normalIndex);
+					}
 					writer.WriteLine();
 					writer.WriteLine();
+
+					vertexIndex += count;
+					uvIndex += count;
+					normalIndex++;
 				}
 			}
-		}
-		private static Vector2 ProjectVertex(Vector3 vertex, Vector3 normal)
-		{
-			Quaternion rotation = Quaternion.CreateFromAxisAngle(Vector3.Cross(normal, Vector3.UnitZ),
-								   (float)Math.Acos(Vector3.Dot(normal, Vector3.UnitZ)));
-			Vector3 rotatedVertex = Vector3.Transform(vertex, rotation);
-
-			// Project the rotated vertex onto the xy-plane
-			return new Vector2(rotatedVertex.X * 0.01f, rotatedVertex.Y * 0.01f); // Magic number to simply scale UV
 		}
 
 		#endregion

@@ -291,6 +291,15 @@ namespace Sledge.BspEditor.Documents
 		{
 			var map = (MapDocument)document;
 
+			// OBJ is an export format with its own options; ask before doing any work
+			ObjExportOptions objOptions = null;
+			if (String.Equals(Path.GetExtension(location), ".obj", StringComparison.OrdinalIgnoreCase))
+			{
+				var hasSelection = !map.Selection.IsEmpty;
+				_shell.Value.InvokeSync(() => objOptions = ObjExportOptionsForm.Ask(_shell.Value, hasSelection));
+				if (objOptions == null) return; // cancelled
+			}
+
 			await map.Environment.UpdateDocumentData(map);
 
 			// If this map was unsaved when the user toggled off some texture packages (so
@@ -314,7 +323,14 @@ namespace Sledge.BspEditor.Documents
 				{
 					try
 					{
-						await provider.Value.Save(stream, map.Map, document as MapDocument);
+						if (objOptions != null && provider.Value is ObjBspSourceProvider objProvider)
+						{
+							await objProvider.Save(stream, map.Map, map, objOptions);
+						}
+						else
+						{
+							await provider.Value.Save(stream, map.Map, document as MapDocument);
+						}
 						using (var fs = File.Open(location, FileMode.Create, FileAccess.Write, FileShare.Read))
 						{
 							stream.Seek(0, SeekOrigin.Begin);
