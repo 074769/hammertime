@@ -121,10 +121,20 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit
 		{
 			if (!_root.TryGetTarget(out var rt)) return;
 
-			var path = _textBox.Text;
-			if (Property.VariableType == VariableType.Sound) path = "sound/" + path;
+			var path = (_textBox.Text ?? "").Trim();
+			if (String.IsNullOrEmpty(path)) return; // Nothing to preview
+			if (Property.VariableType == VariableType.Sound) path = "sound/" + path.TrimStart('/', '\\');
 
-			var file = rt.TraversePath(path);
+			IFile file;
+			try
+			{
+				file = rt.TraversePath(path);
+			}
+			catch (FileNotFoundException)
+			{
+				// Malformed path (e.g. trailing or doubled slash) - nothing to preview
+				return;
+			}
 			if (file == null || !file.Exists) return;
 
 			switch (file.Extension?.ToLower())
