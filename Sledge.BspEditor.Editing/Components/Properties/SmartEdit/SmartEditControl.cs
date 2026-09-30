@@ -15,6 +15,15 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit
         public Property Property { get; private set; }
         public abstract string PriorityHint { get; }
 
+        /// <summary>The document the properties belong to. Set when SetProperty is called.</summary>
+        protected MapDocument Document { get; private set; }
+
+        /// <summary>The class name of the entity being edited (set by the host before SetProperty).</summary>
+        public string ClassName { get; set; }
+
+        /// <summary>Gets the current value of another keyvalue on the same entity, or null if there isn't one (set by the host).</summary>
+        public Func<string, string> GetSiblingValue { get; set; }
+
         public delegate void ValueChangedEventHandler(object sender, string propertyName, string propertyValue);
         public delegate void NameChangedEventHandler(object sender, string oldName, string newName);
 
@@ -45,6 +54,7 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit
         public void SetProperty(MapDocument document, string originalName, string newName, string currentValue, Property property)
         {
             _setting = true;
+            Document = document;
             OriginalName = originalName;
             PropertyName = newName;
             PropertyValue = currentValue;

@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Sledge.BspEditor.Components;
 using Sledge.BspEditor.Documents;
+using Sledge.BspEditor.Editing.Components.Properties.SmartEdit;
 using Sledge.BspEditor.Modification;
 using Sledge.BspEditor.Modification.Operations.Data;
 using Sledge.BspEditor.Primitives.MapObjectData;
@@ -493,6 +494,12 @@ namespace Sledge.BspEditor.Editing.Components.Properties.Tabs
 									 .FirstOrDefault(x => x.SupportsType(type)) ?? _defaultControl;
 
 				_document.TryGetTarget(out MapDocument doc);
+				if (_currentEditor is SmartEditControl smartControl)
+				{
+					smartControl.ClassName = _tableValues.NewClass?.Name ?? _tableValues.OriginalClasses.FirstOrDefault()?.Name;
+					smartControl.GetSiblingValue = key => _tableValues
+						.FirstOrDefault(x => !x.IsRemoved && String.Equals(x.Key, key, StringComparison.InvariantCultureIgnoreCase))?.Value;
+				}
 				_currentEditor.SetProperty(doc, tv.OriginalKey, tv.NewKey, tv.Value, prop);
 				pnlSmartEdit.Controls.Add(_currentEditor.Control);
 
