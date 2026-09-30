@@ -42,29 +42,23 @@ namespace Sledge.Shell.Settings.Editors
 
 		}
 
+		private bool _updating;
+
+		private string GetBinding(IHotkey hotkey)
+		{
+			return _bindings.ContainsKey(hotkey.ID) ? _bindings[hotkey.ID] : hotkey.DefaultHotkey;
+		}
+
+		/// <summary>
+		/// Rebuilds the list and the action dropdown (used after bindings change).
+		/// </summary>
 		private void UpdateHotkeyList()
 		{
-			// Technically a hack, but meh we're going to be using a singleton here anyway because we're lazy.
-			// The whole thing's internal so stop judging me
+			RebuildList();
+
 			var register = BaseForm.HotkeyRegister;
-
-			HotkeyList.BeginUpdate();
-			var idx = HotkeyList.SelectedIndices.Count == 0 ? 0 : HotkeyList.SelectedIndices[0];
-
-			HotkeyList.Items.Clear();
-			foreach (var hotkey in FilterHotkeys(register.GetHotkeys(), FilterBox.Text).OrderBy(x => x.Name))
-			{
-				var binding = _bindings.ContainsKey(hotkey.ID) ? _bindings[hotkey.ID] : hotkey.DefaultHotkey;
-				HotkeyList.Items.Add(new ListViewItem(new[] { hotkey.Name, hotkey.Description, binding }) { Tag = hotkey });
-			}
-
-			HotkeyList.AutoResizeColumns(ColumnHeaderAutoResizeStyle.ColumnContent);
-
-			if (idx >= 0 && idx < HotkeyList.Items.Count) HotkeyList.Items[idx].Selected = true;
-			HotkeyList.EndUpdate();
-
 			HotkeyActionList.BeginUpdate();
-			idx = HotkeyActionList.SelectedIndex;
+			var idx = HotkeyActionList.SelectedIndex;
 			HotkeyActionList.Items.Clear();
 			foreach (var hotkey in register.GetHotkeys().OrderBy(x => x.Name))
 			{
@@ -75,12 +69,103 @@ namespace Sledge.Shell.Settings.Editors
 			HotkeyActionList.EndUpdate();
 		}
 
+		/// <summary>
+		/// Rebuilds only the (filtered) list. Does not touch the action dropdown or the hotkey box.
+		/// </summary>
+		private void RebuildList()
+		{
+			// Technically a hack, but meh we're going to be using a singleton here anyway because we're lazy.
+			// The whole thing's internal so stop judging me
+			var register = BaseForm.HotkeyRegister;
+
+			var prevSelected = HotkeyList.SelectedItems.Count == 0 ? null : HotkeyList.SelectedItems[0].Tag as IHotkey;
+			var filter = FilterBox.Text;
+
+			_updating = true;
+			HotkeyList.BeginUpdate();
+			try
+			{
+				HotkeyList.Items.Clear();
+				var hotkeys = FilterHotkeys(register.GetHotkeys(), filter)
+					.OrderByDescending(x => IsExactBinding(GetBinding(x), filter))
+					.ThenBy(x => x.Name);
+				foreach (var hotkey in hotkeys)
+				{
+					HotkeyList.Items.Add(new ListViewItem(new[] { hotkey.Name ?? "", hotkey.Description ?? "", GetBinding(hotkey) ?? "" }) { Tag = hotkey });
+				}
+
+				ResizeColumns();
+
+				if (HotkeyList.Items.Count > 0)
+				{
+					ListViewItem toSelect = null;
+					if (prevSelected != null) toSelect = HotkeyList.Items.Cast<ListViewItem>().FirstOrDefault(x => Equals(((IHotkey)x.Tag).ID, prevSelected.ID));
+					if (toSelect == null && prevSelected == null && String.IsNullOrWhiteSpace(filter)) toSelect = HotkeyList.Items[0];
+					if (toSelect != null) toSelect.Selected = true;
+				}
+			}
+			finally
+			{
+				HotkeyList.EndUpdate();
+				_updating = false;
+			}
+		}
+
+		/// <summary>
+		/// Size each column to the wider of its content and its header, so columns never collapse
+		/// (which is what happened when the filtered list was empty or had short content).
+		/// </summary>
+		private void ResizeColumns()
+		{
+			for (var i = 0; i < HotkeyList.Columns.Count; i++)
+			{
+				HotkeyList.AutoResizeColumn(i, ColumnHeaderAutoResizeStyle.HeaderSize);
+				var headerWidth = HotkeyList.Columns[i].Width;
+				if (HotkeyList.Items.Count > 0)
+				{
+					HotkeyList.AutoResizeColumn(i, ColumnHeaderAutoResizeStyle.ColumnContent);
+					if (HotkeyList.Columns[i].Width < headerWidth) HotkeyList.Columns[i].Width = headerWidth;
+				}
+			}
+		}
+
+		private static string NormaliseHotkey(string s)
+		{
+			if (String.IsNullOrWhiteSpace(s)) return "";
+			return s.Replace(" ", "")
+				.Replace("Control", "Ctrl", StringComparison.InvariantCultureIgnoreCase)
+				.Replace("Ctl+", "Ctrl+", StringComparison.InvariantCultureIgnoreCase)
+				.ToLowerInvariant();
+		}
+
+		private static bool IsExactBinding(string binding, string filter)
+		{
+			var f = NormaliseHotkey(filter);
+			return f.Length > 0 && NormaliseHotkey(binding) == f;
+		}
+
+		// Matches "ctrl+b", "b+ctrl", "CTRL + B", and partial input such as "ctrl+" or "ctrl+sh"
+		private static bool IsBindingMatch(string binding, string filter)
+		{
+			var b = NormaliseHotkey(binding);
+			var f = NormaliseHotkey(filter);
+			if (b.Length == 0 || f.Length == 0) return false;
+			if (b.Contains(f)) return true;
+
+			var bTokens = b.Split('+');
+			var fTokens = f.Split(new[] { '+' }, StringSplitOptions.RemoveEmptyEntries);
+			return fTokens.Length > 0 && fTokens.All(ft => bTokens.Any(bt => bt.StartsWith(ft, StringComparison.Ordinal)));
+		}
+
 		private IEnumerable<IHotkey> FilterHotkeys(IEnumerable<IHotkey> hotkeys, string filter)
 		{
-			return String.IsNullOrWhiteSpace(filter) ? hotkeys : hotkeys.Where(IsMatch);
+			if (String.IsNullOrWhiteSpace(filter)) return hotkeys;
+			var trimmed = filter.Trim();
+			return hotkeys.Where(IsMatch).ToList();
 
-			bool IsMatch(IHotkey h) => h.Name.IndexOf(filter, StringComparison.InvariantCultureIgnoreCase) >= 0 ||
-									   h.Description.IndexOf(filter, StringComparison.InvariantCultureIgnoreCase) >= 0;
+			bool IsMatch(IHotkey h) => (h.Name ?? "").IndexOf(trimmed, StringComparison.InvariantCultureIgnoreCase) >= 0 ||
+									   (h.Description ?? "").IndexOf(trimmed, StringComparison.InvariantCultureIgnoreCase) >= 0 ||
+									   IsBindingMatch(GetBinding(h), trimmed);
 		}
 
 		private void DeleteHotkey(IHotkey hk)
@@ -147,6 +232,7 @@ namespace Sledge.Shell.Settings.Editors
 
 		private void HotkeyListSelectionChanged(object sender, EventArgs e)
 		{
+			if (_updating) return;
 			if (HotkeyList.SelectedItems.Count == 1)
 			{
 				var hk = (IHotkey)HotkeyList.SelectedItems[0].Tag;
@@ -205,7 +291,7 @@ namespace Sledge.Shell.Settings.Editors
 
 		private void UpdateFilter(object sender, EventArgs e)
 		{
-			UpdateHotkeyList();
+			RebuildList();
 		}
 		public void UseDarkTheme(bool dark)
 		{
