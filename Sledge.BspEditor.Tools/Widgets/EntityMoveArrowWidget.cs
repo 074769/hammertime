@@ -145,16 +145,17 @@ namespace Sledge.BspEditor.Tools.Widgets
 
 		private static Vector3? DirectionFromAngles(Vector3 pitchYawRoll)
 		{
-			// This build's Hammer direction control writes pitch = 90 for straight up and
-			// pitch = -90 for straight down. Handled explicitly since the generic
-			// pitch/yaw/roll math doesn't reliably reduce to a clean vertical vector.
-			if (Math.Abs(pitchYawRoll.X - 90f) < 0.5f) return Vector3.UnitZ;     // up
-			if (Math.Abs(pitchYawRoll.X - -90f) < 0.5f) return -Vector3.UnitZ;  // down
+			// Engine sentinel: angles "0 -1 0" = straight up, "0 -2 0" = straight down (mirrors
+			// UTIL_SetMoveDir, which only honours these when pitch and roll are 0).
+			if (Math.Abs(pitchYawRoll.X) < 0.01f && Math.Abs(pitchYawRoll.Z) < 0.01f)
+			{
+				if (Math.Abs(pitchYawRoll.Y - -1f) < 0.01f) return Vector3.UnitZ;
+				if (Math.Abs(pitchYawRoll.Y - -2f) < 0.01f) return -Vector3.UnitZ;
+			}
 
-			// Also accept the classic Quake/Source yaw sentinel (-1 up, -2 down).
-			if (Math.Abs(pitchYawRoll.Y - -1f) < 0.01f) return Vector3.UnitZ;
-			if (Math.Abs(pitchYawRoll.Y - -2f) < 0.01f) return -Vector3.UnitZ;
-
+			// Everything else is plain AngleVectors: with the fixed AngleMatrix, "-90 0 0" comes out
+			// straight up and "90 0 0" straight down (what AngleControl writes for Up / Down), so
+			// the old explicit pitch = +/-90 special cases (which had up and down swapped) are gone.
 			var dir = AngleToDirection(pitchYawRoll);
 			return dir.LengthSquared() < 0.0001f ? (Vector3?) null : dir;
 		}

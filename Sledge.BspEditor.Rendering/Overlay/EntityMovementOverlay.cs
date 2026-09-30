@@ -131,10 +131,21 @@ namespace Sledge.BspEditor.Rendering.Overlay
 
         // --- Shared angle helpers ----------------------------------------------
 
+        // GoldSrc/Quake AngleMatrix (row-vector layout: forward, left, up). Same basis as
+        // Billboard.geom.hlsl's Oriented sprites and MotionWidgetDrawing.AngleMatrix; kept as a
+        // private copy because this assembly can't reference Sledge.BspEditor.Tools.
         private static Matrix4x4 AngleMatrix(Vector3 pitchYawRoll)
         {
             var rad = pitchYawRoll * (float) Math.PI / 180f;
-            return Matrix4x4.CreateFromYawPitchRoll(rad.X, rad.Z, rad.Y);
+            float sp = (float) Math.Sin(rad.X), cp = (float) Math.Cos(rad.X);
+            float sy = (float) Math.Sin(rad.Y), cy = (float) Math.Cos(rad.Y);
+            float sr = (float) Math.Sin(rad.Z), cr = (float) Math.Cos(rad.Z);
+
+            return new Matrix4x4(
+                cp * cy, cp * sy, -sp, 0,
+                sr * sp * cy - cr * sy, sr * sp * sy + cr * cy, sr * cp, 0,
+                cr * sp * cy + sr * sy, cr * sp * sy - sr * cy, cr * cp, 0,
+                0, 0, 0, 1);
         }
 
         // --- Drawing -------------------------------------------------------

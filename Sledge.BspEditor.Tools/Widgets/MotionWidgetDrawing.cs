@@ -53,10 +53,32 @@ namespace Sledge.BspEditor.Tools.Widgets
 			return cls.Properties.FirstOrDefault(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
 		}
 
+		/// <summary>
+		/// GoldSrc/Quake AngleMatrix for an entity's "angles" (pitch yaw roll, degrees), laid out as
+		/// a System.Numerics row-vector matrix: row 1 = forward, row 2 = left, row 3 = up, so
+		/// Vector3.Transform(local, m) takes a vector from entity space into world space.
+		/// This is the same basis Billboard.geom.hlsl builds for Oriented sprites, which
+		/// oriented_sprite_debbuging.map's 13 reference arrows confirm. Positive pitch looks DOWN
+		/// (angles "-90 0 0" is straight up, "90 0 0" straight down - what AngleControl writes).
+		/// The old CreateFromYawPitchRoll version applied yaw, roll, pitch in the wrong order about
+		/// world axes, so any combined pitch+yaw came out wrong.
+		/// </summary>
 		public static Matrix4x4 AngleMatrix(Vector3 pitchYawRoll)
 		{
 			var rad = pitchYawRoll * (float) Math.PI / 180f;
-			return Matrix4x4.CreateFromYawPitchRoll(rad.X, rad.Z, rad.Y);
+			float sp = (float) Math.Sin(rad.X), cp = (float) Math.Cos(rad.X);
+			float sy = (float) Math.Sin(rad.Y), cy = (float) Math.Cos(rad.Y);
+			float sr = (float) Math.Sin(rad.Z), cr = (float) Math.Cos(rad.Z);
+
+			var forward = new Vector3(cp * cy, cp * sy, -sp);
+			var left = new Vector3(sr * sp * cy - cr * sy, sr * sp * sy + cr * cy, sr * cp);
+			var up = new Vector3(cr * sp * cy + sr * sy, cr * sp * sy - sr * cy, cr * cp);
+
+			return new Matrix4x4(
+				forward.X, forward.Y, forward.Z, 0,
+				left.X, left.Y, left.Z, 0,
+				up.X, up.Y, up.Z, 0,
+				0, 0, 0, 1);
 		}
 
 		public static Vector3 AngleToDirection(Vector3 pitchYawRoll)
