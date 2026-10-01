@@ -32,6 +32,7 @@ namespace Sledge.Shell.Forms
 		private void InitializeComponent()
 		{
 			components = new System.ComponentModel.Container();
+			TopBar = new TableLayoutPanel();
 			MenuStrip = new MenuStrip();
 			StatusStrip = new StatusStrip();
 			ToolStripContainer = new ToolStripContainer();
@@ -57,10 +58,34 @@ namespace Sledge.Shell.Forms
 			// 
 			// MenuStrip
 			// 
+			// 
+			// TopBar: menu on the left, document tabs (with "+" button) to the right of it
+			// 
+			TopBar.ColumnCount = 2;
+			TopBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+			TopBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+			TopBar.RowCount = 1;
+			TopBar.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+			TopBar.Controls.Add(MenuStrip, 0, 0);
+			TopBar.Controls.Add(DocumentTabs, 1, 0);
+			TopBar.Dock = DockStyle.Top;
+			TopBar.Location = new System.Drawing.Point(0, 0);
+			TopBar.Margin = new Padding(0);
+			TopBar.Name = "TopBar";
+			TopBar.Padding = new Padding(0);
+			TopBar.Size = new System.Drawing.Size(808, 24);
+			TopBar.TabIndex = 0;
+			// 
+			// MenuStrip
+			// 
+			MenuStrip.AutoSize = true;
+			MenuStrip.Dock = DockStyle.Fill;
+			MenuStrip.GripStyle = ToolStripGripStyle.Hidden;
 			MenuStrip.Location = new System.Drawing.Point(0, 0);
+			MenuStrip.Margin = new Padding(0);
 			MenuStrip.Name = "MenuStrip";
 			MenuStrip.Padding = new Padding(7, 2, 0, 2);
-			MenuStrip.Size = new System.Drawing.Size(808, 24);
+			MenuStrip.Size = new System.Drawing.Size(300, 24);
 			MenuStrip.TabIndex = 0;
 			MenuStrip.Text = "menuStrip1";
 			// 
@@ -79,7 +104,6 @@ namespace Sledge.Shell.Forms
 			// ToolStripContainer.ContentPanel
 			// 
 			ToolStripContainer.ContentPanel.Controls.Add(DocumentContainer);
-			ToolStripContainer.ContentPanel.Controls.Add(DocumentTabs);
 			ToolStripContainer.ContentPanel.Controls.Add(RightSidebar);
 			ToolStripContainer.ContentPanel.Controls.Add(LeftSidebar);
 			ToolStripContainer.ContentPanel.Controls.Add(BottomSidebar);
@@ -108,14 +132,15 @@ namespace Sledge.Shell.Forms
 			// 
 			// DocumentTabs
 			// 
-			DocumentTabs.Dock = DockStyle.Top;
-			DocumentTabs.Location = new System.Drawing.Point(9, 0);
-			DocumentTabs.Margin = new Padding(4, 3, 4, 3);
+			DocumentTabs.Dock = DockStyle.Fill;
+			DocumentTabs.Location = new System.Drawing.Point(300, 0);
+			DocumentTabs.Margin = new Padding(0);
 			DocumentTabs.Name = "DocumentTabs";
 			DocumentTabs.SelectedIndex = 0;
-			DocumentTabs.Size = new System.Drawing.Size(540, 28);
-			DocumentTabs.TabIndex = 4;
+			DocumentTabs.Size = new System.Drawing.Size(508, 24);
+			DocumentTabs.TabIndex = 1;
 			DocumentTabs.RequestClose += RequestClose;
+			DocumentTabs.RequestNew += RequestNewDocument;
 			DocumentTabs.SelectedIndexChanged += TabChanged;
 			// 
 			// RightSidebar
@@ -226,7 +251,7 @@ namespace Sledge.Shell.Forms
 			ClientSize = new System.Drawing.Size(808, 523);
 			Controls.Add(ToolStripContainer);
 			Controls.Add(StatusStrip);
-			Controls.Add(MenuStrip);
+			Controls.Add(TopBar);
 			MainMenuStrip = MenuStrip;
 			Margin = new Padding(4, 3, 4, 3);
 			Name = "Shell";
@@ -257,6 +282,7 @@ namespace Sledge.Shell.Forms
         private TabPage tabPage2;
         internal TabPage tabPage1;
         internal TabControl BottomTabs;
+        private System.Windows.Forms.TableLayoutPanel TopBar;
         internal MenuStrip MenuStrip;
         internal ToolStrip ToolsContainer;
         internal StatusStrip StatusStrip;

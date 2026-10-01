@@ -1,4 +1,5 @@
 ﻿
+using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
@@ -10,6 +11,11 @@ namespace Sledge.Shell.Controls
         public delegate void RequestCloseEventHandler(object sender, int index);
 
         public event RequestCloseEventHandler RequestClose;
+
+        /// <summary>
+        /// Raised when the "+" (new map) button after the last tab is clicked.
+        /// </summary>
+        public event System.EventHandler RequestNew;
 
         private void OnRequestClose(int index)
         {
@@ -78,6 +84,13 @@ namespace Sledge.Shell.Controls
             if (!DesignMode && (m.Msg == WM_LBUTTONDOWN || m.Msg == WM_MBUTTONDOWN))
             {
                 var pt = PointToClient(Cursor.Position);
+                if (m.Msg == WM_LBUTTONDOWN && GetPlusRect().Contains(pt))
+                {
+                    m.Msg = WM_NULL;
+                    RequestNew?.Invoke(this, System.EventArgs.Empty);
+                    base.WndProc(ref m);
+                    return;
+                }
                 for (var i = 0; i < TabPages.Count; i++)
                 {
                     var rect = m.Msg == WM_LBUTTONDOWN ? GetCloseRect(i) : GetTabRect(i);
@@ -115,6 +128,8 @@ namespace Sledge.Shell.Controls
             g.SetClip(new Rectangle(display.Left, ClientRectangle.Top, display.Width, ClientRectangle.Height));
 
             for (var i = 0; i < TabPages.Count; i++) RenderTab(g, i);
+
+            RenderPlus(g);
 
             g.Clip = clip;
         }
@@ -189,6 +204,42 @@ namespace Sledge.Shell.Controls
                 const int padding = 5;
                 g.DrawLine(pen, closeRect.Left + padding, closeRect.Top + padding, closeRect.Right - padding, closeRect.Bottom - padding);
                 g.DrawLine(pen, closeRect.Right - padding, closeRect.Top + padding, closeRect.Left + padding, closeRect.Bottom - padding);
+            }
+        }
+
+        private Rectangle GetPlusRect()
+        {
+            var x = 4;
+            var y = 2;
+            var h = 20;
+            if (TabPages.Count > 0)
+            {
+                var last = GetTabRect(TabPages.Count - 1);
+                x = last.Right + 4;
+                y = last.Top;
+                h = last.Height;
+            }
+            return new Rectangle(x, y, Math.Max(h, 20), h);
+        }
+
+        private void RenderPlus(Graphics g)
+        {
+            var rect = GetPlusRect();
+            var hover = rect.Contains(PointToClient(MousePosition));
+            if (hover)
+            {
+                using (var b = new SolidBrush(ControlPaint.Light(_backTabColor, 0.8f)))
+                {
+                    g.FillRectangle(b, rect);
+                }
+            }
+            using (var pen = new Pen(_foreColor, 1.5f))
+            {
+                var cx = rect.Left + rect.Width / 2;
+                var cy = rect.Top + rect.Height / 2;
+                const int arm = 5;
+                g.DrawLine(pen, cx - arm, cy, cx + arm, cy);
+                g.DrawLine(pen, cx, cy - arm, cx, cy + arm);
             }
         }
 

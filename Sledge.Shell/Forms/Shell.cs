@@ -1,4 +1,5 @@
 ﻿using LogicAndTrick.Oy;
+using Sledge.Common.Shell.Commands;
 using Sledge.Common.Shell.Documents;
 using Sledge.Common.Shell.Settings;
 using Sledge.Common.Translations;
@@ -417,6 +418,11 @@ namespace Sledge.Shell.Forms
 		private void TabChanged(object sender, EventArgs e)
 		{
 			_documentRegister.Value.ActivateDocument(DocumentTabs.SelectedTab?.Tag as IDocument);
+		}
+
+		private void RequestNewDocument(object sender, EventArgs e)
+		{
+			Oy.Publish("Command:Run", new CommandMessage("File:New"));
 		}
 
 		private void RequestClose(object sender, int index)
