@@ -334,12 +334,14 @@ namespace Sledge.BspEditor.Tools.Texture
 			return set;
 		}
 
-		private async void PackageTreeAfterCheck(object sender, TreeViewEventArgs e)
+		private void PackageTreeAfterCheck(object sender, TreeViewEventArgs e)
 		{
 			// Ignore checkbox changes we made ourselves (rebuilding the tree, syncing "All Packages").
 			if (_updatingPackageList || e.Node == null) return;
-			if (!(_document?.Environment is ITexturePackageManager packageManager)) return;
+			if (!(_document?.Environment is ITexturePackageManager)) return;
 
+			// Ticking only changes what is shown here. Nothing is applied or saved until
+			// "Reload Textures" is clicked.
 			var root = e.Node.Parent == null ? e.Node : e.Node.Parent;
 
 			_updatingPackageList = true;
@@ -360,19 +362,6 @@ namespace Sledge.BspEditor.Tools.Texture
 			{
 				_updatingPackageList = false;
 			}
-
-			// Remember the selection only. Nothing is reloaded until "Reload Textures" is clicked.
-			var disabled = new HashSet<string>(
-				root.Nodes.Cast<TreeNode>().Where(n => !n.Checked).Select(n => n.Name),
-				StringComparer.InvariantCultureIgnoreCase);
-
-			packageManager.SetPendingDisabledTexturePackages(disabled);
-
-			if (!String.IsNullOrWhiteSpace(_document?.FileName))
-			{
-				MapTexturePackageSettingsManager.GetInstance()?.SetDisabledPackages(_document.FileName, disabled);
-				await Oy.Publish("Settings:Save");
-			}
 		}
 
 		private async Task RefreshTexturesFromEnvironment()
@@ -392,6 +381,22 @@ namespace Sledge.BspEditor.Tools.Texture
 			{
 				if (_document != null)
 				{
+					// Apply and save the package selection now (and only now)
+					if (_document.Environment is ITexturePackageManager packageManager && PackageTree.Nodes.Count > 0)
+					{
+						var disabled = new HashSet<string>(
+							PackageTree.Nodes[0].Nodes.Cast<TreeNode>().Where(n => !n.Checked).Select(n => n.Name),
+							StringComparer.InvariantCultureIgnoreCase);
+
+						packageManager.SetPendingDisabledTexturePackages(disabled);
+
+						if (!String.IsNullOrWhiteSpace(_document.FileName))
+						{
+							MapTexturePackageSettingsManager.GetInstance()?.SetDisabledPackages(_document.FileName, disabled);
+							await Oy.Publish("Settings:Save");
+						}
+					}
+
 					await Oy.Publish("Command:Run", new CommandMessage("BspEditor:Textures:Reload"));
 					await RefreshTexturesFromEnvironment();
 				}
