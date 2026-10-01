@@ -48,6 +48,7 @@ namespace Sledge.BspEditor.Tools.Selection
             MoveArrowWidgetCheckbox = new System.Windows.Forms.CheckBox();
             RotationArcWidgetCheckbox = new System.Windows.Forms.CheckBox();
             CameraWidgetCheckbox = new System.Windows.Forms.CheckBox();
+            AutoSelectBoxCheckbox = new System.Windows.Forms.CheckBox();
             flowLayoutPanel1.SuspendLayout();
             flowLayoutPanel2.SuspendLayout();
             SuspendLayout();
@@ -138,6 +139,18 @@ namespace Sledge.BspEditor.Tools.Selection
             CameraWidgetCheckbox.UseVisualStyleBackColor = true;
             CameraWidgetCheckbox.CheckedChanged += WidgetToggleChecked;
             // 
+            // AutoSelectBoxCheckbox
+            // 
+            AutoSelectBoxCheckbox.AutoSize = true;
+            AutoSelectBoxCheckbox.Location = new System.Drawing.Point(8, 192);
+            AutoSelectBoxCheckbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
+            AutoSelectBoxCheckbox.Name = "AutoSelectBoxCheckbox";
+            AutoSelectBoxCheckbox.Size = new System.Drawing.Size(140, 19);
+            AutoSelectBoxCheckbox.TabIndex = 18;
+            AutoSelectBoxCheckbox.Text = "Auto-select box";
+            AutoSelectBoxCheckbox.UseVisualStyleBackColor = true;
+            AutoSelectBoxCheckbox.CheckedChanged += AutoSelectBoxChecked;
+            // 
             // lblMode
             // 
             lblMode.AutoSize = true;
@@ -215,7 +228,7 @@ namespace Sledge.BspEditor.Tools.Selection
             // lblActions
             // 
             lblActions.AutoSize = true;
-            lblActions.Location = new System.Drawing.Point(4, 218);
+            lblActions.Location = new System.Drawing.Point(4, 242);
             lblActions.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
             lblActions.Name = "lblActions";
             lblActions.Size = new System.Drawing.Size(50, 15);
@@ -242,7 +255,7 @@ namespace Sledge.BspEditor.Tools.Selection
             flowLayoutPanel2.Controls.Add(MoveToWorldButton);
             flowLayoutPanel2.Controls.Add(MoveToEntityButton);
             flowLayoutPanel2.FlowDirection = System.Windows.Forms.FlowDirection.TopDown;
-            flowLayoutPanel2.Location = new System.Drawing.Point(4, 236);
+            flowLayoutPanel2.Location = new System.Drawing.Point(4, 260);
             flowLayoutPanel2.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             flowLayoutPanel2.Name = "flowLayoutPanel2";
             flowLayoutPanel2.Size = new System.Drawing.Size(257, 61);
@@ -251,7 +264,7 @@ namespace Sledge.BspEditor.Tools.Selection
             // 
             // keepEntityAngle
             // 
-            keepEntityAngle.Location = new System.Drawing.Point(8, 192);
+            keepEntityAngle.Location = new System.Drawing.Point(8, 216);
             keepEntityAngle.Name = "keepEntityAngle";
             keepEntityAngle.Size = new System.Drawing.Size(122, 26);
             keepEntityAngle.TabIndex = 12;
@@ -276,9 +289,10 @@ namespace Sledge.BspEditor.Tools.Selection
             Controls.Add(MoveArrowWidgetCheckbox);
             Controls.Add(RotationArcWidgetCheckbox);
             Controls.Add(CameraWidgetCheckbox);
+            Controls.Add(AutoSelectBoxCheckbox);
             Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             Padding = new System.Windows.Forms.Padding(6, 6, 6, 6);
-            Size = new System.Drawing.Size(271, 306);
+            Size = new System.Drawing.Size(271, 330);
             flowLayoutPanel1.ResumeLayout(false);
             flowLayoutPanel1.PerformLayout();
             flowLayoutPanel2.ResumeLayout(false);
@@ -297,6 +311,7 @@ namespace Sledge.BspEditor.Tools.Selection
         private System.Windows.Forms.CheckBox MoveArrowWidgetCheckbox;
         private System.Windows.Forms.CheckBox RotationArcWidgetCheckbox;
         private System.Windows.Forms.CheckBox CameraWidgetCheckbox;
+        private System.Windows.Forms.CheckBox AutoSelectBoxCheckbox;
         private System.Windows.Forms.Label lblMode;
         private System.Windows.Forms.CheckBox TranslateModeCheckbox;
         private System.Windows.Forms.CheckBox RotateModeCheckbox;

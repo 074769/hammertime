@@ -99,6 +99,7 @@ namespace Sledge.BspEditor.Tools.Selection
 		{
 			store.LoadInstance(this);
 			Oy.Publish("SelectTool:SetShow3DWidgets", Show3DWidgets ? "1" : "0");
+			Oy.Publish("SelectTool:SetAutoSelectBox", AutoSelectBox ? "1" : "0");
 			_selectionBox.SetWidgetToggles(ShowMoveWidget, ShowRotateWidget, ShowMoveArrowWidget, ShowRotationArcWidget);
 			Sledge.BspEditor.Rendering.Overlay.Camera2DOverlay.ShowCameraWidget = ShowCameraWidget;
 			Oy.Publish("SelectTool:SetWidgetToggles", WidgetTogglesToString());
@@ -153,6 +154,10 @@ namespace Sledge.BspEditor.Tools.Selection
 					if (mode != _selectionBox.CurrentTransformationMode)
 						_selectionBox.SetTransformationMode(mode);
 				}
+			});
+			Oy.Subscribe<string>("SelectTool:AutoSelectBoxChanged", x =>
+			{
+				AutoSelectBox = x == "1";
 			});
 			Oy.Subscribe<string>("SelectTool:Show3DWidgetsChanged", x =>
 			{

@@ -172,6 +172,7 @@
             "Rotate": "Rotate",
             "Skew": "Skew",
             "Show3DWidgets": "Show 3D widgets",
+            "AutoSelectBox": "Auto-select box",
             "MoveWidget": "Move widget",
             "RotateWidget": "Rotate widget",
             "MoveArrowWidget": "Move arrow",

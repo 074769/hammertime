@@ -41,6 +41,11 @@ namespace Sledge.BspEditor.Tools.Selection
 				Show3DWidgetsCheckbox.Checked = x == "1";
 			});
 
+			Oy.Subscribe<String>("SelectTool:SetAutoSelectBox", x =>
+			{
+				AutoSelectBoxCheckbox.Checked = x == "1";
+			});
+
 			Oy.Subscribe<String>("SelectTool:SetWidgetToggles", x =>
 			{
 				if (string.IsNullOrEmpty(x) || x.Length < 4) return;
@@ -73,6 +78,7 @@ namespace Sledge.BspEditor.Tools.Selection
 				RotateModeCheckbox.Text = strings.GetString(prefix, "Rotate");
 				SkewModeCheckbox.Text = strings.GetString(prefix, "Skew");
 				Show3DWidgetsCheckbox.Text = strings.GetString(prefix, "Show3DWidgets");
+				AutoSelectBoxCheckbox.Text = strings.GetString(prefix, "AutoSelectBox") ?? AutoSelectBoxCheckbox.Text;
 				MoveWidgetCheckbox.Text = strings.GetString(prefix, "MoveWidget") ?? MoveWidgetCheckbox.Text;
 				RotateWidgetCheckbox.Text = strings.GetString(prefix, "RotateWidget") ?? RotateWidgetCheckbox.Text;
 				MoveArrowWidgetCheckbox.Text = strings.GetString(prefix, "MoveArrowWidget") ?? MoveArrowWidgetCheckbox.Text;
@@ -164,6 +170,11 @@ namespace Sledge.BspEditor.Tools.Selection
 			// (the camera widget is drawn in the 2D views, so it is independent of this checkbox)
 			MoveWidgetCheckbox.Enabled = RotateWidgetCheckbox.Enabled =
 				MoveArrowWidgetCheckbox.Enabled = RotationArcWidgetCheckbox.Enabled = Show3DWidgetsCheckbox.Checked;
+		}
+
+		private void AutoSelectBoxChecked(object sender, EventArgs e)
+		{
+			Oy.Publish("SelectTool:AutoSelectBoxChanged", AutoSelectBoxCheckbox.Checked ? "1" : "0");
 		}
 
 		private void WidgetToggleChecked(object sender, EventArgs e)
