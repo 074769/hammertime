@@ -285,12 +285,9 @@ namespace Sledge.Shell.Registers
 				if (_toolbarMenu == null) _toolbarMenu = BuildToolbarMenu();
 
 				var iconSize = TopToolbarSettings.IconSize;
-				panel.SuspendLayout();
-				// Strips are placed at explicit positions, left to right (or top to bottom) in section order.
-				// Letting the panel pick the position of each re-joined strip used stale strip sizes (the settings
-				// load a moment after startup and trigger a second render), which shifted the strips on the right.
-				var pos = 0;
-				foreach (var ts in RootNodes.Values.OrderBy(x => x.OrderHint))
+				panel.BeginInit();
+				// Joined in descending order, like the first render: the panel puts each newly joined strip at the start of the row
+				foreach (var ts in RootNodes.Values.OrderByDescending(x => x.OrderHint))
 				{
 					ts.ApplyLayout(layout, iconSize);
 					if (ts.ToolStrip.Items.Count == 0) continue;
@@ -303,25 +300,18 @@ namespace Sledge.Shell.Registers
 					strip.GripStyle = TopToolbarSettings.Locked ? ToolStripGripStyle.Hidden : ToolStripGripStyle.Visible;
 					strip.ContextMenuStrip = _toolbarMenu;
 
-					// Measure the strip with its new buttons before it is joined, so its size is never stale
+					// Measure the strip with its new buttons and forget its old position before it is joined,
+					// so the panel never works from a stale size or location (the settings load a moment after
+					// startup and trigger a second render, which used to shift the strips on the right)
 					strip.AutoSize = true;
 					strip.PerformLayout();
-					var size = strip.GetPreferredSize(Size.Empty);
-					strip.Size = size;
+					strip.Size = strip.GetPreferredSize(Size.Empty);
+					strip.Location = Point.Empty;
 
-					if (vertical)
-					{
-						panel.Join(strip, 0, pos);
-						pos += size.Height;
-					}
-					else
-					{
-						panel.Join(strip, pos, 0);
-						pos += size.Width;
-					}
+					panel.Join(strip);
 					_joinedStrips.Add(strip);
 				}
-				panel.ResumeLayout(true);
+				panel.EndInit();
 				panel.ContextMenuStrip = _toolbarMenu;
 
 				ApplyToolbarTheme();
