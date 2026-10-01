@@ -9,6 +9,7 @@ using Sledge.BspEditor.Environment;
 using Sledge.BspEditor.Modification;
 using Sledge.BspEditor.Modification.ChangeHandling;
 using Sledge.BspEditor.Primitives.MapObjects;
+using Sledge.BspEditor.Rendering.Converters;
 using Sledge.BspEditor.Rendering.Resources;
 using Sledge.DataStructures.GameData;
 using Sledge.DataStructures.Geometric;
@@ -106,7 +107,7 @@ namespace Sledge.BspEditor.Rendering.ChangeHandlers
 				if (colProp != null)
 				{
 					var col = entity.EntityData.GetVector3(colProp.Name);
-					if (colProp.VariableType == VariableType.Color255) col /= 255f;
+					if (colProp.VariableType == VariableType.Color255) col = RenderColorProfile.ResolveTint(col, doc.Environment);
 					if (col.HasValue) color = col.Value.ToColor();
 				}
 

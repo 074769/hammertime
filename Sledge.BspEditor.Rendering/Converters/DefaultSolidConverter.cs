@@ -103,7 +103,7 @@ namespace Sledge.BspEditor.Rendering.Converters
 				{
 					case renderModeColor:
 						// Flat colour, use render colour and force it to run through the alpha tested pipeline
-						var rendercolor = parentEntity.EntityData.GetVector3("rendercolor") / 255f ?? Vector3.One;
+						var rendercolor = RenderColorProfile.ResolveTint(parentEntity.EntityData.GetVector3("rendercolor"), document.Environment);
 						tint = new Vector4(rendercolor, renderamt);
 						flags |= VertexFlags.FlatColour | VertexFlags.AlphaTested;
 						pipeline = PipelineType.TexturedAlpha;
