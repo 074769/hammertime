@@ -73,6 +73,8 @@ namespace Sledge.Shell.Controls
         private const int WM_NULL = 0x0;
         private const int WM_MBUTTONDOWN = 0x0207;
         private const int WM_LBUTTONDOWN = 0x0201;
+        private const int WM_LBUTTONUP = 0x0202;
+        private bool _plusPressed;
 		private Color _backColor;
 		private Color _foreColor;
 		private Color _backTabColor;
@@ -81,14 +83,29 @@ namespace Sledge.Shell.Controls
 
 		protected override void WndProc(ref Message m)
         {
+            if (!DesignMode && m.Msg == WM_LBUTTONUP && _plusPressed)
+            {
+                _plusPressed = false;
+                Capture = false;
+                var over = GetPlusRect().Contains(PointToClient(Cursor.Position));
+                Invalidate();
+                if (over)
+                {
+                    // Run after the message has finished so the tab list isn't modified mid-message
+                    BeginInvoke(new Action(() => RequestNew?.Invoke(this, EventArgs.Empty)));
+                }
+                return;
+            }
+
             if (!DesignMode && (m.Msg == WM_LBUTTONDOWN || m.Msg == WM_MBUTTONDOWN))
             {
                 var pt = PointToClient(Cursor.Position);
                 if (m.Msg == WM_LBUTTONDOWN && GetPlusRect().Contains(pt))
                 {
-                    m.Msg = WM_NULL;
-                    RequestNew?.Invoke(this, System.EventArgs.Empty);
-                    base.WndProc(ref m);
+                    // Button behaviour: press now, fire on release while still over the button
+                    _plusPressed = true;
+                    Capture = true;
+                    Invalidate();
                     return;
                 }
                 for (var i = 0; i < TabPages.Count; i++)
@@ -105,7 +122,15 @@ namespace Sledge.Shell.Controls
 
         protected override void OnMouseMove(MouseEventArgs e)
         {
+            Cursor = GetPlusRect().Contains(e.Location) ? Cursors.Hand : Cursors.Default;
             Invalidate();
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            Cursor = Cursors.Default;
+            Invalidate();
+            base.OnMouseLeave(e);
         }
 
         private void Render(Graphics g)
@@ -241,7 +266,8 @@ namespace Sledge.Shell.Controls
             // Same colours as an unselected tab (lighter on hover)
             var hover = rect.Contains(PointToClient(MousePosition));
             var backColour = _backTabColor;
-            if (hover) backColour = ControlPaint.Light(backColour, 0.8f);
+            if (_plusPressed && hover) backColour = ControlPaint.Light(backColour, 1);
+            else if (hover) backColour = ControlPaint.Light(backColour, 0.8f);
 
             using (var b = new SolidBrush(backColour))
             {
