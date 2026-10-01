@@ -285,22 +285,43 @@ namespace Sledge.Shell.Registers
 				if (_toolbarMenu == null) _toolbarMenu = BuildToolbarMenu();
 
 				var iconSize = TopToolbarSettings.IconSize;
-				panel.BeginInit();
-				foreach (var ts in RootNodes.Values.OrderByDescending(x => x.OrderHint))
+				panel.SuspendLayout();
+				// Strips are placed at explicit positions, left to right (or top to bottom) in section order.
+				// Letting the panel pick the position of each re-joined strip used stale strip sizes (the settings
+				// load a moment after startup and trigger a second render), which shifted the strips on the right.
+				var pos = 0;
+				foreach (var ts in RootNodes.Values.OrderBy(x => x.OrderHint))
 				{
 					ts.ApplyLayout(layout, iconSize);
 					if (ts.ToolStrip.Items.Count == 0) continue;
 
-					ts.ToolStrip.ImageScalingSize = new Size(iconSize, iconSize);
-					WireDragDrop(ts.ToolStrip);
+					var strip = ts.ToolStrip;
+					strip.ImageScalingSize = new Size(iconSize, iconSize);
+					WireDragDrop(strip);
 
-					ts.ToolStrip.LayoutStyle = vertical ? ToolStripLayoutStyle.VerticalStackWithOverflow : ToolStripLayoutStyle.Flow;
-					ts.ToolStrip.GripStyle = TopToolbarSettings.Locked ? ToolStripGripStyle.Hidden : ToolStripGripStyle.Visible;
-					ts.ToolStrip.ContextMenuStrip = _toolbarMenu;
-					panel.Join(ts.ToolStrip);
-					_joinedStrips.Add(ts.ToolStrip);
+					strip.LayoutStyle = vertical ? ToolStripLayoutStyle.VerticalStackWithOverflow : ToolStripLayoutStyle.Flow;
+					strip.GripStyle = TopToolbarSettings.Locked ? ToolStripGripStyle.Hidden : ToolStripGripStyle.Visible;
+					strip.ContextMenuStrip = _toolbarMenu;
+
+					// Measure the strip with its new buttons before it is joined, so its size is never stale
+					strip.AutoSize = true;
+					strip.PerformLayout();
+					var size = strip.GetPreferredSize(Size.Empty);
+					strip.Size = size;
+
+					if (vertical)
+					{
+						panel.Join(strip, 0, pos);
+						pos += size.Height;
+					}
+					else
+					{
+						panel.Join(strip, pos, 0);
+						pos += size.Width;
+					}
+					_joinedStrips.Add(strip);
 				}
-				panel.EndInit();
+				panel.ResumeLayout(true);
 				panel.ContextMenuStrip = _toolbarMenu;
 
 				ApplyToolbarTheme();
