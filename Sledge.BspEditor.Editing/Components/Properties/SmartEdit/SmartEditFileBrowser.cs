@@ -7,6 +7,7 @@ using System.Threading;
 using System.Windows.Forms;
 using Sledge.BspEditor.Controls.FileSystem;
 using Sledge.BspEditor.Documents;
+using Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser;
 using Sledge.Common.Logging;
 using Sledge.Common.Translations;
 using Sledge.DataStructures.GameData;
@@ -87,6 +88,20 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit
 		private void OpenModelBrowser(object sender, EventArgs e)
 		{
 			if (!_root.TryGetTarget(out var rt)) return;
+
+			// Models get the dedicated browser (folder tree, search, static preview)
+			if (Property.VariableType == VariableType.Studio)
+			{
+				using (var mb = new ModelBrowserDialog(rt, _textBox.Text))
+				{
+					if (mb.ShowDialog() == DialogResult.OK && mb.SelectedFile != null)
+					{
+						_textBox.Text = GetPath(mb.SelectedFile);
+					}
+				}
+				return;
+			}
+
 			var path = rt;
 			var basePath = _textBox.Text;
 			switch (Property.VariableType)
