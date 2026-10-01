@@ -32,7 +32,7 @@ namespace Sledge.Shell.Forms
 		private void InitializeComponent()
 		{
 			components = new System.ComponentModel.Container();
-			TopBar = new TableLayoutPanel();
+			TopBar = new Panel();
 			MenuStrip = new MenuStrip();
 			StatusStrip = new StatusStrip();
 			ToolStripContainer = new ToolStripContainer();
@@ -63,13 +63,9 @@ namespace Sledge.Shell.Forms
 			// 
 			// TopBar: menu on the left, document tabs (with "+" button) to the right of it
 			// 
-			TopBar.ColumnCount = 2;
-			TopBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-			TopBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-			TopBar.RowCount = 1;
-			TopBar.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-			TopBar.Controls.Add(MenuStrip, 0, 0);
-			TopBar.Controls.Add(TabHost, 1, 0);
+			// Fill control first, then the left-docked menu, so the tabs get all the space the menu doesn't use
+			TopBar.Controls.Add(TabHost);
+			TopBar.Controls.Add(MenuStrip);
 			TopBar.Dock = DockStyle.Top;
 			TopBar.Location = new System.Drawing.Point(0, 0);
 			TopBar.Margin = new Padding(0);
@@ -81,7 +77,8 @@ namespace Sledge.Shell.Forms
 			// MenuStrip
 			// 
 			MenuStrip.AutoSize = true;
-			MenuStrip.Dock = DockStyle.Fill;
+			MenuStrip.Stretch = false;
+			MenuStrip.Dock = DockStyle.Left;
 			MenuStrip.GripStyle = ToolStripGripStyle.Hidden;
 			MenuStrip.Location = new System.Drawing.Point(0, 0);
 			MenuStrip.Margin = new Padding(0);
@@ -304,7 +301,7 @@ namespace Sledge.Shell.Forms
         private TabPage tabPage2;
         internal TabPage tabPage1;
         internal TabControl BottomTabs;
-        private System.Windows.Forms.TableLayoutPanel TopBar;
+        private System.Windows.Forms.Panel TopBar;
         private System.Windows.Forms.Panel TabHost;
         private Sledge.Shell.Controls.NewTabButton NewTabButton;
         internal MenuStrip MenuStrip;
