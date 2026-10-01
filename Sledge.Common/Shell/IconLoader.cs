@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Drawing;
+using System.IO;
 using System.Reflection;
 using Svg;
 
@@ -31,6 +32,44 @@ namespace Sledge.Common.Shell
             var result = svg ?? png;
             if (result != null) Cache[key] = result;
             return result;
+        }
+
+        /// <summary>
+        /// Loads a user-supplied icon from disk (.svg, .png, .ico, .bmp, .jpg, .gif).
+        /// Returns null if the file is missing or can't be read.
+        /// </summary>
+        public static Image LoadFromFile(string path, int size)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
+
+            var key = "file|" + path + "|" + File.GetLastWriteTimeUtc(path).Ticks + "|" + size;
+            if (Cache.TryGetValue(key, out var cached)) return cached;
+
+            try
+            {
+                Image result;
+                var ext = Path.GetExtension(path) ?? "";
+                if (ext.Equals(".svg", StringComparison.OrdinalIgnoreCase))
+                {
+                    var doc = SvgDocument.Open<SvgDocument>(path);
+                    result = doc.Draw(size, size);
+                }
+                else if (ext.Equals(".ico", StringComparison.OrdinalIgnoreCase))
+                {
+                    using (var icon = new Icon(path, size, size)) result = icon.ToBitmap();
+                }
+                else
+                {
+                    // Copy into a new bitmap so the file isn't left locked
+                    using (var img = Image.FromFile(path)) result = new Bitmap(img, size, size);
+                }
+                if (result != null) Cache[key] = result;
+                return result;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
         }
 
         private static Image GetPng(Type resourceType, string resourceName)

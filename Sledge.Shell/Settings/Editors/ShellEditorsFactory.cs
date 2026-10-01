@@ -53,6 +53,10 @@ namespace Sledge.Shell.Settings.Editors
             {
                 return true;
             }
+            else if (key.Type == typeof(ToolbarLayout))
+            {
+                return true;
+            }
             return false;
         }
 
@@ -94,6 +98,10 @@ namespace Sledge.Shell.Settings.Editors
             else if (key.Type == typeof(DocumentRegister.FileAssociations))
             {
                 return new FileAssociationsEditor();
+            }
+            else if (key.Type == typeof(ToolbarLayout))
+            {
+                return new ToolbarEditor();
             }
             return null;
         }

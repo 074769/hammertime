@@ -1,16 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
+using System.Drawing;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using LogicAndTrick.Oy;
 using Sledge.Common.Logging;
+using Sledge.Common.Shell;
 using Sledge.Common.Shell.Components;
 using Sledge.Common.Shell.Context;
 using Sledge.Common.Shell.Documents;
 using Sledge.Common.Shell.Hooks;
 using Sledge.Common.Shell.Hotkeys;
+using Sledge.Shell.Settings;
 
 namespace Sledge.Shell.Registers
 {
@@ -34,8 +37,16 @@ namespace Sledge.Shell.Registers
 				_components.Add(export.Value);
 			}
 
+			AllTools = _components.ToList();
+
 			// Subscribe to context changes
 			Oy.Subscribe<IContext>("Context:Changed", ContextChanged);
+
+			// Rebuild the toolbar when settings change (order, visibility and icons are user settings)
+			Oy.Subscribe<object>("SettingsChanged", async _ =>
+			{
+				if (_lastContext != null) await ContextChanged(_lastContext);
+			});
 
 			Oy.Subscribe<string>("ActivateTool", async x =>
 			{
@@ -45,6 +56,25 @@ namespace Sledge.Shell.Registers
 		}
 
 		private readonly List<ITool> _components;
+		private IContext _lastContext;
+
+		/// <summary>
+		/// Every registered tool in default order (used by the toolbar settings editor).
+		/// </summary>
+		internal static IReadOnlyList<ITool> AllTools { get; private set; }
+
+		/// <summary>
+		/// The icon to show for a tool: the user's custom icon if one is set and loads, otherwise the tool's own icon.
+		/// </summary>
+		internal static Image GetToolIcon(ITool tool, ToolbarEntry entry, int size)
+		{
+			if (entry != null && !string.IsNullOrWhiteSpace(entry.IconPath))
+			{
+				var custom = IconLoader.LoadFromFile(entry.IconPath, size);
+				if (custom != null) return custom;
+			}
+			return tool.Icon;
+		}
 
 		public ToolRegister()
 		{
@@ -58,9 +88,17 @@ namespace Sledge.Shell.Registers
 
 		private async Task ContextChanged(IContext context)
 		{
+			_lastContext = context;
 			var activeDocument = context.Get<IDocument>("ActiveDocument");
 			var activeTool = context.Get<ITool>("ActiveTool");
 			var toolsInContext = _components.Where(x => activeDocument?.Capabilities.Contains(x.ToolCapability) ?? false && x.IsInContext(context)).ToList();
+
+			// Apply the user's toolbar layout: order, and which tools are visible
+			var layout = ToolbarSettings.Layout.Resolve(toolsInContext.Select(x => x.Name));
+			var toolbarTools = layout
+				.Where(x => x.Visible)
+				.Select(x => new { Tool = toolsInContext.First(t => t.Name == x.Name), Entry = x })
+				.ToList();
 
 			// If there are any tools available, or the active tool exists
 			// And if the active tool isn't in context
@@ -68,7 +106,8 @@ namespace Sledge.Shell.Registers
 			if ((toolsInContext.Any() || activeTool != null) && !toolsInContext.Contains(activeTool))
 			{
 				// This will change the context anyway so return immediately
-				activeTool = toolsInContext.FirstOrDefault();
+				// Prefer the first tool that is shown in the toolbar
+				activeTool = toolbarTools.Select(x => x.Tool).FirstOrDefault() ?? toolsInContext.FirstOrDefault();
 				await ActivateTool(activeTool);
 				return;
 			}
@@ -77,9 +116,10 @@ namespace Sledge.Shell.Registers
 			{
 				_shell.ToolsContainer.SuspendLayout();
 				_shell.ToolsContainer.Items.Clear();
-				foreach (var tl in toolsInContext)
+				foreach (var tb in toolbarTools)
 				{
-					var toolButton = new ToolStripButton("", tl.Icon, async (s, ea) => await ActivateTool(tl), tl.Name)
+					var tl = tb.Tool;
+					var toolButton = new ToolStripButton("", GetToolIcon(tl, tb.Entry, 32), async (s, ea) => await ActivateTool(tl), tl.Name)
 					{
 						Checked = tl == activeTool,
 						ToolTipText = tl.Name,
