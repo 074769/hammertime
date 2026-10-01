@@ -209,34 +209,53 @@ namespace Sledge.Shell.Controls
 
         private Rectangle GetPlusRect()
         {
-            var x = 4;
+            var x = 2;
             var y = 2;
-            var h = 20;
+            var h = 22;
             if (TabPages.Count > 0)
             {
                 var last = GetTabRect(TabPages.Count - 1);
-                x = last.Right + 4;
+                x = last.Right + 2;
                 y = last.Top;
                 h = last.Height;
             }
-            return new Rectangle(x, y, Math.Max(h, 20), h);
+            return new Rectangle(x, y, 30, h);
         }
 
         private void RenderPlus(Graphics g)
         {
             var rect = GetPlusRect();
-            var hover = rect.Contains(PointToClient(MousePosition));
-            if (hover)
+
+            // Same shape as a tab
+            var points = new[]
             {
-                using (var b = new SolidBrush(ControlPaint.Light(_backTabColor, 0.8f)))
-                {
-                    g.FillRectangle(b, rect);
-                }
+                new Point(rect.Left, rect.Bottom),
+                new Point(rect.Left, rect.Top + 3),
+                new Point(rect.Left + 3, rect.Top),
+                new Point(rect.Right - 3, rect.Top),
+                new Point(rect.Right, rect.Top + 3),
+                new Point(rect.Right, rect.Bottom),
+                new Point(rect.Left, rect.Bottom)
+            };
+
+            // Same colours as an unselected tab (lighter on hover)
+            var hover = rect.Contains(PointToClient(MousePosition));
+            var backColour = _backTabColor;
+            if (hover) backColour = ControlPaint.Light(backColour, 0.8f);
+
+            using (var b = new SolidBrush(backColour))
+            {
+                g.FillPolygon(b, points);
             }
-            using (var pen = new Pen(_foreColor, 1.5f))
+
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.DrawPolygon(SystemPens.ControlDark, points);
+
+            // The "+" glyph, same colour as the tab text
+            using (var pen = new Pen(_foreColor))
             {
                 var cx = rect.Left + rect.Width / 2;
-                var cy = rect.Top + rect.Height / 2;
+                var cy = rect.Top + 3 + (rect.Height - 3) / 2;
                 const int arm = 5;
                 g.DrawLine(pen, cx - arm, cy, cx + arm, cy);
                 g.DrawLine(pen, cx, cy - arm, cx, cy + arm);
