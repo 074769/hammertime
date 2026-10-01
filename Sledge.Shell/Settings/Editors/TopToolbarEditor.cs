@@ -54,8 +54,8 @@ namespace Sledge.Shell.Settings.Editors
 			_hint = new Label
 			{
 				Dock = DockStyle.Top,
-				Height = 34,
-				Text = "Tick a button to show it in the top toolbar. Hidden buttons stay available in the menus. Press OK to apply."
+				Height = 48,
+				Text = "Tick a button to show it. Drag rows to reorder them (you can also drag buttons on the toolbar itself, or drop an image file on one to set its icon). Press OK to apply."
 			};
 
 			_images = new ImageList { ColorDepth = ColorDepth.Depth32Bit, ImageSize = new Size(IconSize, IconSize) };
@@ -77,6 +77,11 @@ namespace Sledge.Shell.Settings.Editors
 			_list.ItemChecked += ItemChecked;
 			_list.SelectedIndexChanged += (s, e) => UpdateButtons();
 			_list.DoubleClick += (s, e) => ChooseIcon();
+			_list.AllowDrop = true;
+			_list.ItemDrag += (s, e) => _list.DoDragDrop(e.Item, DragDropEffects.Move);
+			_list.DragEnter += (s, e) => e.Effect = e.Data.GetDataPresent(typeof(ListViewItem)) ? DragDropEffects.Move : DragDropEffects.None;
+			_list.DragOver += (s, e) => e.Effect = e.Data.GetDataPresent(typeof(ListViewItem)) ? DragDropEffects.Move : DragDropEffects.None;
+			_list.DragDrop += (s, e) => DropItem(e);
 
 			var buttons = new FlowLayoutPanel
 			{
@@ -179,6 +184,23 @@ namespace Sledge.Shell.Settings.Editors
 				entry.Visible = e.Item.Checked;
 				Changed();
 			}
+		}
+
+		/// <summary>Drag a row to a new position in the list.</summary>
+		private void DropItem(DragEventArgs e)
+		{
+			var dragged = e.Data.GetData(typeof(ListViewItem)) as ListViewItem;
+			if (dragged == null) return;
+			var from = dragged.Index;
+			var over = _list.GetItemAt(_list.PointToClient(new Point(e.X, e.Y)).X, _list.PointToClient(new Point(e.X, e.Y)).Y);
+			var to = over == null ? _layout.Count - 1 : over.Index;
+			if (from < 0 || to < 0 || from == to) return;
+
+			var moving = _layout[from];
+			_layout.RemoveAt(from);
+			_layout.Insert(to, moving);
+			Rebuild(to);
+			Changed();
 		}
 
 		private void Move(int delta)

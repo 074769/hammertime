@@ -97,6 +97,7 @@ namespace Sledge.Shell.Settings
 		public static TopToolbarLayout Layout { get; set; } = new TopToolbarLayout();
 		public static ToolbarDock Dock { get; set; } = ToolbarDock.Top;
 		public static bool Locked { get; set; } = false;
+		public static int IconSize { get; set; } = 16;
 
 		/// <summary>True once the saved values have been read (they may arrive after the menus are first built)</summary>
 		public static bool Loaded { get; private set; }
@@ -106,15 +107,18 @@ namespace Sledge.Shell.Settings
 
 		public IEnumerable<SettingKey> GetKeys()
 		{
-			yield return new SettingKey("Toolbar", "TopToolbarPosition", typeof(ToolbarDock));
-			yield return new SettingKey("Toolbar", "TopToolbarLocked", typeof(bool));
-			yield return new SettingKey("Toolbar", "TopToolbarButtons", typeof(TopToolbarLayout));
+			// The button list goes first: the settings page gives the first tall editor all the spare room
+			yield return new SettingKey("Top Toolbar", "TopToolbarButtons", typeof(TopToolbarLayout));
+			yield return new SettingKey("Top Toolbar", "TopToolbarIconSize", typeof(int)) { EditorType = "Slider", EditorHint = "16,64,2,8,1" };
+			yield return new SettingKey("Top Toolbar", "TopToolbarPosition", typeof(ToolbarDock));
+			yield return new SettingKey("Top Toolbar", "TopToolbarLocked", typeof(bool));
 		}
 
 		public void LoadValues(ISettingsStore store)
 		{
 			Dock = store.Get("TopToolbarPosition", ToolbarDock.Top);
 			Locked = store.Get("TopToolbarLocked", false);
+			IconSize = Math.Max(16, Math.Min(64, store.Get("TopToolbarIconSize", 16)));
 			Layout = store.Get("TopToolbarButtons", new TopToolbarLayout()) ?? new TopToolbarLayout();
 			ValuesLoaded = true;
 			Loaded = true;
@@ -124,6 +128,7 @@ namespace Sledge.Shell.Settings
 		{
 			store.Set("TopToolbarPosition", Dock);
 			store.Set("TopToolbarLocked", Locked);
+			store.Set("TopToolbarIconSize", IconSize);
 			store.Set("TopToolbarButtons", Layout);
 		}
 	}

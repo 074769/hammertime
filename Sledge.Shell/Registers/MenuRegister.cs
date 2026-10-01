@@ -283,11 +283,15 @@ namespace Sledge.Shell.Registers
 
 				if (_toolbarMenu == null) _toolbarMenu = BuildToolbarMenu();
 
+				var iconSize = TopToolbarSettings.IconSize;
 				panel.BeginInit();
 				foreach (var ts in RootNodes.Values.OrderByDescending(x => x.OrderHint))
 				{
-					ts.ApplyLayout(layout);
+					ts.ApplyLayout(layout, iconSize);
 					if (ts.ToolStrip.Items.Count == 0) continue;
+
+					ts.ToolStrip.ImageScalingSize = new Size(iconSize, iconSize);
+					WireDragDrop(ts.ToolStrip);
 
 					ts.ToolStrip.LayoutStyle = vertical ? ToolStripLayoutStyle.VerticalStackWithOverflow : ToolStripLayoutStyle.Flow;
 					ts.ToolStrip.GripStyle = TopToolbarSettings.Locked ? ToolStripGripStyle.Hidden : ToolStripGripStyle.Visible;
@@ -308,6 +312,98 @@ namespace Sledge.Shell.Registers
 						strip.ForeColor = System.Drawing.Color.White;
 					}
 				}
+			}
+
+			private readonly HashSet<ToolStrip> _wired = new HashSet<ToolStrip>();
+			private Point _dragStart;
+			private string _dragId;
+
+			private static string NodeId(ToolStripItem item)
+			{
+				return (item?.Tag as BaseMenuTreeNode)?.Id;
+			}
+
+			private static string DroppedIconFile(DragEventArgs e)
+			{
+				if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return null;
+				var files = e.Data.GetData(DataFormats.FileDrop) as string[];
+				if (files == null || files.Length != 1) return null;
+				var ext = System.IO.Path.GetExtension(files[0])?.ToLowerInvariant();
+				return new[] { ".svg", ".png", ".ico", ".bmp", ".jpg", ".gif" }.Contains(ext) ? files[0] : null;
+			}
+
+			/// <summary>
+			/// Lets the user drag a toolbar button to a new place in its strip, or drop an image file on a button to give it that icon.
+			/// </summary>
+			private void WireDragDrop(ToolStrip strip)
+			{
+				if (!_wired.Add(strip)) return;
+				strip.AllowDrop = true;
+
+				strip.MouseDown += (s, e) =>
+				{
+					_dragId = null;
+					if (e.Button != MouseButtons.Left || TopToolbarSettings.Locked) return;
+					var item = strip.GetItemAt(e.Location);
+					if (item is ToolStripButton) { _dragId = NodeId(item); _dragStart = e.Location; }
+				};
+				strip.MouseUp += (s, e) => _dragId = null;
+				strip.MouseMove += (s, e) =>
+				{
+					if (_dragId == null || e.Button != MouseButtons.Left) return;
+					var dx = Math.Abs(e.X - _dragStart.X);
+					var dy = Math.Abs(e.Y - _dragStart.Y);
+					if (dx < SystemInformation.DragSize.Width && dy < SystemInformation.DragSize.Height) return;
+					var id = _dragId;
+					_dragId = null;
+					strip.DoDragDrop(new DataObject("Sledge.TopToolbarButton", id), DragDropEffects.Move);
+				};
+
+				DragEventHandler over = (s, e) =>
+				{
+					var pt = strip.PointToClient(new Point(e.X, e.Y));
+					if (e.Data.GetDataPresent("Sledge.TopToolbarButton") && !TopToolbarSettings.Locked) e.Effect = DragDropEffects.Move;
+					else if (DroppedIconFile(e) != null && strip.GetItemAt(pt) is ToolStripButton) e.Effect = DragDropEffects.Copy;
+					else e.Effect = DragDropEffects.None;
+				};
+				strip.DragEnter += over;
+				strip.DragOver += over;
+				strip.DragDrop += (s, e) =>
+				{
+					var pt = strip.PointToClient(new Point(e.X, e.Y));
+					var target = strip.GetItemAt(pt) as ToolStripButton;
+					var layout = TopToolbarSettings.Layout.Resolve(AllToolbarItems.Select(x => x.Id));
+
+					if (e.Data.GetDataPresent("Sledge.TopToolbarButton"))
+					{
+						var id = e.Data.GetData("Sledge.TopToolbarButton") as string;
+						var targetId = NodeId(target);
+						// Only reorder inside the same strip
+						var sameStrip = strip.Items.OfType<ToolStripButton>().Any(x => NodeId(x) == id);
+						if (id == null || targetId == null || id == targetId || !sameStrip) return;
+
+						var moving = layout.Find(id);
+						layout.Remove(moving);
+						var idx = layout.FindIndex(x => x.Id == targetId);
+						// Dropped on the far half of the target: go after it
+						var after = strip.LayoutStyle == ToolStripLayoutStyle.VerticalStackWithOverflow
+							? pt.Y > target.Bounds.Top + target.Bounds.Height / 2
+							: pt.X > target.Bounds.Left + target.Bounds.Width / 2;
+						layout.Insert(after ? idx + 1 : idx, moving);
+						TopToolbarSettings.Layout = layout;
+						ToolbarChanged();
+					}
+					else
+					{
+						var file = DroppedIconFile(e);
+						var targetId = NodeId(target);
+						if (file == null || targetId == null) return;
+						if (IconLoader.LoadFromFile(file, 16) == null) return;
+						layout.Find(targetId).IconPath = file;
+						TopToolbarSettings.Layout = layout;
+						ToolbarChanged();
+					}
+				};
 			}
 
 			/// <summary>
@@ -598,7 +694,7 @@ namespace Sledge.Shell.Registers
 			/// <summary>
 			/// Rebuilds the toolbar strip from the user's layout: order, visibility and custom icons.
 			/// </summary>
-			public void ApplyLayout(TopToolbarLayout layout)
+			public void ApplyLayout(TopToolbarLayout layout, int iconSize)
 			{
 				var nodes = ToolbarNodes
 					.Select((n, i) => new { Node = n, Index = i, Pos = layout.FindIndex(e => e.Id == n.Id) })
@@ -621,10 +717,10 @@ namespace Sledge.Shell.Registers
 					Image icon = null;
 					if (entry != null && !string.IsNullOrWhiteSpace(entry.IconPath))
 					{
-						var size = node.DefaultIcon?.Width ?? 16;
-						icon = IconLoader.LoadFromFile(entry.IconPath, size);
+						icon = IconLoader.LoadFromFile(entry.IconPath, iconSize);
 					}
-					node.ToolbarButton.Image = icon ?? node.DefaultIcon;
+					node.ToolbarButton.ImageScaling = ToolStripItemImageScaling.None;
+					node.ToolbarButton.Image = icon ?? node.ScaledIcon(iconSize);
 
 					var group = node.Group?.Name ?? "";
 					if (any && group != lastGroup) ToolStrip.Items.Add(new ToolStripSeparator());
@@ -941,6 +1037,27 @@ namespace Sledge.Shell.Registers
 			public virtual string Id => null;
 			public virtual string DisplayName => null;
 			public virtual Image DefaultIcon => null;
+
+			private readonly Dictionary<int, Image> _scaledIcons = new Dictionary<int, Image>();
+
+			/// <summary>The built-in icon resized to a square of the given size.</summary>
+			public Image ScaledIcon(int size)
+			{
+				var src = DefaultIcon;
+				if (src == null || (src.Width == size && src.Height == size)) return src;
+				if (_scaledIcons.TryGetValue(size, out var cached)) return cached;
+
+				var bmp = new Bitmap(size, size, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+				using (var g = Graphics.FromImage(bmp))
+				{
+					g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+					g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+					g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+					g.DrawImage(src, new Rectangle(0, 0, size, size));
+				}
+				_scaledIcons[size] = bmp;
+				return bmp;
+			}
 
 			protected BaseMenuTreeNode()
 			{

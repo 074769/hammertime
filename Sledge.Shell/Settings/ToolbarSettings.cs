@@ -72,6 +72,7 @@ namespace Sledge.Shell.Settings
 	{
 		// Static so the toolbar (ToolRegister) can read it directly
 		public static ToolbarLayout Layout { get; private set; } = new ToolbarLayout();
+		public static int IconSize { get; private set; } = 32;
 
 		public string Name => "Sledge.Shell.Toolbar";
 		public bool ValuesLoaded { get; private set; }
@@ -79,17 +80,20 @@ namespace Sledge.Shell.Settings
 		public IEnumerable<SettingKey> GetKeys()
 		{
 			yield return new SettingKey("Toolbar", "Tools", typeof(ToolbarLayout));
+			yield return new SettingKey("Toolbar", "ToolsIconSize", typeof(int)) { EditorType = "Slider", EditorHint = "16,64,2,8,1" };
 		}
 
 		public void LoadValues(ISettingsStore store)
 		{
 			Layout = store.Get("Tools", new ToolbarLayout()) ?? new ToolbarLayout();
+			IconSize = Math.Max(16, Math.Min(64, store.Get("ToolsIconSize", 32)));
 			ValuesLoaded = true;
 		}
 
 		public void StoreValues(ISettingsStore store)
 		{
 			store.Set("Tools", Layout);
+			store.Set("ToolsIconSize", IconSize);
 		}
 	}
 }

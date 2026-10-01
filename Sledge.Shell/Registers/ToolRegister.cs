@@ -114,20 +114,21 @@ namespace Sledge.Shell.Registers
 
 			_shell.Invoke((MethodInvoker)delegate
 			{
+				var iconSize = ToolbarSettings.IconSize;
 				_shell.ToolsContainer.SuspendLayout();
 				_shell.ToolsContainer.Items.Clear();
 				foreach (var tb in toolbarTools)
 				{
 					var tl = tb.Tool;
-					var toolButton = new ToolStripButton("", GetToolIcon(tl, tb.Entry, 32), async (s, ea) => await ActivateTool(tl), tl.Name)
+					var toolButton = new ToolStripButton("", GetToolIcon(tl, tb.Entry, iconSize), async (s, ea) => await ActivateTool(tl), tl.Name)
 					{
 						Checked = tl == activeTool,
 						ToolTipText = tl.Name,
 						DisplayStyle = ToolStripItemDisplayStyle.Image,
 						ImageScaling = ToolStripItemImageScaling.None,
 						AutoSize = false,
-						Width = 36,
-						Height = 36
+						Width = iconSize + 4,
+						Height = iconSize + 4
 					};
 					_shell.ToolsContainer.Items.Add(toolButton);
 				}
