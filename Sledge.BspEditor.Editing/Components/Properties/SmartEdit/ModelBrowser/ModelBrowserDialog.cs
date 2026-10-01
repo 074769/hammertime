@@ -613,7 +613,7 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 			if (mdl == null)
 			{
 				_pictureMessage.Text = error ?? "Unable to load model";
-				_info.Text = GetGamePath(file) + Environment.NewLine + FormatSize(file.Size);
+				_info.Text = GetGamePath(file) + System.Environment.NewLine + FormatSize(file.Size);
 				return;
 			}
 
