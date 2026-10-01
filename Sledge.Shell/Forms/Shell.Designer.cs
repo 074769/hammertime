@@ -38,6 +38,8 @@ namespace Sledge.Shell.Forms
 			ToolStripContainer = new ToolStripContainer();
 			DocumentContainer = new Panel();
 			DocumentTabs = new ClosableTabControl();
+			TabHost = new Panel();
+			NewTabButton = new NewTabButton();
 			RightSidebar = new DockedPanel();
 			RightSidebarContainer = new SidebarContainer();
 			LeftSidebar = new DockedPanel();
@@ -67,7 +69,7 @@ namespace Sledge.Shell.Forms
 			TopBar.RowCount = 1;
 			TopBar.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 			TopBar.Controls.Add(MenuStrip, 0, 0);
-			TopBar.Controls.Add(DocumentTabs, 1, 0);
+			TopBar.Controls.Add(TabHost, 1, 0);
 			TopBar.Dock = DockStyle.Top;
 			TopBar.Location = new System.Drawing.Point(0, 0);
 			TopBar.Margin = new Padding(0);
@@ -132,15 +134,35 @@ namespace Sledge.Shell.Forms
 			// 
 			// DocumentTabs
 			// 
-			DocumentTabs.Dock = DockStyle.Fill;
-			DocumentTabs.Location = new System.Drawing.Point(300, 0);
+			// 
+			// TabHost: holds the document tabs and the "+" button, laid out manually (see Shell.LayoutTabStrip)
+			// 
+			TabHost.Controls.Add(DocumentTabs);
+			TabHost.Controls.Add(NewTabButton);
+			TabHost.Dock = DockStyle.Fill;
+			TabHost.Margin = new Padding(0);
+			TabHost.Name = "TabHost";
+			TabHost.Size = new System.Drawing.Size(508, 24);
+			TabHost.TabIndex = 1;
+			TabHost.Resize += (s, e) => LayoutTabStrip();
+			// 
+			// NewTabButton
+			// 
+			NewTabButton.Name = "NewTabButton";
+			NewTabButton.Size = new System.Drawing.Size(30, 24);
+			NewTabButton.Source = DocumentTabs;
+			NewTabButton.Click += RequestNewDocument;
+			// 
+			// DocumentTabs
+			// 
+			DocumentTabs.Dock = DockStyle.None;
+			DocumentTabs.Location = new System.Drawing.Point(0, 0);
 			DocumentTabs.Margin = new Padding(0);
 			DocumentTabs.Name = "DocumentTabs";
 			DocumentTabs.SelectedIndex = 0;
 			DocumentTabs.Size = new System.Drawing.Size(508, 24);
 			DocumentTabs.TabIndex = 1;
 			DocumentTabs.RequestClose += RequestClose;
-			DocumentTabs.RequestNew += RequestNewDocument;
 			DocumentTabs.SelectedIndexChanged += TabChanged;
 			// 
 			// RightSidebar
@@ -283,6 +305,8 @@ namespace Sledge.Shell.Forms
         internal TabPage tabPage1;
         internal TabControl BottomTabs;
         private System.Windows.Forms.TableLayoutPanel TopBar;
+        private System.Windows.Forms.Panel TabHost;
+        private Sledge.Shell.Controls.NewTabButton NewTabButton;
         internal MenuStrip MenuStrip;
         internal ToolStrip ToolsContainer;
         internal StatusStrip StatusStrip;

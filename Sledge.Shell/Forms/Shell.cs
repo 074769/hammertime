@@ -87,6 +87,7 @@ namespace Sledge.Shell.Forms
         private void InitializeShell()
 		{
 			DocumentTabs.TabPages.Clear();
+			LayoutTabStrip();
 
 			Oy.Subscribe<List<string>>("Shell:InstanceOpened", async a => await this.InvokeAsync(() => InstanceOpened(a)));
 
@@ -297,6 +298,7 @@ namespace Sledge.Shell.Forms
 				page.ImageKey = document.HasUnsavedChanges ? "Dirty" : "Clean";
 			}
 
+			LayoutTabStrip();
 			return Task.CompletedTask;
 		}
 
@@ -332,6 +334,7 @@ namespace Sledge.Shell.Forms
 		{
 			var page = DocumentTabs.TabPages.OfType<TabPage>().FirstOrDefault(x => x.Tag == document);
 			if (page != null) DocumentTabs.TabPages.Remove(page);
+			LayoutTabStrip();
 			return Task.CompletedTask;
 		}
 
@@ -352,6 +355,7 @@ namespace Sledge.Shell.Forms
 				Text = Title + @" - " + sd.Name;
 			}
 
+			LayoutTabStrip();
 			return Task.CompletedTask;
 		}
 
@@ -418,6 +422,26 @@ namespace Sledge.Shell.Forms
 		private void TabChanged(object sender, EventArgs e)
 		{
 			_documentRegister.Value.ActivateDocument(DocumentTabs.SelectedTab?.Tag as IDocument);
+		}
+
+		/// <summary>
+		/// Size the tab control to fit its tabs and place the "+" button right after the last one
+		/// </summary>
+		private void LayoutTabStrip()
+		{
+			var count = DocumentTabs.TabPages.Count;
+			const int buttonWidth = 30;
+			const int gap = 2;
+			var h = TabHost.ClientSize.Height;
+
+			var available = Math.Max(0, TabHost.ClientSize.Width - buttonWidth - gap);
+			var needed = count == 0 ? 0 : DocumentTabs.TabsRight + 4;
+			var w = Math.Min(needed, available);
+
+			DocumentTabs.Visible = count > 0;
+			DocumentTabs.SetBounds(0, 0, w, h);
+			NewTabButton.SetBounds(count > 0 ? w + gap : 2, 0, buttonWidth, h);
+			NewTabButton.Invalidate();
 		}
 
 		private void RequestNewDocument(object sender, EventArgs e)

@@ -1,5 +1,4 @@
 ﻿
-using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
@@ -11,11 +10,6 @@ namespace Sledge.Shell.Controls
         public delegate void RequestCloseEventHandler(object sender, int index);
 
         public event RequestCloseEventHandler RequestClose;
-
-        /// <summary>
-        /// Raised when the "+" (new map) button after the last tab is clicked.
-        /// </summary>
-        public event System.EventHandler RequestNew;
 
         private void OnRequestClose(int index)
         {
@@ -73,41 +67,25 @@ namespace Sledge.Shell.Controls
         private const int WM_NULL = 0x0;
         private const int WM_MBUTTONDOWN = 0x0207;
         private const int WM_LBUTTONDOWN = 0x0201;
-        private const int WM_LBUTTONUP = 0x0202;
-        private bool _plusPressed;
 		private Color _backColor;
 		private Color _foreColor;
 		private Color _backTabColor;
+
+		internal Color TabBackColor => _backTabColor;
+		internal Color TabForeColor => _foreColor;
+
+		/// <summary>Right edge of the last tab (0 if there are no tabs)</summary>
+		internal int TabsRight => TabPages.Count == 0 ? 0 : GetTabRect(TabPages.Count - 1).Right;
+		/// <summary>Top/height of the tab row, used so the new-tab button lines up with the tabs</summary>
+		internal Rectangle FirstTabRect => TabPages.Count == 0 ? new Rectangle(0, 2, 0, 22) : GetTabRect(0);
 
 		// ReSharper enable InconsistentNaming
 
 		protected override void WndProc(ref Message m)
         {
-            if (!DesignMode && m.Msg == WM_LBUTTONUP && _plusPressed)
-            {
-                _plusPressed = false;
-                Capture = false;
-                var over = GetPlusRect().Contains(PointToClient(Cursor.Position));
-                Invalidate();
-                if (over)
-                {
-                    // Run after the message has finished so the tab list isn't modified mid-message
-                    BeginInvoke(new Action(() => RequestNew?.Invoke(this, EventArgs.Empty)));
-                }
-                return;
-            }
-
             if (!DesignMode && (m.Msg == WM_LBUTTONDOWN || m.Msg == WM_MBUTTONDOWN))
             {
                 var pt = PointToClient(Cursor.Position);
-                if (m.Msg == WM_LBUTTONDOWN && GetPlusRect().Contains(pt))
-                {
-                    // Button behaviour: press now, fire on release while still over the button
-                    _plusPressed = true;
-                    Capture = true;
-                    Invalidate();
-                    return;
-                }
                 for (var i = 0; i < TabPages.Count; i++)
                 {
                     var rect = m.Msg == WM_LBUTTONDOWN ? GetCloseRect(i) : GetTabRect(i);
@@ -122,15 +100,7 @@ namespace Sledge.Shell.Controls
 
         protected override void OnMouseMove(MouseEventArgs e)
         {
-            Cursor = GetPlusRect().Contains(e.Location) ? Cursors.Hand : Cursors.Default;
             Invalidate();
-        }
-
-        protected override void OnMouseLeave(EventArgs e)
-        {
-            Cursor = Cursors.Default;
-            Invalidate();
-            base.OnMouseLeave(e);
         }
 
         private void Render(Graphics g)
@@ -153,8 +123,6 @@ namespace Sledge.Shell.Controls
             g.SetClip(new Rectangle(display.Left, ClientRectangle.Top, display.Width, ClientRectangle.Height));
 
             for (var i = 0; i < TabPages.Count; i++) RenderTab(g, i);
-
-            RenderPlus(g);
 
             g.Clip = clip;
         }
@@ -229,62 +197,6 @@ namespace Sledge.Shell.Controls
                 const int padding = 5;
                 g.DrawLine(pen, closeRect.Left + padding, closeRect.Top + padding, closeRect.Right - padding, closeRect.Bottom - padding);
                 g.DrawLine(pen, closeRect.Right - padding, closeRect.Top + padding, closeRect.Left + padding, closeRect.Bottom - padding);
-            }
-        }
-
-        private Rectangle GetPlusRect()
-        {
-            var x = 2;
-            var y = 2;
-            var h = 22;
-            if (TabPages.Count > 0)
-            {
-                var last = GetTabRect(TabPages.Count - 1);
-                x = last.Right + 2;
-                y = last.Top;
-                h = last.Height;
-            }
-            return new Rectangle(x, y, 30, h);
-        }
-
-        private void RenderPlus(Graphics g)
-        {
-            var rect = GetPlusRect();
-
-            // Same shape as a tab
-            var points = new[]
-            {
-                new Point(rect.Left, rect.Bottom),
-                new Point(rect.Left, rect.Top + 3),
-                new Point(rect.Left + 3, rect.Top),
-                new Point(rect.Right - 3, rect.Top),
-                new Point(rect.Right, rect.Top + 3),
-                new Point(rect.Right, rect.Bottom),
-                new Point(rect.Left, rect.Bottom)
-            };
-
-            // Same colours as an unselected tab (lighter on hover)
-            var hover = rect.Contains(PointToClient(MousePosition));
-            var backColour = _backTabColor;
-            if (_plusPressed && hover) backColour = ControlPaint.Light(backColour, 1);
-            else if (hover) backColour = ControlPaint.Light(backColour, 0.8f);
-
-            using (var b = new SolidBrush(backColour))
-            {
-                g.FillPolygon(b, points);
-            }
-
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.DrawPolygon(SystemPens.ControlDark, points);
-
-            // The "+" glyph, same colour as the tab text
-            using (var pen = new Pen(_foreColor))
-            {
-                var cx = rect.Left + rect.Width / 2;
-                var cy = rect.Top + 3 + (rect.Height - 3) / 2;
-                const int arm = 5;
-                g.DrawLine(pen, cx - arm, cy, cx + arm, cy);
-                g.DrawLine(pen, cx, cy - arm, cx, cy + arm);
             }
         }
 
