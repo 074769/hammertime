@@ -124,12 +124,26 @@ namespace Sledge.BspEditor.Rendering.Viewport
 
             // These keys are used for hotkeys, don't want the 3D view to move about when trying to use hotkeys.
             var ignore = !FreeLook && KeyboardState.IsAnyKeyDown(Keys.ShiftKey, Keys.ControlKey, Keys.Alt);
-            IfKey(_forwardKey, () => Camera.Advance(move), ignore);
-            IfKey(_backwardKey, () => Camera.Advance(-move), ignore);
-            IfKey(_leftKey, () => Camera.Strafe(-move), ignore);
-            IfKey(_rightKey, () => Camera.Strafe(move), ignore);
-            IfKey(_upKey, () => Camera.AscendAbsolute(move), ignore);
-            IfKey(_downKey, () => Camera.AscendAbsolute(-move), ignore);
+
+            // Movement keys (WASD/QE) only work while free look has been toggled on with the free look key (Z).
+            if (FreeLookToggle)
+            {
+                IfKey(_forwardKey, () => Camera.Advance(move), ignore);
+                IfKey(_backwardKey, () => Camera.Advance(-move), ignore);
+                IfKey(_leftKey, () => Camera.Strafe(-move), ignore);
+                IfKey(_rightKey, () => Camera.Strafe(move), ignore);
+                IfKey(_upKey, () => Camera.AscendAbsolute(move), ignore);
+                IfKey(_downKey, () => Camera.AscendAbsolute(-move), ignore);
+            }
+            else
+            {
+                _downKeys.Remove(_forwardKey);
+                _downKeys.Remove(_backwardKey);
+                _downKeys.Remove(_leftKey);
+                _downKeys.Remove(_rightKey);
+                _downKeys.Remove(_upKey);
+                _downKeys.Remove(_downKey);
+            }
 
             // Arrow keys are not really used for hotkeys all that much, so we allow shift+arrows to match Hammer's keys
             var shiftDown = KeyboardState.IsKeyDown(Keys.ShiftKey);
