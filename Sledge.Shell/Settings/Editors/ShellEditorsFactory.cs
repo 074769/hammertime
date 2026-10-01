@@ -57,6 +57,10 @@ namespace Sledge.Shell.Settings.Editors
             {
                 return true;
             }
+            else if (key.Type == typeof(TopToolbarLayout))
+            {
+                return true;
+            }
             return false;
         }
 
@@ -102,6 +106,10 @@ namespace Sledge.Shell.Settings.Editors
             else if (key.Type == typeof(ToolbarLayout))
             {
                 return new ToolbarEditor();
+            }
+            else if (key.Type == typeof(TopToolbarLayout))
+            {
+                return new TopToolbarEditor();
             }
             return null;
         }

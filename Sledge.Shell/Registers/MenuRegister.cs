@@ -6,10 +6,12 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using LogicAndTrick.Oy;
+using Sledge.Common.Shell;
 using Sledge.Common.Shell.Context;
 using Sledge.Common.Shell.Hooks;
 using Sledge.Common.Shell.Menu;
 using Sledge.Shell.Components;
+using Sledge.Shell.Settings;
 
 namespace Sledge.Shell.Registers
 {
@@ -55,19 +57,44 @@ namespace Sledge.Shell.Registers
 
 			_shell.InvokeSync(() =>
 			{
-				_tree = new VirtualMenuTree(_context, _shell.MenuStrip, _shell.ToolStrip, _declaredSections, _declaredGroups);
+				_tree = new VirtualMenuTree(_context, _shell.MenuStrip, _shell.ToolbarContainer, _declaredSections, _declaredGroups);
 				_tree.ResetItems(_menuItems.Values);
+				_toolbarSettingsApplied = TopToolbarSettings.Loaded;
 			});
 
 			Oy.Subscribe<IContext>("Context:Changed", ContextChanged);
 			Oy.Subscribe<object>("Menu:Update", UpdateMenu);
 			Oy.Subscribe<bool>("Theme:Changed", (useDark) => _tree.UseDarkTheme = useDark);
+
+			// Re-lay out the top toolbar when its settings change (settings form, or its right-click menu)
+			Oy.Subscribe<object>("SettingsChanged", ToolbarSettingsChanged);
+			Oy.Subscribe<object>("TopToolbar:Changed", ToolbarSettingsChanged);
 		}
 
 		private Task ContextChanged(IContext context)
 		{
+			// The settings may finish loading after the menus were first built; apply them once they are available
+			if (!_toolbarSettingsApplied && TopToolbarSettings.Loaded)
+			{
+				_toolbarSettingsApplied = true;
+				_shell.InvokeLater(() => _tree.ApplyToolbarSettings());
+			}
 			return UpdateMenu(context);
 		}
+
+		private bool _toolbarSettingsApplied;
+
+		private Task ToolbarSettingsChanged(object obj)
+		{
+			_toolbarSettingsApplied = true;
+			_shell.InvokeLater(() => _tree?.ApplyToolbarSettings());
+			return Task.CompletedTask;
+		}
+
+		/// <summary>
+		/// Every button that can appear in the top toolbar, in default order (used by the settings editor).
+		/// </summary>
+		internal static IReadOnlyList<TopToolbarItemInfo> AllToolbarItems { get; private set; } = new List<TopToolbarItemInfo>();
 
 		private async Task UpdateMenu(object obj)
 		{
@@ -153,9 +180,16 @@ namespace Sledge.Shell.Registers
 			private Color _backColor = Color.FromArgb(70, 70, 70);
 
 			/// <summary>
-			/// The toolstrip containing the toolbars
+			/// The container whose four edge panels can host the toolbars
 			/// </summary>
-			private ToolStripPanel ToolStrip { get; set; }
+			private ToolStripContainer ToolbarContainer { get; set; }
+
+			/// <summary>
+			/// The toolbar strips we have joined to a panel (they may have been dragged to another panel since)
+			/// </summary>
+			private readonly List<ToolStrip> _joinedStrips = new List<ToolStrip>();
+
+			private ContextMenuStrip _toolbarMenu;
 
 			/// <summary>
 			/// The menu strip for the top level menus
@@ -167,13 +201,13 @@ namespace Sledge.Shell.Registers
 			/// </summary>
 			private Dictionary<string, MenuTreeRoot> RootNodes { get; set; }
 
-			public VirtualMenuTree(IContext context, MenuStrip menuStrip, ToolStripPanel toolStrip, List<MenuSection> declaredSections, List<MenuGroup> declaredGroups)
+			public VirtualMenuTree(IContext context, MenuStrip menuStrip, ToolStripContainer toolbarContainer, List<MenuSection> declaredSections, List<MenuGroup> declaredGroups)
 			{
 				_context = context;
 				_declaredSections = declaredSections;
 				_declaredGroups = declaredGroups;
 				MenuStrip = menuStrip;
-				ToolStrip = toolStrip;
+				ToolbarContainer = toolbarContainer;
 				RootNodes = new Dictionary<string, MenuTreeRoot>();
 				Clear();
 
@@ -197,23 +231,126 @@ namespace Sledge.Shell.Registers
 				MenuStrip.Items.Clear();
 				MenuStrip.Items.AddRange(RootNodes.Values.OrderBy(x => x.OrderHint).Select(x => x.MenuMenuItem).OfType<ToolStripItem>().ToArray());
 				MenuStrip.ResumeLayout();
-				ToolStrip.BeginInit();
-				ToolStrip.Controls.Clear();
+				RenderToolbars();
+			}
+
+			/// <summary>
+			/// Re-applies the top toolbar settings (position, lock, button visibility, order and icons).
+			/// </summary>
+			public void ApplyToolbarSettings()
+			{
+				RenderToolbars();
+			}
+
+			private ToolStripPanel PanelFor(ToolbarDock dock)
+			{
+				switch (dock)
+				{
+					case ToolbarDock.Bottom: return ToolbarContainer.BottomToolStripPanel;
+					case ToolbarDock.Left: return ToolbarContainer.LeftToolStripPanel;
+					case ToolbarDock.Right: return ToolbarContainer.RightToolStripPanel;
+					default: return ToolbarContainer.TopToolStripPanel;
+				}
+			}
+
+			/// <summary>
+			/// Removes the toolbar strips we joined from whichever panel they are in now.
+			/// Only our own strips are removed, the left panel also hosts the tools toolbar.
+			/// </summary>
+			private void DetachToolbars()
+			{
+				foreach (var strip in _joinedStrips)
+				{
+					strip.Parent?.Controls.Remove(strip);
+				}
+				_joinedStrips.Clear();
+			}
+
+			private void RenderToolbars()
+			{
+				DetachToolbars();
+
+				var dock = TopToolbarSettings.Dock;
+				var vertical = dock == ToolbarDock.Left || dock == ToolbarDock.Right;
+				var panel = PanelFor(dock);
+
+				// Publish the list of available buttons for the settings editor and work out the user's layout
+				AllToolbarItems = RootNodes.Values
+					.OrderBy(x => x.OrderHint)
+					.SelectMany(r => r.ToolbarNodes.Select(n => new TopToolbarItemInfo { Id = n.Id, Name = n.DisplayName, Section = r.SectionName, DefaultIcon = n.DefaultIcon }))
+					.ToList();
+				var layout = TopToolbarSettings.Layout.Resolve(AllToolbarItems.Select(x => x.Id));
+
+				if (_toolbarMenu == null) _toolbarMenu = BuildToolbarMenu();
+
+				panel.BeginInit();
 				foreach (var ts in RootNodes.Values.OrderByDescending(x => x.OrderHint))
 				{
-					if (ts.ToolStrip.Items.Count > 0) ToolStrip.Join(ts.ToolStrip);
+					ts.ApplyLayout(layout);
+					if (ts.ToolStrip.Items.Count == 0) continue;
+
+					ts.ToolStrip.LayoutStyle = vertical ? ToolStripLayoutStyle.VerticalStackWithOverflow : ToolStripLayoutStyle.Flow;
+					ts.ToolStrip.GripStyle = TopToolbarSettings.Locked ? ToolStripGripStyle.Hidden : ToolStripGripStyle.Visible;
+					ts.ToolStrip.ContextMenuStrip = _toolbarMenu;
+					panel.Join(ts.ToolStrip);
+					_joinedStrips.Add(ts.ToolStrip);
 				}
-				ToolStrip.EndInit();
+				panel.EndInit();
+				panel.ContextMenuStrip = _toolbarMenu;
+
 				if (UseDarkTheme)
 				{
-					ToolStrip.BackColor = _systemDarkBackColor;
-					ToolStrip.ForeColor = System.Drawing.Color.White;
-					foreach (Control item in ToolStrip.Controls)
+					panel.BackColor = _systemDarkBackColor;
+					panel.ForeColor = System.Drawing.Color.White;
+					foreach (var strip in _joinedStrips)
 					{
-						item.BackColor = _systemDarkBackColor;
-						item.ForeColor = System.Drawing.Color.White;
+						strip.BackColor = _systemDarkBackColor;
+						strip.ForeColor = System.Drawing.Color.White;
 					}
 				}
+			}
+
+			/// <summary>
+			/// The right-click menu of the toolbar: choose which edge it is docked to and lock it in place.
+			/// </summary>
+			private ContextMenuStrip BuildToolbarMenu()
+			{
+				var menu = new ContextMenuStrip();
+				var dockItems = new List<ToolStripMenuItem>();
+				foreach (ToolbarDock d in Enum.GetValues(typeof(ToolbarDock)))
+				{
+					var dock = d;
+					var item = new ToolStripMenuItem("Dock " + dock.ToString().ToLowerInvariant()) { Tag = dock };
+					item.Click += (s, e) =>
+					{
+						TopToolbarSettings.Dock = dock;
+						ToolbarChanged();
+					};
+					dockItems.Add(item);
+					menu.Items.Add(item);
+				}
+				menu.Items.Add(new ToolStripSeparator());
+				var lockItem = new ToolStripMenuItem("Lock toolbar");
+				lockItem.Click += (s, e) =>
+				{
+					TopToolbarSettings.Locked = !TopToolbarSettings.Locked;
+					ToolbarChanged();
+				};
+				menu.Items.Add(lockItem);
+
+				menu.Opening += (s, e) =>
+				{
+					foreach (var di in dockItems) di.Checked = (ToolbarDock) di.Tag == TopToolbarSettings.Dock;
+					lockItem.Checked = TopToolbarSettings.Locked;
+				};
+				return menu;
+			}
+
+			private static void ToolbarChanged()
+			{
+				// Persist the new position, then tell the register to lay the toolbar out again
+				Oy.Publish("Settings:Save");
+				Oy.Publish("TopToolbar:Changed", new object());
 			}
 
 			/// <summary>
@@ -250,7 +387,7 @@ namespace Sledge.Shell.Registers
 			public void Clear()
 			{
 				MenuStrip.Items.Clear();
-				ToolStrip.Controls.Clear();
+				DetachToolbars();
 				RootNodes.Clear();
 
 				// Add known sections straight away
@@ -449,7 +586,53 @@ namespace Sledge.Shell.Registers
 
 			public override string OrderHint => Section.OrderHint;
 
+			public string SectionName => Section.Description;
+
 			private List<MenuTreeGroup> _toolbarGroups;
+
+			/// <summary>
+			/// The nodes that have a toolbar button, in default order.
+			/// </summary>
+			public IEnumerable<BaseMenuTreeNode> ToolbarNodes => _toolbarGroups.SelectMany(g => g.Nodes).Where(n => n.ToolbarButton != null);
+
+			/// <summary>
+			/// Rebuilds the toolbar strip from the user's layout: order, visibility and custom icons.
+			/// </summary>
+			public void ApplyLayout(TopToolbarLayout layout)
+			{
+				var nodes = ToolbarNodes
+					.Select((n, i) => new { Node = n, Index = i, Pos = layout.FindIndex(e => e.Id == n.Id) })
+					.OrderBy(x => x.Pos < 0 ? int.MaxValue : x.Pos)
+					.ThenBy(x => x.Index)
+					.Select(x => x.Node)
+					.ToList();
+
+				// RemoveAt rather than Clear so the buttons are kept alive
+				while (ToolStrip.Items.Count > 0) ToolStrip.Items.RemoveAt(0);
+
+				string lastGroup = null;
+				var any = false;
+				foreach (var node in nodes)
+				{
+					var entry = layout.Find(node.Id);
+					if (entry != null && !entry.Visible) continue;
+
+					// Icon: the user's own if set and loadable, otherwise the built-in one
+					Image icon = null;
+					if (entry != null && !string.IsNullOrWhiteSpace(entry.IconPath))
+					{
+						var size = node.DefaultIcon?.Width ?? 16;
+						icon = IconLoader.LoadFromFile(entry.IconPath, size);
+					}
+					node.ToolbarButton.Image = icon ?? node.DefaultIcon;
+
+					var group = node.Group?.Name ?? "";
+					if (any && group != lastGroup) ToolStrip.Items.Add(new ToolStripSeparator());
+					ToolStrip.Items.Add(node.ToolbarButton);
+					lastGroup = group;
+					any = true;
+				}
+			}
 
 			public MenuTreeRoot(IContext context, string text, MenuSection section)
 			{
@@ -568,6 +751,9 @@ namespace Sledge.Shell.Registers
 			private IMenuItem MenuItem { get; set; }
 
 			public override string OrderHint => MenuItem.OrderHint;
+			public override string Id => MenuItem.ID;
+			public override string DisplayName => MenuItem.Name;
+			public override Image DefaultIcon => MenuItem.Icon;
 
 			public MenuTreeNode(IContext context, IMenuItem menuItem, MenuGroup group)
 			{
@@ -750,6 +936,11 @@ namespace Sledge.Shell.Registers
 			public Dictionary<string, BaseMenuTreeNode> Children { get; private set; }
 
 			public abstract string OrderHint { get; }
+
+			/// <summary>The ID of the underlying menu item, if there is one.</summary>
+			public virtual string Id => null;
+			public virtual string DisplayName => null;
+			public virtual Image DefaultIcon => null;
 
 			protected BaseMenuTreeNode()
 			{

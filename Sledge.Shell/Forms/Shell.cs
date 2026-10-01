@@ -40,6 +40,7 @@ namespace Sledge.Shell.Forms
 
 
 		internal ToolStripPanel ToolStrip => ToolStripContainer.TopToolStripPanel;
+		internal ToolStripContainer ToolbarContainer => ToolStripContainer;
 
 		[ImportingConstructor]
 		public Shell(
