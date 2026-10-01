@@ -39,7 +39,10 @@ namespace Sledge.Shell.Components
 
                 var allow = ty.GetCustomAttributes(typeof(AllowToolbarAttribute), false).OfType<AllowToolbarAttribute>().FirstOrDefault();
 
-                yield return new CommandMenuItem(export.Value, mia.Section, mia.Path, mia.Group, mia.OrderHint, icon?.Image, shortcut ?? "", allow?.Allowed != false);
+                yield return new CommandMenuItem(export.Value, mia.Section, mia.Path, mia.Group, mia.OrderHint, icon?.Image, shortcut ?? "", allow?.Allowed != false)
+                {
+                    IconAtSize = icon == null ? (Func<int, System.Drawing.Image>) null : icon.GetImage
+                };
             }
         }
     }

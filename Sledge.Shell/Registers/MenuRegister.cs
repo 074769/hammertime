@@ -857,6 +857,7 @@ namespace Sledge.Shell.Registers
 			public override string Id => MenuItem.ID;
 			public override string DisplayName => MenuItem.Name;
 			public override Image DefaultIcon => MenuItem.Icon;
+			public override Image IconAtSize(int size) => (MenuItem as CommandMenuItem)?.IconAtSize?.Invoke(size);
 
 			public MenuTreeNode(IContext context, IMenuItem menuItem, MenuGroup group)
 			{
@@ -1045,6 +1046,9 @@ namespace Sledge.Shell.Registers
 			public virtual string DisplayName => null;
 			public virtual Image DefaultIcon => null;
 
+			/// <summary>The icon rendered natively at the given size (SVG), or null if it can't be.</summary>
+			public virtual Image IconAtSize(int size) => null;
+
 			private readonly Dictionary<int, Image> _scaledIcons = new Dictionary<int, Image>();
 
 			/// <summary>The built-in icon resized to a square of the given size.</summary>
@@ -1053,6 +1057,14 @@ namespace Sledge.Shell.Registers
 				var src = DefaultIcon;
 				if (src == null || (src.Width == size && src.Height == size)) return src;
 				if (_scaledIcons.TryGetValue(size, out var cached)) return cached;
+
+				// SVG icons are drawn directly at the target size so they stay sharp
+				var native = IconAtSize(size);
+				if (native != null && native.Width == size && native.Height == size)
+				{
+					_scaledIcons[size] = native;
+					return native;
+				}
 
 				var bmp = new Bitmap(size, size, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
 				using (var g = Graphics.FromImage(bmp))

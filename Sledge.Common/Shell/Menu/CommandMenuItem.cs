@@ -1,4 +1,5 @@
-﻿using System.Drawing;
+﻿using System;
+using System.Drawing;
 using System.Threading.Tasks;
 using LogicAndTrick.Oy;
 using Sledge.Common.Shell.Commands;
@@ -22,6 +23,9 @@ namespace Sledge.Common.Shell.Menu
         public string Group { get; }
         public string OrderHint { get; }
         public Image Icon { get; }
+
+        /// <summary>Renders the icon at a specific size, if the icon can do that (SVG). May be null.</summary>
+        public Func<int, Image> IconAtSize { get; set; }
         public string ShortcutText { get; }
         public bool IsToggle => (_command as IMenuItemExtendedProperties)?.IsToggle == true;
 

@@ -14,6 +14,9 @@ namespace Sledge.Common.Shell.Menu
         public string ResourceName { get; set; }
         public Image Image => IconLoader.Load(ResourceType, ResourceName);
 
+        /// <summary>The image rendered at the given pixel size (crisp if there is an SVG, otherwise the PNG at its own size).</summary>
+        public Image GetImage(int size) => IconLoader.Load(ResourceType, ResourceName, size);
+
         public MenuImageAttribute(Type resourceType, string resourceName)
         {
             ResourceType = resourceType;
