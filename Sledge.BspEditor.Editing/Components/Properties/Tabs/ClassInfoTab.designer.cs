@@ -65,22 +65,23 @@ namespace Sledge.BspEditor.Editing.Components.Properties.Tabs
 			// 
 			this.btnSmartEdit.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
 			this.btnSmartEdit.Appearance = System.Windows.Forms.Appearance.Button;
-			this.btnSmartEdit.AutoSize = true;
+			this.btnSmartEdit.AutoSize = false;
 			this.btnSmartEdit.Checked = true;
 			this.btnSmartEdit.CheckState = System.Windows.Forms.CheckState.Checked;
-			this.btnSmartEdit.Location = new System.Drawing.Point(611, 3);
+			this.btnSmartEdit.Location = new System.Drawing.Point(601, 3);
 			this.btnSmartEdit.Name = "btnSmartEdit";
-			this.btnSmartEdit.Size = new System.Drawing.Size(65, 23);
+			this.btnSmartEdit.Size = new System.Drawing.Size(75, 23);
 			this.btnSmartEdit.TabIndex = 22;
 			this.btnSmartEdit.Text = "Smart Edit";
+			this.btnSmartEdit.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
 			this.btnSmartEdit.UseVisualStyleBackColor = true;
 			this.btnSmartEdit.CheckedChanged += new System.EventHandler(this.SmartEditToggled);
 			// 
 			// btnPaste
 			// 
-			this.btnPaste.Location = new System.Drawing.Point(121, 30);
+			this.btnPaste.Location = new System.Drawing.Point(129, 30);
 			this.btnPaste.Name = "btnPaste";
-			this.btnPaste.Size = new System.Drawing.Size(44, 23);
+			this.btnPaste.Size = new System.Drawing.Size(52, 23);
 			this.btnPaste.TabIndex = 20;
 			this.btnPaste.Text = "Paste";
 			this.btnPaste.UseVisualStyleBackColor = true;
@@ -90,7 +91,7 @@ namespace Sledge.BspEditor.Editing.Components.Properties.Tabs
 			// 
 			this.btnCopy.Location = new System.Drawing.Point(71, 30);
 			this.btnCopy.Name = "btnCopy";
-			this.btnCopy.Size = new System.Drawing.Size(44, 23);
+			this.btnCopy.Size = new System.Drawing.Size(52, 23);
 			this.btnCopy.TabIndex = 21;
 			this.btnCopy.Text = "Copy";
 			this.btnCopy.UseVisualStyleBackColor = true;
@@ -119,9 +120,9 @@ namespace Sledge.BspEditor.Editing.Components.Properties.Tabs
 			// btnHelp
 			// 
 			this.btnHelp.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-			this.btnHelp.Location = new System.Drawing.Point(611, 30);
+			this.btnHelp.Location = new System.Drawing.Point(601, 30);
 			this.btnHelp.Name = "btnHelp";
-			this.btnHelp.Size = new System.Drawing.Size(65, 23);
+			this.btnHelp.Size = new System.Drawing.Size(75, 23);
 			this.btnHelp.TabIndex = 17;
 			this.btnHelp.Text = "Help";
 			this.btnHelp.UseVisualStyleBackColor = true;
@@ -216,7 +217,7 @@ namespace Sledge.BspEditor.Editing.Components.Properties.Tabs
 			this.angAngles.AnglePropertyString = "-90 0 0";
 			this.angAngles.Down = false;
 			this.angAngles.LabelText = "Angles:";
-			this.angAngles.Location = new System.Drawing.Point(490, 3);
+			this.angAngles.Location = new System.Drawing.Point(480, 3);
 			this.angAngles.Name = "angAngles";
 			this.angAngles.ShowLabel = true;
 			this.angAngles.ShowTextBox = true;
