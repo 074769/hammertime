@@ -302,7 +302,6 @@ namespace Sledge.BspEditor.Tools.Texture
 				PackageTree.CheckBoxes = packageManager != null;
 				PackageTree.Nodes.Clear();
 				var parent = PackageTree.Nodes.Add("", "All Packages");
-				parent.Checked = true;
 				TreeNode reselect = null;
 				foreach (var name in packageNames.OrderBy(x => x, StringComparer.InvariantCultureIgnoreCase))
 				{
@@ -312,6 +311,7 @@ namespace Sledge.BspEditor.Tools.Texture
 					node.Checked = !disabled.Contains(name);
 					if (selectedKey == node.Name) reselect = node;
 				}
+				parent.Checked = parent.Nodes.Count > 0 && parent.Nodes.Cast<TreeNode>().All(n => n.Checked);
 				PackageTree.SelectedNode = reselect;
 				PackageTree.ExpandAll();
 			}
@@ -336,24 +336,43 @@ namespace Sledge.BspEditor.Tools.Texture
 
 		private async void PackageTreeAfterCheck(object sender, TreeViewEventArgs e)
 		{
-			// Ignore checkbox changes we made ourselves while rebuilding the tree, and clicks
-			// on the "All Packages" root node (it isn't tied to a real package).
-			if (_updatingPackageList || e.Node?.Parent == null) return;
+			// Ignore checkbox changes we made ourselves (rebuilding the tree, syncing "All Packages").
+			if (_updatingPackageList || e.Node == null) return;
 			if (!(_document?.Environment is ITexturePackageManager packageManager)) return;
 
-			var disabled = new HashSet<string>(packageManager.ManuallyDisabledTexturePackages, StringComparer.InvariantCultureIgnoreCase);
-			if (e.Node.Checked) disabled.Remove(e.Node.Name);
-			else disabled.Add(e.Node.Name);
+			var root = e.Node.Parent == null ? e.Node : e.Node.Parent;
 
-			packageManager.SetManuallyDisabledTexturePackages(disabled);
+			_updatingPackageList = true;
+			try
+			{
+				if (e.Node.Parent == null)
+				{
+					// "All Packages": check/uncheck every package
+					foreach (TreeNode child in root.Nodes) child.Checked = root.Checked;
+				}
+				else
+				{
+					// A single package: "All Packages" is ticked only when every package is
+					root.Checked = root.Nodes.Cast<TreeNode>().All(n => n.Checked);
+				}
+			}
+			finally
+			{
+				_updatingPackageList = false;
+			}
+
+			// Remember the selection only. Nothing is reloaded until "Reload Textures" is clicked.
+			var disabled = new HashSet<string>(
+				root.Nodes.Cast<TreeNode>().Where(n => !n.Checked).Select(n => n.Name),
+				StringComparer.InvariantCultureIgnoreCase);
+
+			packageManager.SetPendingDisabledTexturePackages(disabled);
 
 			if (!String.IsNullOrWhiteSpace(_document?.FileName))
 			{
 				MapTexturePackageSettingsManager.GetInstance()?.SetDisabledPackages(_document.FileName, disabled);
 				await Oy.Publish("Settings:Save");
 			}
-
-			await RefreshTexturesFromEnvironment();
 		}
 
 		private async Task RefreshTexturesFromEnvironment()

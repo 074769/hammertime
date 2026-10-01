@@ -74,7 +74,9 @@
             this.ReloadTexturesButton.Size = new System.Drawing.Size(226, 27);
             this.ReloadTexturesButton.TabIndex = 2;
             this.ReloadTexturesButton.Text = "Reload Textures";
-            this.ReloadTexturesButton.UseVisualStyleBackColor = true;
+            this.ReloadTexturesButton.BackColor = System.Drawing.Color.FromArgb(235, 165, 165);
+            this.ReloadTexturesButton.ForeColor = System.Drawing.Color.Black;
+            this.ReloadTexturesButton.UseVisualStyleBackColor = false;
             this.ReloadTexturesButton.Click += new System.EventHandler(this.ReloadTexturesButtonClick);
             // 
             // panel1

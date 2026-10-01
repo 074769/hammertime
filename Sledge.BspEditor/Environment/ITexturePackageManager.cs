@@ -19,14 +19,22 @@ namespace Sledge.BspEditor.Environment
         IEnumerable<string> GetAllTexturePackageNames();
 
         /// <summary>
-        /// The names of texture packages that have been manually unloaded (unchecked) for the
-        /// map currently open in this environment.
+        /// The names of texture packages the user has chosen to unload (unchecked) for the
+        /// map currently open in this environment. This is the user's selection: it only
+        /// takes effect on the loaded textures after <see cref="RefreshTexturePackages"/>.
         /// </summary>
         IEnumerable<string> ManuallyDisabledTexturePackages { get; }
 
         /// <summary>
-        /// Sets which texture packages should be manually unloaded for the current map, and
-        /// rebuilds the texture collection so the change takes effect immediately.
+        /// Records which texture packages the user wants unloaded WITHOUT reloading anything.
+        /// The choice is applied the next time <see cref="RefreshTexturePackages"/> is called.
+        /// </summary>
+        /// <param name="packageNames">The names of the packages to unload</param>
+        void SetPendingDisabledTexturePackages(IEnumerable<string> packageNames);
+
+        /// <summary>
+        /// Sets which texture packages should be manually unloaded for the current map and
+        /// applies the change immediately (rebuilds the texture collection).
         /// </summary>
         /// <param name="packageNames">The names of the packages to unload</param>
         void SetManuallyDisabledTexturePackages(IEnumerable<string> packageNames);
@@ -34,7 +42,8 @@ namespace Sledge.BspEditor.Environment
         /// <summary>
         /// Forces texture packages to be re-read from disk, discarding any cached texture
         /// metadata. Used so that a WAD file edited on disk (outside the editor) can be picked
-        /// up without restarting the editor. Does not affect which packages are enabled/disabled.
+        /// up without restarting the editor. Also applies any pending package selection made with
+        /// <see cref="SetPendingDisabledTexturePackages"/>.
         /// </summary>
         void RefreshTexturePackages();
     }

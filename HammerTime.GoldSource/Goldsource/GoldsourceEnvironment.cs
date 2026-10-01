@@ -51,7 +51,10 @@ namespace Sledge.BspEditor.Environment.Goldsource
 
 		// Packages the user has manually unloaded for the map currently open in this
 		// environment instance (not part of the saved game profile - see ITexturePackageManager).
+		// _manuallyDisabledWads = what the current texture collection was built with;
+		// _pendingDisabledWads = what the user has ticked/unticked (applied on the next refresh).
 		private List<string> _manuallyDisabledWads = new List<string>();
+		private List<string> _pendingDisabledWads = new List<string>();
 
 		private IEnumerable<TexturePackageReference> _skyTextures;
 		public string Engine => "Goldsource";
@@ -228,19 +231,26 @@ namespace Sledge.BspEditor.Environment.Goldsource
 			return _wadProvider.GetPackagesInFile(Root).Select(x => x.Name).Distinct(StringComparer.InvariantCultureIgnoreCase);
 		}
 
-		public IEnumerable<string> ManuallyDisabledTexturePackages => _manuallyDisabledWads;
+		public IEnumerable<string> ManuallyDisabledTexturePackages => _pendingDisabledWads;
+
+		public void SetPendingDisabledTexturePackages(IEnumerable<string> packageNames)
+		{
+			_pendingDisabledWads = (packageNames ?? Enumerable.Empty<string>())
+				.Distinct(StringComparer.InvariantCultureIgnoreCase)
+				.ToList();
+		}
 
 		public void SetManuallyDisabledTexturePackages(IEnumerable<string> packageNames)
 		{
-			_manuallyDisabledWads = (packageNames ?? Enumerable.Empty<string>())
-				.Distinct(StringComparer.InvariantCultureIgnoreCase)
-				.ToList();
-
+			SetPendingDisabledTexturePackages(packageNames);
 			RefreshTexturePackages();
 		}
 
 		public void RefreshTexturePackages()
 		{
+			// Apply the user's current package selection to what gets loaded.
+			_manuallyDisabledWads = _pendingDisabledWads.ToList();
+
 			// Replace the lazy holder so the next call to GetTextureCollection() re-scans
 			// disk and re-reads WAD contents, picking up both live file edits and any change
 			// to the manually-disabled package set.

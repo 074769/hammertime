@@ -139,6 +139,12 @@ namespace Sledge.BspEditor.Documents
 			var env = await GetEnvironment();
 			if (env == null) return null;
 
+			// New projects start with every texture package (WAD) unticked; the user picks what to load.
+			if (env is ITexturePackageManager newMapPackages)
+			{
+				newMapPackages.SetManuallyDisabledTexturePackages(newMapPackages.GetAllTexturePackageNames().ToList());
+			}
+
 			var md = new MapDocument(new Map(), env)
 			{
 				Name = string.Format(UntitledDocumentName, _untitled++),
@@ -430,6 +436,11 @@ namespace Sledge.BspEditor.Documents
 			{
 				var disabled = MapTexturePackageSettingsManager.GetInstance()?.GetDisabledPackages(md.FileName);
 				if (disabled != null && disabled.Count > 0) packageManager.SetManuallyDisabledTexturePackages(disabled);
+			}
+			else if (env is ITexturePackageManager unsavedPackages && md.Environment is ITexturePackageManager previous)
+			{
+				// Unsaved map: nothing to key a saved choice against, so carry the current selection over.
+				unsavedPackages.SetManuallyDisabledTexturePackages(previous.ManuallyDisabledTexturePackages.ToList());
 			}
 
 			md.Environment = env;
