@@ -33,16 +33,11 @@ namespace Sledge.Shell.Controls
 
         protected override void OnMouseUp(MouseEventArgs e)
         {
-            var wasPressed = _pressed;
+            // The base class raises Click when the mouse is released over the control
             _pressed = false;
             Invalidate();
             base.OnMouseUp(e);
-            // Click is raised by the base class when released over the control
-            if (wasPressed && e.Button == MouseButtons.Left && ClientRectangle.Contains(e.Location)) OnClick(EventArgs.Empty);
         }
-
-        // Stop the base class raising Click a second time on mouse up
-        protected override void OnMouseClick(MouseEventArgs e) { }
 
         protected override void OnPaint(PaintEventArgs e)
         {

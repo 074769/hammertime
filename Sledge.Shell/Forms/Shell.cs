@@ -425,6 +425,16 @@ namespace Sledge.Shell.Forms
 		}
 
 		/// <summary>
+		/// Menu keeps its natural width on the left; the tab area fills the rest of the row
+		/// </summary>
+		private void LayoutTopBar()
+		{
+			if (MenuStrip.Height > 0 && TopBar.Height != MenuStrip.Height) TopBar.Height = MenuStrip.Height;
+			var left = MenuStrip.Right;
+			TabHost.SetBounds(left, 0, Math.Max(0, TopBar.ClientSize.Width - left), TopBar.ClientSize.Height);
+		}
+
+		/// <summary>
 		/// The tab control fills the row; the "+" button sits on top of its empty space, right after
 		/// the last tab, and moves right as tabs are added. Only when the tabs run out of room does the
 		/// "+" stop at the right edge and the tab control shrink to leave it space.

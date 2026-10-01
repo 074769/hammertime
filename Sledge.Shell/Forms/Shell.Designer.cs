@@ -63,10 +63,11 @@ namespace Sledge.Shell.Forms
 			// 
 			// TopBar: menu on the left, document tabs (with "+" button) to the right of it
 			// 
-			// Fill control first, then the left-docked menu, so the tabs get all the space the menu doesn't use
+			// Menu on the left at its natural width; the tab area takes the rest (see Shell.LayoutTopBar)
 			TopBar.Controls.Add(TabHost);
 			TopBar.Controls.Add(MenuStrip);
 			TopBar.Dock = DockStyle.Top;
+			TopBar.Resize += (s, e) => LayoutTopBar();
 			TopBar.Location = new System.Drawing.Point(0, 0);
 			TopBar.Margin = new Padding(0);
 			TopBar.Name = "TopBar";
@@ -78,7 +79,9 @@ namespace Sledge.Shell.Forms
 			// 
 			MenuStrip.AutoSize = true;
 			MenuStrip.Stretch = false;
-			MenuStrip.Dock = DockStyle.Left;
+			MenuStrip.Dock = DockStyle.None;
+			MenuStrip.LayoutStyle = ToolStripLayoutStyle.HorizontalStackWithOverflow;
+			MenuStrip.SizeChanged += (s, e) => LayoutTopBar();
 			MenuStrip.GripStyle = ToolStripGripStyle.Hidden;
 			MenuStrip.Location = new System.Drawing.Point(0, 0);
 			MenuStrip.Margin = new Padding(0);
@@ -136,7 +139,7 @@ namespace Sledge.Shell.Forms
 			// 
 			TabHost.Controls.Add(DocumentTabs);
 			TabHost.Controls.Add(NewTabButton);
-			TabHost.Dock = DockStyle.Fill;
+			TabHost.Dock = DockStyle.None;
 			TabHost.Margin = new Padding(0);
 			TabHost.Name = "TabHost";
 			TabHost.Size = new System.Drawing.Size(508, 24);
