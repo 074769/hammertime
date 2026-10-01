@@ -719,8 +719,15 @@ namespace Sledge.Shell.Registers
 					{
 						icon = IconLoader.LoadFromFile(entry.IconPath, iconSize);
 					}
-					node.ToolbarButton.ImageScaling = ToolStripItemImageScaling.None;
-					node.ToolbarButton.Image = icon ?? node.ScaledIcon(iconSize);
+					// Same look as the left tool bar: image only, fixed square buttons sized from the icon size
+					var button = node.ToolbarButton;
+					button.DisplayStyle = ToolStripItemDisplayStyle.Image;
+					button.ImageScaling = ToolStripItemImageScaling.None;
+					button.ImageAlign = ContentAlignment.MiddleCenter;
+					button.Image = icon ?? node.ScaledIcon(iconSize);
+					button.AutoSize = false;
+					button.Width = iconSize + 4;
+					button.Height = iconSize + 4;
 
 					var group = node.Group?.Name ?? "";
 					if (any && group != lastGroup) ToolStrip.Items.Add(new ToolStripSeparator());
