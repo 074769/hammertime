@@ -168,6 +168,7 @@ namespace Sledge.Shell.Registers
 				get => _useDarkTheme; set
 				{
 					_useDarkTheme = value;
+					ApplyToolbarTheme();
 					if (value)
 					{
 						MenuStrip.Renderer = new CustomToolStripRenderer(SystemColors.ControlDarkDark, _backColor);
@@ -302,15 +303,30 @@ namespace Sledge.Shell.Registers
 				panel.EndInit();
 				panel.ContextMenuStrip = _toolbarMenu;
 
-				if (UseDarkTheme)
+				ApplyToolbarTheme();
+
+				// Force a clean repaint after the strips were removed/re-joined
+				panel.PerformLayout();
+				foreach (var strip in _joinedStrips) strip.Invalidate();
+				panel.Invalidate(true);
+			}
+
+			/// <summary>
+			/// Gives every top toolbar strip the flat renderer (grey highlight for active buttons) and the theme colours.
+			/// </summary>
+			private void ApplyToolbarTheme()
+			{
+				if (_joinedStrips == null) return;
+				var dark = UseDarkTheme;
+				var back = dark ? _systemDarkBackColor : SystemColors.Control;
+				var fore = dark ? Color.White : SystemColors.ControlText;
+
+				foreach (var strip in _joinedStrips)
 				{
-					panel.BackColor = _systemDarkBackColor;
-					panel.ForeColor = System.Drawing.Color.White;
-					foreach (var strip in _joinedStrips)
-					{
-						strip.BackColor = _systemDarkBackColor;
-						strip.ForeColor = System.Drawing.Color.White;
-					}
+					strip.Renderer = new ToolbarRenderer(dark);
+					strip.BackColor = back;
+					strip.ForeColor = fore;
+					strip.Invalidate();
 				}
 			}
 
@@ -498,6 +514,90 @@ namespace Sledge.Shell.Registers
 				}
 			}
 		}
+		/// <summary>
+		/// A ToolStrip that paints through a back buffer, so highlight changes don't flicker or leave stale pixels behind.
+		/// </summary>
+		private class BufferedToolStrip : ToolStrip
+		{
+			public BufferedToolStrip()
+			{
+				SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
+				DoubleBuffered = true;
+			}
+		}
+
+		/// <summary>
+		/// Flat renderer for the top toolbar: active (checked) buttons get a grey background,
+		/// hover and pressed get lighter/darker greys. Nothing is gradient-filled.
+		/// </summary>
+		private class ToolbarRenderer : ToolStripProfessionalRenderer
+		{
+			private readonly Color _checked, _checkedBorder, _hover, _pressed;
+
+			public ToolbarRenderer(bool dark)
+			{
+				RoundedEdges = false;
+				if (dark)
+				{
+					_checked = Color.FromArgb(105, 105, 105);
+					_checkedBorder = Color.FromArgb(140, 140, 140);
+					_hover = Color.FromArgb(80, 80, 80);
+					_pressed = Color.FromArgb(125, 125, 125);
+				}
+				else
+				{
+					_checked = Color.FromArgb(200, 200, 200);
+					_checkedBorder = Color.FromArgb(140, 140, 140);
+					_hover = Color.FromArgb(225, 225, 225);
+					_pressed = Color.FromArgb(180, 180, 180);
+				}
+			}
+
+			protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e)
+			{
+				using (var brush = new SolidBrush(e.ToolStrip.BackColor))
+				{
+					e.Graphics.FillRectangle(brush, e.AffectedBounds);
+				}
+			}
+
+			protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
+			{
+				// No border
+			}
+
+			protected override void OnRenderButtonBackground(ToolStripItemRenderEventArgs e)
+			{
+				var item = e.Item as ToolStripButton;
+				if (item == null || !item.Enabled)
+				{
+					// Disabled buttons draw no highlight (a checked one still shows its state)
+					if (item == null || !item.Checked) return;
+				}
+
+				var rect = new Rectangle(0, 0, e.Item.Width - 1, e.Item.Height - 1);
+
+				Color? fill = null;
+				if (item.Pressed) fill = _pressed;
+				else if (item.Checked) fill = item.Selected ? _pressed : _checked;
+				else if (item.Selected) fill = _hover;
+
+				if (fill == null) return;
+
+				using (var brush = new SolidBrush(fill.Value))
+				{
+					e.Graphics.FillRectangle(brush, rect);
+				}
+				if (item.Checked)
+				{
+					using (var pen = new Pen(_checkedBorder))
+					{
+						e.Graphics.DrawRectangle(pen, rect);
+					}
+				}
+			}
+		}
+
 		public class CustomToolStripRenderer : ToolStripProfessionalRenderer
 		{
 			private readonly Color _pressedBackColor;
@@ -741,7 +841,7 @@ namespace Sledge.Shell.Registers
 			{
 				Section = section;
 				MenuMenuItem = new ToolStripMenuItem(text) { Tag = this };
-				ToolStrip = new ToolStrip { Tag = this, LayoutStyle = ToolStripLayoutStyle.Flow };
+				ToolStrip = new BufferedToolStrip { Tag = this, LayoutStyle = ToolStripLayoutStyle.Flow };
 				Context = context;
 				_toolbarGroups = new List<MenuTreeGroup>();
 			}
@@ -913,7 +1013,11 @@ namespace Sledge.Shell.Registers
 
 			private void Fire(object sender, EventArgs e)
 			{
-				MenuItem?.Invoke(Context).ContinueWith(t => MenuMenuItem.GetCurrentParent()?.InvokeLater(Update));
+				// Refresh through a control that is guaranteed to have a handle. The menu item's parent is a drop-down
+				// that has never been opened if the button was clicked in the toolbar, and InvokeLater silently
+				// skips controls without a handle - which left the toolbar state stale until the next context change.
+				var owner = (sender as ToolStripItem)?.GetCurrentParent() ?? ToolbarButton?.GetCurrentParent() ?? MenuMenuItem.GetCurrentParent();
+				MenuItem?.Invoke(Context).ContinueWith(t => owner?.InvokeLater(Update));
 			}
 
 			public override void Update()
@@ -925,7 +1029,12 @@ namespace Sledge.Shell.Registers
 				{
 					var ts = MenuItem.GetToggleState(Context);
 					MenuMenuItem.CheckState = ts ? CheckState.Checked : CheckState.Unchecked;
-					if (ToolbarButton != null) ToolbarButton.CheckState = MenuMenuItem.CheckState;
+					if (ToolbarButton != null && ToolbarButton.CheckState != MenuMenuItem.CheckState)
+					{
+						ToolbarButton.CheckState = MenuMenuItem.CheckState;
+						ToolbarButton.Invalidate();
+						ToolbarButton.GetCurrentParent()?.Invalidate();
+					}
 				}
 				base.Update();
 			}
