@@ -50,7 +50,7 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit
 
 		public SoundPreviewPanel()
 		{
-			Size = new Size(255, 58);
+			Size = new Size(255, 80);
 
 			_button = new Button { Text = "Preview", Location = new Point(0, 0), Size = new Size(75, 25), UseVisualStyleBackColor = true };
 			_button.Click += ButtonClicked;
@@ -77,7 +77,7 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit
 			_percent = new Label { Text = _volume.Value + "%", Location = new Point(212, 6), Size = new Size(40, 15) };
 			Controls.Add(_percent);
 
-			_status = new Label { Location = new Point(0, 29), Size = new Size(255, 28), ForeColor = SystemColors.GrayText };
+			_status = new Label { Location = new Point(0, 29), Size = new Size(255, 50), AutoSize = false, ForeColor = SystemColors.GrayText };
 			Controls.Add(_status);
 
 			_endTimer = new Timer();

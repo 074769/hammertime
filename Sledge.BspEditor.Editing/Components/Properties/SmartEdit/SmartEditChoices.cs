@@ -74,19 +74,22 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit
 
                     // The presets modulate the entity's own sound ("WAV Name" / message)
                     var message = GetSiblingValue?.Invoke("message");
-                    if (String.IsNullOrWhiteSpace(message))
-                    {
-                        _preview.Status = "Set the WAV Name (message) first, the preset is applied to that sound.";
-                        return;
-                    }
 
                     var envelope = AmbientPresetSimulator.Simulate(preset);
                     if (envelope == null) return;
 
-                    source = SoundFileLoader.Load(Document, message);
+                    if (String.IsNullOrWhiteSpace(message))
+                    {
+                        source = WavPreviewRenderer.TestTone();
+                        _preview.Status = "No WAV Name set, using a test tone.";
+                    }
+                    else
+                    {
+                        source = SoundFileLoader.Load(Document, message);
+                        _preview.Status = "Preset applied to " + message.Trim();
+                    }
                     wav = WavPreviewRenderer.Render(source, _preview.Volume, envelope, true);
                     seconds = envelope.Duration;
-                    _preview.Status = "Simulated from the engine's preset, sound looped.";
                 }
                 else
                 {

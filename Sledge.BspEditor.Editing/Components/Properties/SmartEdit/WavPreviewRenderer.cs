@@ -72,6 +72,24 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit
 			return WriteWav(dst, channels, sampleRate);
 		}
 
+		/// <summary>
+		/// A 1 second, seamlessly looping buzz (22050Hz mono 16 bit) used to audition a dynamic preset
+		/// when the entity has no sound file set yet.
+		/// </summary>
+		public static byte[] TestTone()
+		{
+			const int rate = 22050;
+			const double freq = 210; // 105 samples per cycle, so the loop is seamless
+			var samples = new short[rate];
+			for (var i = 0; i < samples.Length; i++)
+			{
+				var ph = 2 * Math.PI * freq * i / rate;
+				var v = 0.5 * Math.Sin(ph) + 0.25 * Math.Sin(2 * ph) + 0.15 * Math.Sin(3 * ph) + 0.1 * Math.Sin(5 * ph);
+				samples[i] = (short) (v * 0.6 * 32767);
+			}
+			return WriteWav(samples, 1, rate);
+		}
+
 		private static void ParseHeader(byte[] b, out int channels, out int sampleRate, out int bits, out int dataOffset, out int dataLength)
 		{
 			channels = sampleRate = bits = dataOffset = dataLength = 0;
