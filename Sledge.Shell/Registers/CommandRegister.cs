@@ -56,6 +56,7 @@ namespace Sledge.Shell.Registers
                 await Oy.Publish("Command:Intercept", message);
                 if (message.Intercepted) return;
                 await cmd.Invoke(_context, message.Parameters);
+                await Oy.Publish("Menu:Update", string.Empty);
             }
         }
 

@@ -1,5 +1,6 @@
 using System.ComponentModel.Composition;
 using System.Threading.Tasks;
+using LogicAndTrick.Oy;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Modification;
 using Sledge.BspEditor.Modification.Operations;
@@ -19,10 +20,18 @@ namespace Sledge.BspEditor.Tools.Grid
     [MenuItem("Map", "", "Grid", "B")]
     [MenuImage(typeof(Resources), nameof(Resources.Menu_SnapToGrid))]
     [AutoTranslate]
-    public class ToggleSnapToGrid : ICommand
+    public class ToggleSnapToGrid : ICommand, IMenuItemExtendedProperties
     {
         public string Name { get; set; } = "Snap to Grid";
         public string Details { get; set; } = "Toggle grid snapping";
+        public bool IsToggle => true;
+
+        public bool GetToggleState(IContext context)
+        {
+            if (!context.TryGet("ActiveDocument", out MapDocument doc)) return false;
+            return doc.Map.Data.GetOne<GridData>()?.SnapToGrid == true;
+        }
+
         public bool IsInContext(IContext context)
         {
             return context.TryGet("ActiveDocument", out MapDocument _);
@@ -37,6 +46,7 @@ namespace Sledge.BspEditor.Tools.Grid
                 {
                     var operation = new TrivialOperation(x => activeGrid.SnapToGrid = !activeGrid.SnapToGrid, x => x.Update(activeGrid));
                     await MapDocumentOperation.Perform(doc, operation);
+                    await Oy.Publish("Menu:Update", string.Empty);
                 }
             }
         }

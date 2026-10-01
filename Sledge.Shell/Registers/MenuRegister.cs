@@ -512,6 +512,15 @@ namespace Sledge.Shell.Registers
 				{
 					node.Update();
 				}
+
+				// Opening a document flips many buttons between enabled/disabled at once; make sure the strips
+				// are re-laid out and fully repainted instead of leaving stale pixels until the window is reactivated
+				foreach (var strip in _joinedStrips)
+				{
+					strip.PerformLayout();
+					strip.Invalidate(true);
+					strip.Update();
+				}
 			}
 		}
 		/// <summary>
