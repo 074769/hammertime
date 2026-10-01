@@ -425,22 +425,27 @@ namespace Sledge.Shell.Forms
 		}
 
 		/// <summary>
-		/// Size the tab control to fit its tabs and place the "+" button right after the last one
+		/// The tab control fills the row; the "+" button sits on top of its empty space, right after
+		/// the last tab, and moves right as tabs are added. Only when the tabs run out of room does the
+		/// "+" stop at the right edge and the tab control shrink to leave it space.
 		/// </summary>
 		private void LayoutTabStrip()
 		{
 			var count = DocumentTabs.TabPages.Count;
 			const int buttonWidth = 30;
 			const int gap = 2;
+			var w = TabHost.ClientSize.Width;
 			var h = TabHost.ClientSize.Height;
 
-			var available = Math.Max(0, TabHost.ClientSize.Width - buttonWidth - gap);
-			var needed = count == 0 ? 0 : DocumentTabs.TabsRight + 4;
-			var w = Math.Min(needed, available);
+			var tabsRight = count == 0 ? 0 : DocumentTabs.TabsRight;
+			var overflow = count > 0 && tabsRight + gap + buttonWidth > w;
 
 			DocumentTabs.Visible = count > 0;
-			DocumentTabs.SetBounds(0, 0, w, h);
-			NewTabButton.SetBounds(count > 0 ? w + gap : 2, 0, buttonWidth, h);
+			DocumentTabs.SetBounds(0, 0, overflow ? Math.Max(0, w - buttonWidth - gap) : w, h);
+
+			var x = count == 0 ? 2 : (overflow ? w - buttonWidth : tabsRight + gap);
+			NewTabButton.SetBounds(x, 0, buttonWidth, h);
+			NewTabButton.BringToFront();
 			NewTabButton.Invalidate();
 		}
 
