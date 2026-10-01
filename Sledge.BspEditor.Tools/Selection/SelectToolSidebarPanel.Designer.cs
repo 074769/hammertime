@@ -56,7 +56,7 @@ namespace Sledge.BspEditor.Tools.Selection
             // Show3DWidgetsCheckbox
             // 
             Show3DWidgetsCheckbox.AutoSize = true;
-            Show3DWidgetsCheckbox.Location = new System.Drawing.Point(8, 62);
+            Show3DWidgetsCheckbox.Location = new System.Drawing.Point(8, 86);
             Show3DWidgetsCheckbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             Show3DWidgetsCheckbox.Name = "Show3DWidgetsCheckbox";
             Show3DWidgetsCheckbox.Size = new System.Drawing.Size(118, 19);
@@ -71,7 +71,7 @@ namespace Sledge.BspEditor.Tools.Selection
             MoveWidgetCheckbox.Checked = true;
             MoveWidgetCheckbox.CheckState = System.Windows.Forms.CheckState.Checked;
             MoveWidgetCheckbox.Enabled = false;
-            MoveWidgetCheckbox.Location = new System.Drawing.Point(26, 84);
+            MoveWidgetCheckbox.Location = new System.Drawing.Point(26, 108);
             MoveWidgetCheckbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             MoveWidgetCheckbox.Name = "MoveWidgetCheckbox";
             MoveWidgetCheckbox.Size = new System.Drawing.Size(100, 19);
@@ -86,7 +86,7 @@ namespace Sledge.BspEditor.Tools.Selection
             RotateWidgetCheckbox.Checked = true;
             RotateWidgetCheckbox.CheckState = System.Windows.Forms.CheckState.Checked;
             RotateWidgetCheckbox.Enabled = false;
-            RotateWidgetCheckbox.Location = new System.Drawing.Point(26, 105);
+            RotateWidgetCheckbox.Location = new System.Drawing.Point(26, 129);
             RotateWidgetCheckbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             RotateWidgetCheckbox.Name = "RotateWidgetCheckbox";
             RotateWidgetCheckbox.Size = new System.Drawing.Size(100, 19);
@@ -101,7 +101,7 @@ namespace Sledge.BspEditor.Tools.Selection
             MoveArrowWidgetCheckbox.Checked = true;
             MoveArrowWidgetCheckbox.CheckState = System.Windows.Forms.CheckState.Checked;
             MoveArrowWidgetCheckbox.Enabled = false;
-            MoveArrowWidgetCheckbox.Location = new System.Drawing.Point(26, 126);
+            MoveArrowWidgetCheckbox.Location = new System.Drawing.Point(26, 150);
             MoveArrowWidgetCheckbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             MoveArrowWidgetCheckbox.Name = "MoveArrowWidgetCheckbox";
             MoveArrowWidgetCheckbox.Size = new System.Drawing.Size(140, 19);
@@ -116,7 +116,7 @@ namespace Sledge.BspEditor.Tools.Selection
             RotationArcWidgetCheckbox.Checked = true;
             RotationArcWidgetCheckbox.CheckState = System.Windows.Forms.CheckState.Checked;
             RotationArcWidgetCheckbox.Enabled = false;
-            RotationArcWidgetCheckbox.Location = new System.Drawing.Point(26, 147);
+            RotationArcWidgetCheckbox.Location = new System.Drawing.Point(26, 171);
             RotationArcWidgetCheckbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             RotationArcWidgetCheckbox.Name = "RotationArcWidgetCheckbox";
             RotationArcWidgetCheckbox.Size = new System.Drawing.Size(140, 19);
@@ -130,7 +130,7 @@ namespace Sledge.BspEditor.Tools.Selection
             CameraWidgetCheckbox.AutoSize = true;
             CameraWidgetCheckbox.Checked = true;
             CameraWidgetCheckbox.CheckState = System.Windows.Forms.CheckState.Checked;
-            CameraWidgetCheckbox.Location = new System.Drawing.Point(26, 168);
+            CameraWidgetCheckbox.Location = new System.Drawing.Point(26, 192);
             CameraWidgetCheckbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             CameraWidgetCheckbox.Name = "CameraWidgetCheckbox";
             CameraWidgetCheckbox.Size = new System.Drawing.Size(140, 19);
@@ -142,7 +142,7 @@ namespace Sledge.BspEditor.Tools.Selection
             // AutoSelectBoxCheckbox
             // 
             AutoSelectBoxCheckbox.AutoSize = true;
-            AutoSelectBoxCheckbox.Location = new System.Drawing.Point(8, 192);
+            AutoSelectBoxCheckbox.Location = new System.Drawing.Point(8, 62);
             AutoSelectBoxCheckbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             AutoSelectBoxCheckbox.Name = "AutoSelectBoxCheckbox";
             AutoSelectBoxCheckbox.Size = new System.Drawing.Size(140, 19);
