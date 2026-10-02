@@ -75,7 +75,6 @@ namespace Sledge.Shell.Controls
 
             // Strip colour behind the tab shape (src.BackColor is the un-themed control colour, which showed up as white above the button)
             var strip = src != null ? src.StripColor : BackColor;
-            var inside = _colorSource != null ? _colorSource.BackColor : strip;
             using (var b = new SolidBrush(strip)) g.FillRectangle(b, ClientRectangle);
 
             var tab = src != null ? src.FirstTabRect : new Rectangle(0, 2, 0, 22);
@@ -92,10 +91,11 @@ namespace Sledge.Shell.Controls
                 new Point(rect.Left, rect.Bottom)
             };
 
-            // Same colour as the menu bar. Hover/press only nudge it lighter, so it can never look like the selected (light grey) tab
-            var fill = inside;
-            if (_pressed && _hover) fill = Blend(inside, Color.White, 0.22f);
-            else if (_hover) fill = Blend(inside, Color.White, 0.12f);
+            // Mid grey (the inactive-tab grey): clearly lighter than the dark bar, clearly darker than the selected tab.
+            // Hover/press only nudge it lighter, so it never turns into the selected tab's light grey.
+            var fill = back;
+            if (_pressed && _hover) fill = Blend(back, Color.White, 0.30f);
+            else if (_hover) fill = Blend(back, Color.White, 0.15f);
 
             using (var b = new SolidBrush(fill)) g.FillPolygon(b, points);
 
