@@ -325,6 +325,32 @@ namespace Sledge.Shell.Registers
 				_joinedStrips.Clear();
 			}
 
+			/// <summary>
+			/// Gets the first saved position of a toolbar section.
+			///
+			/// This makes the saved TopToolbarLayout determine the order
+			/// of the individual toolbar strips as well as the buttons
+			/// inside them.
+			/// </summary>
+			private static int GetSectionLayoutPosition(
+				MenuTreeRoot root,
+				TopToolbarLayout layout)
+			{
+				var positions =
+					root.ToolbarNodes
+						.Select(x => layout.FindIndex(
+							e => e.Id == x.Id))
+						.Where(x => x >= 0)
+						.ToList();
+
+				if (positions.Count == 0)
+				{
+					return int.MaxValue;
+				}
+
+				return positions.Min();
+			}
+
 			private void RenderToolbars()
 			{
 				DetachToolbars();
@@ -355,9 +381,8 @@ namespace Sledge.Shell.Registers
 				 * Resolve the saved layout against the currently
 				 * available toolbar items.
 				 *
-				 * The resolved layout determines the order of the
-				 * buttons. It does NOT determine the order of the
-				 * toolbar sections themselves.
+				 * The returned layout is deliberately used for all
+				 * ordering decisions below.
 				 */
 				var layout =
 					TopToolbarSettings.Layout.Resolve(
@@ -375,13 +400,17 @@ namespace Sledge.Shell.Registers
 				panel.BeginInit();
 
 				/*
-				 * Toolbar sections always use their normal OrderHint.
+				 * IMPORTANT:
 				 *
-				 * The saved TopToolbarLayout is applied inside each
-				 * section by MenuTreeRoot.ApplyLayout().
+				 * The old code sorted the strips by OrderHint.
+				 * That meant the saved global toolbar order could
+				 * never completely control the visual order.
 				 *
-				 * This prevents dragging a button from causing the
-				 * entire toolbar section to jump to another position.
+				 * We now sort sections by the position of their first
+				 * saved toolbar item.
+				 *
+				 * If a section has no saved entries yet, its normal
+				 * OrderHint is used as the fallback.
 				 */
 				var orderedRoots =
 					RootNodes.Values
@@ -389,9 +418,17 @@ namespace Sledge.Shell.Registers
 							(root, index) => new
 							{
 								Root = root,
-								Index = index
+								Index = index,
+								LayoutPosition =
+									GetSectionLayoutPosition(
+										root,
+										layout)
 							})
-						.OrderBy(x => x.Root.OrderHint)
+						.OrderBy(x =>
+							x.LayoutPosition == int.MaxValue
+								? int.MaxValue
+								: x.LayoutPosition)
+						.ThenBy(x => x.Root.OrderHint)
 						.ThenBy(x => x.Index)
 						.Select(x => x.Root)
 						.ToList();
@@ -754,7 +791,7 @@ namespace Sledge.Shell.Registers
 							 * Remove the moving item first.
 							 * This makes the insertion index correct
 							 * whether the item stays in its section or
-							 * moves relative to another section.
+							 * moves into another section.
 							 */
 							layout.Remove(moving);
 
@@ -787,7 +824,9 @@ namespace Sledge.Shell.Registers
 								moving);
 
 							/*
-							 * Persist the complete toolbar layout.
+							 * This is the important persistence step.
+							 * The complete layout is stored, not just
+							 * the current strip's local order.
 							 */
 							TopToolbarSettings.Layout =
 								layout;
@@ -1483,8 +1522,6 @@ namespace Sledge.Shell.Registers
 									: x.Pos)
 						.ThenBy(
 							x => x.Index)
-						.ThenBy(
-							x => x.Node.Id ?? "")
 						.Select(
 							x => x.Node)
 						.ToList();
@@ -2427,7 +2464,7 @@ namespace Sledge.Shell.Registers
 				Group = group;
 
 				Nodes =
-					new List<MenuTreeGroup>();
+					new List<BaseMenuTreeNode>();
 			}
 		}
 	}
