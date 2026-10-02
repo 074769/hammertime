@@ -351,6 +351,31 @@ namespace Sledge.Shell.Registers
 				return positions.Min();
 			}
 
+			/// <summary>
+			/// Default left-to-right order of the toolbar strips. Sections that
+			/// are not listed come after these, ordered by their order hint.
+			/// </summary>
+			private static readonly string[] DefaultSectionOrder =
+			{
+				"File",
+				"Edit",
+				"View",
+				"Map",
+				"Tools"
+			};
+
+			private static int SectionRank(MenuTreeRoot root)
+			{
+				var i =
+					Array.IndexOf(
+						DefaultSectionOrder,
+						root.SectionId);
+
+				return i < 0
+					? DefaultSectionOrder.Length
+					: i;
+			}
+
 			private void RenderToolbars()
 			{
 				_rendering = true;
@@ -369,7 +394,8 @@ namespace Sledge.Shell.Registers
 
 				AllToolbarItems =
 					RootNodes.Values
-						.OrderBy(x => x.OrderHint)
+						.OrderBy(x => SectionRank(x))
+						.ThenBy(x => x.OrderHint)
 						.SelectMany(
 							r => r.ToolbarNodes.Select(
 								n => new TopToolbarItemInfo
@@ -380,6 +406,41 @@ namespace Sledge.Shell.Registers
 									DefaultIcon = n.DefaultIcon
 								}))
 						.ToList();
+
+				/*
+				 * Layouts saved by older builds could have an arbitrary
+				 * section order (new buttons were appended at the end).
+				 * Once, put them in the default order and keep each
+				 * button's visibility and custom icon.
+				 */
+				if (TopToolbarSettings.ResetOrder &&
+					AllToolbarItems.Count > 0)
+				{
+					var fresh =
+						new TopToolbarLayout().Resolve(
+							AllToolbarItems.Select(x => x.Id));
+
+					foreach (var entry in fresh)
+					{
+						var old =
+							TopToolbarSettings.Layout.Find(entry.Id);
+
+						if (old != null)
+						{
+							entry.Visible = old.Visible;
+							entry.IconPath = old.IconPath;
+						}
+					}
+
+					TopToolbarSettings.Layout = fresh;
+
+					TopToolbarSettings.StripPositions =
+						new Dictionary<string, int[]>();
+
+					TopToolbarSettings.ResetOrder = false;
+
+					Oy.Publish("Settings:Save");
+				}
 
 				/*
 				 * Resolve the saved layout against the currently
@@ -432,6 +493,7 @@ namespace Sledge.Shell.Registers
 							x.LayoutPosition == int.MaxValue
 								? int.MaxValue
 								: x.LayoutPosition)
+						.ThenBy(x => SectionRank(x.Root))
 						.ThenBy(x => x.Root.OrderHint)
 						.ThenBy(x => x.Index)
 						.Select(x => x.Root)
@@ -1724,6 +1786,8 @@ namespace Sledge.Shell.Registers
 
 			public override string OrderHint =>
 				Section.OrderHint;
+
+			public string SectionId => Section.Name;
 
 			public string SectionName =>
 				Section.Description;

@@ -122,6 +122,12 @@ namespace Sledge.Shell.Settings
 		/// <summary>True once the saved values have been read (they may arrive after the menus are first built)</summary>
 		public static bool Loaded { get; private set; }
 
+		/// <summary>Version of the saved layout format. Layouts older than this get their order reset to the default once.</summary>
+		private const int LayoutVersion = 2;
+
+		/// <summary>True when the loaded layout is from an older build and must be put in the default order</summary>
+		public static bool ResetOrder { get; set; }
+
 		public string Name => "Sledge.Shell.TopToolbar";
 		public bool ValuesLoaded { get; private set; }
 
@@ -141,6 +147,7 @@ namespace Sledge.Shell.Settings
 			IconSize = Math.Max(16, Math.Min(64, store.Get("TopToolbarIconSize24", 24)));
 			Layout = store.Get("TopToolbarButtons", new TopToolbarLayout()) ?? new TopToolbarLayout();
 			StripPositions = store.Get("TopToolbarStripPositions", new Dictionary<string, int[]>()) ?? new Dictionary<string, int[]>();
+			ResetOrder = store.Get("TopToolbarLayoutVersion", 0) < LayoutVersion;
 			ValuesLoaded = true;
 			Loaded = true;
 		}
@@ -152,6 +159,7 @@ namespace Sledge.Shell.Settings
 			store.Set("TopToolbarIconSize24", IconSize);
 			store.Set("TopToolbarButtons", Layout);
 			store.Set("TopToolbarStripPositions", StripPositions);
+			store.Set("TopToolbarLayoutVersion", ResetOrder ? 0 : LayoutVersion);
 		}
 	}
 }
