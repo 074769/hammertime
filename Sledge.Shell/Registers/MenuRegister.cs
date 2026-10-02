@@ -22,10 +22,7 @@ namespace Sledge.Shell.Registers
 	[Export(typeof(IInitialiseHook))]
 	internal class MenuRegister : IStartupHook, IInitialiseHook
 	{
-		// The menu register needs direct access to the shell
 		[Import] private Forms.Shell _shell;
-
-		// Store the context (the menu register is one of the few things that should need static access to the context)
 		[Import] private IContext _context;
 
 		[ImportMany] private IEnumerable<Lazy<IMenuItemProvider>> _itemProviders;
@@ -33,10 +30,10 @@ namespace Sledge.Shell.Registers
 
 		public Task OnStartup()
 		{
-			// Register commands as menu items
 			foreach (var export in _itemProviders)
 			{
 				export.Value.MenuItemsChanged += UpdateMenus;
+
 				foreach (var menuItem in export.Value.GetMenuItems())
 				{
 					Add(menuItem);
@@ -48,7 +45,6 @@ namespace Sledge.Shell.Registers
 
 		public async Task OnInitialise()
 		{
-			// Register metadata providers
 			foreach (var md in _metaDataProviders)
 			{
 				_declaredGroups.AddRange(md.Value.GetMenuGroups());
@@ -57,19 +53,35 @@ namespace Sledge.Shell.Registers
 
 			_shell.InvokeSync(() =>
 			{
-				_tree = new VirtualMenuTree(_context, _shell.MenuStrip, _shell.ToolbarContainer, _declaredSections, _declaredGroups);
+				_tree = new VirtualMenuTree(
+					_context,
+					_shell.MenuStrip,
+					_shell.ToolbarContainer,
+					_declaredSections,
+					_declaredGroups);
+
 				_tree.ResetItems(_menuItems.Values);
-				_toolbarSettingsApplied = TopToolbarSettings.Loaded;
+
+				_toolbarSettingsApplied =
+					TopToolbarSettings.Loaded;
 			});
 
 			Oy.Subscribe<IContext>("Context:Changed", ContextChanged);
 			Oy.Subscribe<object>("Menu:Update", UpdateMenu);
-			Oy.Subscribe<bool>("Theme:Changed", (useDark) => _tree.UseDarkTheme = useDark);
+			Oy.Subscribe<bool>("Theme:Changed",
+				(useDark) => _tree.UseDarkTheme = useDark);
 
-			// Re-lay out the top toolbar when its settings change (settings form, or its right-click menu)
-			Oy.Subscribe<object>("SettingsChanged", ToolbarSettingsChanged);
-			Oy.Subscribe<object>("TopToolbar:Changed", ToolbarSettingsChanged);
-			Oy.Subscribe<object>("Settings:Loaded", SettingsLoaded);
+			Oy.Subscribe<object>(
+				"SettingsChanged",
+				ToolbarSettingsChanged);
+
+			Oy.Subscribe<object>(
+				"TopToolbar:Changed",
+				ToolbarSettingsChanged);
+
+			Oy.Subscribe<object>(
+				"Settings:Loaded",
+				SettingsLoaded);
 		}
 
 		private Task ContextChanged(IContext context)
@@ -79,10 +91,16 @@ namespace Sledge.Shell.Registers
 
 		private Task SettingsLoaded(object obj)
 		{
-			if (!TopToolbarSettings.Loaded) return Task.CompletedTask;
+			if (!TopToolbarSettings.Loaded)
+			{
+				return Task.CompletedTask;
+			}
 
 			_toolbarSettingsApplied = true;
-			_shell.InvokeLater(() => _tree?.ApplyToolbarSettings());
+
+			_shell.InvokeLater(
+				() => _tree?.ApplyToolbarSettings());
+
 			return Task.CompletedTask;
 		}
 
@@ -91,21 +109,28 @@ namespace Sledge.Shell.Registers
 		private Task ToolbarSettingsChanged(object obj)
 		{
 			_toolbarSettingsApplied = true;
-			_shell.InvokeLater(() => _tree?.ApplyToolbarSettings());
+
+			_shell.InvokeLater(
+				() => _tree?.ApplyToolbarSettings());
+
 			return Task.CompletedTask;
 		}
 
 		/// <summary>
-		/// Every button that can appear in the top toolbar, in default order (used by the settings editor).
+		/// Every button that can appear in the top toolbar,
+		/// in default order.
 		/// </summary>
-		internal static IReadOnlyList<TopToolbarItemInfo> AllToolbarItems { get; private set; } = new List<TopToolbarItemInfo>();
+		internal static IReadOnlyList<TopToolbarItemInfo> AllToolbarItems
+		{
+			get;
+			private set;
+		} = new List<TopToolbarItemInfo>();
 
 		private async Task UpdateMenu(object obj)
 		{
 			_shell.InvokeLater(_tree.Update);
 		}
 
-		// Clear all menus and repopulate them from the menu item providers
 		private void UpdateMenus(object sender, EventArgs e)
 		{
 			_shell.InvokeLater(() =>
@@ -124,61 +149,61 @@ namespace Sledge.Shell.Registers
 			});
 		}
 
-		/// <summary>
-		/// The list of all menu items by ID
-		/// </summary>
 		private readonly Dictionary<string, IMenuItem> _menuItems;
 
-		/// <summary>
-		/// Sections declared by menu metadata providers. A section is a top-level menu or toolbar.
-		/// </summary>
 		private readonly List<MenuSection> _declaredSections;
 
-		/// <summary>
-		/// Groups declared by menu metadata providers. Groups within a section are separated with lines.
-		/// </summary>
 		private readonly List<MenuGroup> _declaredGroups;
 
 		private VirtualMenuTree _tree;
 
 		public MenuRegister()
 		{
-			_menuItems = new Dictionary<string, IMenuItem>();
-			_declaredSections = new List<MenuSection>();
-			_declaredGroups = new List<MenuGroup>();
+			_menuItems =
+				new Dictionary<string, IMenuItem>();
+
+			_declaredSections =
+				new List<MenuSection>();
+
+			_declaredGroups =
+				new List<MenuGroup>();
 		}
 
-		/// <summary>
-		/// Add a menu item to the list
-		/// </summary>
-		/// <param name="menuItem">The menu item to add</param>
 		private void Add(IMenuItem menuItem)
 		{
 			_menuItems[menuItem.ID] = menuItem;
 		}
 
 		/// <summary>
-		/// A class that handles the tree of menu items
-		/// and inserts them into the correct positions.
+		/// Handles the virtual menu tree and toolbar.
 		/// </summary>
 		private class VirtualMenuTree
 		{
 			private readonly IContext _context;
+
 			private readonly List<MenuSection> _declaredSections;
+
 			private readonly List<MenuGroup> _declaredGroups;
+
 			private bool _useDarkTheme = false;
 
 			public bool UseDarkTheme
 			{
 				get => _useDarkTheme;
+
 				set
 				{
 					_useDarkTheme = value;
+
 					ApplyToolbarTheme();
 
 					if (value)
 					{
-						MenuStrip.Renderer = new CustomToolStripRenderer(SystemColors.ControlDarkDark, _backColor);
+						MenuStrip.Renderer =
+							new CustomToolStripRenderer(
+								SystemColors.ControlDarkDark,
+								_backColor);
+
 						return;
 					}
 
@@ -186,30 +211,31 @@ namespace Sledge.Shell.Registers
 				}
 			}
 
-			private Color _systemDarkBackColor = Color.FromArgb(50, 50, 50);
-			private Color _backColor = Color.FromArgb(70, 70, 70);
+			private Color _systemDarkBackColor =
+				Color.FromArgb(50, 50, 50);
 
-			/// <summary>
-			/// The container whose four edge panels can host the toolbars
-			/// </summary>
-			private ToolStripContainer ToolbarContainer { get; set; }
+			private Color _backColor =
+				Color.FromArgb(70, 70, 70);
 
-			/// <summary>
-			/// The toolbar strips we have joined to a panel (they may have been dragged to another panel since)
-			/// </summary>
-			private readonly List<ToolStrip> _joinedStrips = new List<ToolStrip>();
+			private ToolStripContainer ToolbarContainer
+			{
+				get;
+			}
+
+			private readonly List<ToolStrip> _joinedStrips =
+				new List<ToolStrip>();
 
 			private ContextMenuStrip _toolbarMenu;
 
-			/// <summary>
-			/// The menu strip for the top level menus
-			/// </summary>
-			private MenuStrip MenuStrip { get; set; }
+			private MenuStrip MenuStrip
+			{
+				get;
+			}
 
-			/// <summary>
-			/// The root nodes of the virtual tree
-			/// </summary>
-			private Dictionary<string, MenuTreeRoot> RootNodes { get; set; }
+			private Dictionary<string, MenuTreeRoot> RootNodes
+			{
+				get;
+			}
 
 			public VirtualMenuTree(
 				IContext context,
@@ -221,14 +247,18 @@ namespace Sledge.Shell.Registers
 				_context = context;
 				_declaredSections = declaredSections;
 				_declaredGroups = declaredGroups;
+
 				MenuStrip = menuStrip;
 				ToolbarContainer = toolbarContainer;
-				RootNodes = new Dictionary<string, MenuTreeRoot>();
+
+				RootNodes =
+					new Dictionary<string, MenuTreeRoot>();
 
 				Clear();
 			}
 
-			public void ResetItems(IEnumerable<IMenuItem> items)
+			public void ResetItems(
+				IEnumerable<IMenuItem> items)
 			{
 				Clear();
 
@@ -243,29 +273,31 @@ namespace Sledge.Shell.Registers
 			private void Render()
 			{
 				MenuStrip.SuspendLayout();
+
 				MenuStrip.Items.Clear();
+
 				MenuStrip.Items.AddRange(
 					RootNodes.Values
 						.OrderBy(x => x.OrderHint)
 						.Select(x => x.MenuMenuItem)
 						.OfType<ToolStripItem>()
 						.ToArray());
+
 				MenuStrip.ResumeLayout();
 
-				// SettingsProvider runs after MenuRegister alphabetically. Do not construct and place the
-				// toolbar using default settings during startup; wait until the saved settings are loaded.
-				if (TopToolbarSettings.Loaded) RenderToolbars();
+				if (TopToolbarSettings.Loaded)
+				{
+					RenderToolbars();
+				}
 			}
 
-			/// <summary>
-			/// Re-applies the top toolbar settings (position, lock, button visibility, order and icons).
-			/// </summary>
 			public void ApplyToolbarSettings()
 			{
 				RenderToolbars();
 			}
 
-			private ToolStripPanel PanelFor(ToolbarDock dock)
+			private ToolStripPanel PanelFor(
+				ToolbarDock dock)
 			{
 				switch (dock)
 				{
@@ -283,10 +315,6 @@ namespace Sledge.Shell.Registers
 				}
 			}
 
-			/// <summary>
-			/// Removes the toolbar strips we joined from whichever panel they are in now.
-			/// Only our own strips are removed, the left panel also hosts the tools toolbar.
-			/// </summary>
 			private void DetachToolbars()
 			{
 				foreach (var strip in _joinedStrips)
@@ -297,42 +325,119 @@ namespace Sledge.Shell.Registers
 				_joinedStrips.Clear();
 			}
 
+			/// <summary>
+			/// Gets the first saved position of a toolbar section.
+			///
+			/// This makes the saved TopToolbarLayout determine the order
+			/// of the individual toolbar strips as well as the buttons
+			/// inside them.
+			/// </summary>
+			private static int GetSectionLayoutPosition(
+				MenuTreeRoot root,
+				TopToolbarLayout layout)
+			{
+				var positions =
+					root.ToolbarNodes
+						.Select(x => layout.FindIndex(
+							e => e.Id == x.Id))
+						.Where(x => x >= 0)
+						.ToList();
+
+				if (positions.Count == 0)
+				{
+					return int.MaxValue;
+				}
+
+				return positions.Min();
+			}
+
 			private void RenderToolbars()
 			{
 				DetachToolbars();
 
 				var dock = TopToolbarSettings.Dock;
-				var vertical = dock == ToolbarDock.Left || dock == ToolbarDock.Right;
+
+				var vertical =
+					dock == ToolbarDock.Left ||
+					dock == ToolbarDock.Right;
+
 				var panel = PanelFor(dock);
 
-				// Publish the list of available buttons for the settings editor and work out the user's layout
-				AllToolbarItems = RootNodes.Values
-					.OrderBy(x => x.OrderHint)
-					.SelectMany(r => r.ToolbarNodes.Select(n => new TopToolbarItemInfo
-					{
-						Id = n.Id,
-						Name = n.DisplayName,
-						Section = r.SectionName,
-						DefaultIcon = n.DefaultIcon
-					}))
-					.ToList();
+				AllToolbarItems =
+					RootNodes.Values
+						.OrderBy(x => x.OrderHint)
+						.SelectMany(
+							r => r.ToolbarNodes.Select(
+								n => new TopToolbarItemInfo
+								{
+									Id = n.Id,
+									Name = n.DisplayName,
+									Section = r.SectionName,
+									DefaultIcon = n.DefaultIcon
+								}))
+						.ToList();
 
-				var layout = TopToolbarSettings.Layout.Resolve(
-					AllToolbarItems.Select(x => x.Id));
+				/*
+				 * Resolve the saved layout against the currently
+				 * available toolbar items.
+				 *
+				 * The returned layout is deliberately used for all
+				 * ordering decisions below.
+				 */
+				var layout =
+					TopToolbarSettings.Layout.Resolve(
+						AllToolbarItems.Select(x => x.Id));
 
 				if (_toolbarMenu == null)
 				{
-					_toolbarMenu = BuildToolbarMenu();
+					_toolbarMenu =
+						BuildToolbarMenu();
 				}
 
-				var iconSize = TopToolbarSettings.IconSize;
+				var iconSize =
+					TopToolbarSettings.IconSize;
 
 				panel.BeginInit();
 
-				// Joined in descending order, like the first render: the panel puts each newly joined strip at the start of the row
-				foreach (var ts in RootNodes.Values.OrderByDescending(x => x.OrderHint))
+				/*
+				 * IMPORTANT:
+				 *
+				 * The old code sorted the strips by OrderHint.
+				 * That meant the saved global toolbar order could
+				 * never completely control the visual order.
+				 *
+				 * We now sort sections by the position of their first
+				 * saved toolbar item.
+				 *
+				 * If a section has no saved entries yet, its normal
+				 * OrderHint is used as the fallback.
+				 */
+				var orderedRoots =
+					RootNodes.Values
+						.Select(
+							(root, index) => new
+							{
+								Root = root,
+								Index = index,
+								LayoutPosition =
+									GetSectionLayoutPosition(
+										root,
+										layout)
+							})
+						.OrderBy(x =>
+							x.LayoutPosition == int.MaxValue
+								? int.MaxValue
+								: x.LayoutPosition)
+						.ThenBy(x => x.Root.OrderHint)
+						.ThenBy(x => x.Index)
+						.Select(x => x.Root)
+						.ToList();
+
+				foreach (var ts in orderedRoots)
 				{
-					ts.ApplyLayout(layout, iconSize);
+					ts.ApplyLayout(
+						layout,
+						iconSize);
 
 					if (ts.ToolStrip.Items.Count == 0)
 					{
@@ -341,32 +446,37 @@ namespace Sledge.Shell.Registers
 
 					var strip = ts.ToolStrip;
 
-					strip.ImageScalingSize = new Size(iconSize, iconSize);
+					strip.ImageScalingSize =
+						new Size(iconSize, iconSize);
+
 					WireDragDrop(strip);
 
-					// IMPORTANT:
-					// Do not use Flow here. Flow can re-arrange the buttons when the available
-					// width changes. HorizontalStackWithOverflow keeps the buttons in a
-					// horizontal sequence and uses overflow instead of wrapping them.
-					strip.LayoutStyle = vertical
-						? ToolStripLayoutStyle.VerticalStackWithOverflow
-						: ToolStripLayoutStyle.HorizontalStackWithOverflow;
+					strip.LayoutStyle =
+						vertical
+							? ToolStripLayoutStyle
+								.VerticalStackWithOverflow
+							: ToolStripLayoutStyle
+								.HorizontalStackWithOverflow;
 
-					strip.GripStyle = TopToolbarSettings.Locked
-						? ToolStripGripStyle.Hidden
-						: ToolStripGripStyle.Visible;
+					strip.GripStyle =
+						TopToolbarSettings.Locked
+							? ToolStripGripStyle.Hidden
+							: ToolStripGripStyle.Visible;
 
-					strip.ContextMenuStrip = _toolbarMenu;
+					strip.ContextMenuStrip =
+						_toolbarMenu;
 
-					// Measure the strip with its new buttons and forget its old position before it is joined,
-					// so the panel never works from a stale size or location.
 					strip.AutoSize = true;
-					strip.PerformLayout();
-					strip.Size = strip.GetPreferredSize(Size.Empty);
-					strip.Location = Point.Empty;
 
-					// Vertical docks keep the panel's own placement;
-					// horizontal ones are placed explicitly below.
+					strip.PerformLayout();
+
+					strip.Size =
+						strip.GetPreferredSize(
+							Size.Empty);
+
+					strip.Location =
+						Point.Empty;
+
 					if (vertical)
 					{
 						panel.Join(strip);
@@ -377,16 +487,16 @@ namespace Sledge.Shell.Registers
 
 				if (!vertical)
 				{
-					_autoPlaced = true;
 					PlaceStrips(panel);
 				}
 
 				panel.EndInit();
-				panel.ContextMenuStrip = _toolbarMenu;
+
+				panel.ContextMenuStrip =
+					_toolbarMenu;
 
 				ApplyToolbarTheme();
 
-				// Force a clean repaint after the strips were removed/re-joined
 				panel.PerformLayout();
 
 				foreach (var strip in _joinedStrips)
@@ -397,69 +507,103 @@ namespace Sledge.Shell.Registers
 				panel.Invalidate(true);
 			}
 
-			private bool _autoPlaced = true;
-
 			/// <summary>
-			/// Places all horizontal toolbar strips in one row.
+			/// Places horizontal strips in a single row.
 			///
-			/// Unlike the previous implementation, this deliberately does not check the
-			/// panel width and does not create additional rows. The toolbar therefore keeps
-			/// the same strip positions when the main window is resized.
+			/// There is intentionally no width calculation and no
+			/// wrapping here. The individual ToolStrips use overflow
+			/// instead.
 			/// </summary>
-			private void PlaceStrips(ToolStripPanel panel)
+			private void PlaceStrips(
+				ToolStripPanel panel)
 			{
 				int x = 0;
 
-				// _joinedStrips is in descending menu order.
-				// Reverse it so the final visual order remains the same as before.
-				foreach (var strip in Enumerable.Reverse(_joinedStrips))
+				foreach (var strip in _joinedStrips)
 				{
-					var size = strip.GetPreferredSize(Size.Empty);
+					var size =
+						strip.GetPreferredSize(
+							Size.Empty);
 
-					panel.Join(strip, x, 0);
+					panel.Join(
+						strip,
+						x,
+						0);
 
 					x += size.Width;
 				}
 			}
 
-			/// <summary>
-			/// Gives every top toolbar strip the flat renderer (grey highlight for active buttons) and the theme colours.
-			/// </summary>
 			private void ApplyToolbarTheme()
 			{
-				if (_joinedStrips == null) return;
+				if (_joinedStrips == null)
+				{
+					return;
+				}
 
 				var dark = UseDarkTheme;
-				var back = dark ? _systemDarkBackColor : SystemColors.Control;
-				var fore = dark ? Color.White : SystemColors.ControlText;
+
+				var back =
+					dark
+						? _systemDarkBackColor
+						: SystemColors.Control;
+
+				var fore =
+					dark
+						? Color.White
+						: SystemColors.ControlText;
 
 				foreach (var strip in _joinedStrips)
 				{
-					strip.Renderer = new ToolbarRenderer(dark);
+					strip.Renderer =
+						new ToolbarRenderer(dark);
+
 					strip.BackColor = back;
 					strip.ForeColor = fore;
+
 					strip.Invalidate();
 				}
 			}
 
-			private readonly HashSet<ToolStrip> _wired = new HashSet<ToolStrip>();
+			private readonly HashSet<ToolStrip> _wired =
+				new HashSet<ToolStrip>();
+
 			private Point _dragStart;
+
 			private string _dragId;
 
-			private static string NodeId(ToolStripItem item)
+			private static string NodeId(
+				ToolStripItem item)
 			{
-				return (item?.Tag as BaseMenuTreeNode)?.Id;
+				return (
+					item?.Tag as BaseMenuTreeNode
+				)?.Id;
 			}
 
-			private static string DroppedIconFile(DragEventArgs e)
+			private static string DroppedIconFile(
+				DragEventArgs e)
 			{
-				if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return null;
+				if (!e.Data.GetDataPresent(
+					DataFormats.FileDrop))
+				{
+					return null;
+				}
 
-				var files = e.Data.GetData(DataFormats.FileDrop) as string[];
+				var files =
+					e.Data.GetData(
+						DataFormats.FileDrop)
+					as string[];
 
-				if (files == null || files.Length != 1) return null;
+				if (files == null ||
+					files.Length != 1)
+				{
+					return null;
+				}
 
-				var ext = System.IO.Path.GetExtension(files[0])?.ToLowerInvariant();
+				var ext =
+					System.IO.Path
+						.GetExtension(files[0])
+						?.ToLowerInvariant();
 
 				return new[]
 				{
@@ -475,235 +619,402 @@ namespace Sledge.Shell.Registers
 			}
 
 			/// <summary>
-			/// Lets the user drag a toolbar button to a new place in its strip, or drop an image file on a button to give it that icon.
+			/// Enables toolbar button dragging and custom icon drops.
 			/// </summary>
-			private void WireDragDrop(ToolStrip strip)
+			private void WireDragDrop(
+				ToolStrip strip)
 			{
-				if (!_wired.Add(strip)) return;
+				if (!_wired.Add(strip))
+				{
+					return;
+				}
 
 				strip.AllowDrop = true;
-
-				strip.EndDrag += (s, e) => _autoPlaced = false;
 
 				strip.MouseDown += (s, e) =>
 				{
 					_dragId = null;
 
-					if (e.Button != MouseButtons.Left || TopToolbarSettings.Locked)
+					if (e.Button != MouseButtons.Left ||
+						TopToolbarSettings.Locked)
 					{
 						return;
 					}
 
-					var item = strip.GetItemAt(e.Location);
+					var item =
+						strip.GetItemAt(e.Location);
 
 					if (item is ToolStripButton)
 					{
-						_dragId = NodeId(item);
-						_dragStart = e.Location;
+						_dragId =
+							NodeId(item);
+
+						_dragStart =
+							e.Location;
 					}
 				};
 
-				strip.MouseUp += (s, e) => _dragId = null;
-
-				strip.MouseMove += (s, e) =>
-				{
-					if (_dragId == null || e.Button != MouseButtons.Left)
+				strip.MouseUp +=
+					(s, e) =>
 					{
-						return;
-					}
+						_dragId = null;
+					};
 
-					var dx = Math.Abs(e.X - _dragStart.X);
-					var dy = Math.Abs(e.Y - _dragStart.Y);
-
-					if (dx < SystemInformation.DragSize.Width &&
-						dy < SystemInformation.DragSize.Height)
+				strip.MouseMove +=
+					(s, e) =>
 					{
-						return;
-					}
+						if (_dragId == null ||
+							e.Button != MouseButtons.Left)
+						{
+							return;
+						}
 
-					var id = _dragId;
-					_dragId = null;
+						var dx =
+							Math.Abs(
+								e.X -
+								_dragStart.X);
 
-					strip.DoDragDrop(
-						new DataObject("Sledge.TopToolbarButton", id),
-						DragDropEffects.Move);
-				};
+						var dy =
+							Math.Abs(
+								e.Y -
+								_dragStart.Y);
 
-				DragEventHandler over = (s, e) =>
-				{
-					var pt = strip.PointToClient(new Point(e.X, e.Y));
+						if (dx <
+								SystemInformation
+									.DragSize.Width &&
+							dy <
+								SystemInformation
+									.DragSize.Height)
+						{
+							return;
+						}
 
-					if (e.Data.GetDataPresent("Sledge.TopToolbarButton") &&
-						!TopToolbarSettings.Locked)
+						var id = _dragId;
+
+						_dragId = null;
+
+						strip.DoDragDrop(
+							new DataObject(
+								"Sledge.TopToolbarButton",
+								id),
+							DragDropEffects.Move);
+					};
+
+				DragEventHandler over =
+					(s, e) =>
 					{
-						e.Effect = DragDropEffects.Move;
-					}
-					else if (DroppedIconFile(e) != null &&
-						strip.GetItemAt(pt) is ToolStripButton)
-					{
-						e.Effect = DragDropEffects.Copy;
-					}
-					else
-					{
-						e.Effect = DragDropEffects.None;
-					}
-				};
+						var pt =
+							strip.PointToClient(
+								new Point(
+									e.X,
+									e.Y));
+
+						if (e.Data.GetDataPresent(
+								"Sledge.TopToolbarButton") &&
+							!TopToolbarSettings.Locked)
+						{
+							e.Effect =
+								DragDropEffects.Move;
+						}
+						else if (
+							DroppedIconFile(e) != null &&
+							strip.GetItemAt(pt)
+								is ToolStripButton)
+						{
+							e.Effect =
+								DragDropEffects.Copy;
+						}
+						else
+						{
+							e.Effect =
+								DragDropEffects.None;
+						}
+					};
 
 				strip.DragEnter += over;
 				strip.DragOver += over;
 
-				strip.DragDrop += (s, e) =>
-				{
-					var pt = strip.PointToClient(new Point(e.X, e.Y));
-					var target = strip.GetItemAt(pt) as ToolStripButton;
-
-					var layout = TopToolbarSettings.Layout.Resolve(
-						AllToolbarItems.Select(x => x.Id));
-
-					if (e.Data.GetDataPresent("Sledge.TopToolbarButton"))
+				strip.DragDrop +=
+					(s, e) =>
 					{
-						var id = e.Data.GetData("Sledge.TopToolbarButton") as string;
-						var targetId = NodeId(target);
+						var pt =
+							strip.PointToClient(
+								new Point(
+									e.X,
+									e.Y));
 
-						// Only reorder inside the same strip
-						var sameStrip = strip.Items
-							.OfType<ToolStripButton>()
-							.Any(x => NodeId(x) == id);
+						var target =
+							strip.GetItemAt(pt)
+								as ToolStripButton;
 
-						if (id == null ||
-							targetId == null ||
-							id == targetId ||
-							!sameStrip)
+						var layout =
+							TopToolbarSettings.Layout
+								.Resolve(
+									AllToolbarItems
+										.Select(x => x.Id));
+
+						if (e.Data.GetDataPresent(
+							"Sledge.TopToolbarButton"))
+						{
+							var id =
+								e.Data.GetData(
+									"Sledge.TopToolbarButton")
+								as string;
+
+							var targetId =
+								NodeId(target);
+
+							if (id == null ||
+								targetId == null ||
+								id == targetId)
+							{
+								return;
+							}
+
+							var moving =
+								layout.Find(id);
+
+							if (moving == null)
+							{
+								return;
+							}
+
+							var targetEntry =
+								layout.Find(targetId);
+
+							if (targetEntry == null)
+							{
+								return;
+							}
+
+							/*
+							 * Remove the moving item first.
+							 * This makes the insertion index correct
+							 * whether the item stays in its section or
+							 * moves into another section.
+							 */
+							layout.Remove(moving);
+
+							var idx =
+								layout.FindIndex(
+									x =>
+										x.Id ==
+										targetId);
+
+							if (idx < 0)
+							{
+								return;
+							}
+
+							var after =
+								strip.LayoutStyle ==
+									ToolStripLayoutStyle
+										.VerticalStackWithOverflow
+										? pt.Y >
+											target.Bounds.Top +
+											target.Bounds.Height / 2
+										: pt.X >
+											target.Bounds.Left +
+											target.Bounds.Width / 2;
+
+							layout.Insert(
+								after
+									? idx + 1
+									: idx,
+								moving);
+
+							/*
+							 * This is the important persistence step.
+							 * The complete layout is stored, not just
+							 * the current strip's local order.
+							 */
+							TopToolbarSettings.Layout =
+								layout;
+
+							ToolbarChanged();
+
+							return;
+						}
+
+						var file =
+							DroppedIconFile(e);
+
+						var targetIdForIcon =
+							NodeId(target);
+
+						if (file == null ||
+							targetIdForIcon == null)
 						{
 							return;
 						}
 
-						var moving = layout.Find(id);
-						layout.Remove(moving);
+						if (IconLoader.LoadFromFile(
+								file,
+								16) == null)
+						{
+							return;
+						}
 
-						var idx = layout.FindIndex(x => x.Id == targetId);
+						var entry =
+							layout.Find(
+								targetIdForIcon);
 
-						// Dropped on the far half of the target: go after it
-						var after = strip.LayoutStyle ==
-							ToolStripLayoutStyle.VerticalStackWithOverflow
-								? pt.Y > target.Bounds.Top + target.Bounds.Height / 2
-								: pt.X > target.Bounds.Left + target.Bounds.Width / 2;
+						if (entry == null)
+						{
+							return;
+						}
 
-						layout.Insert(after ? idx + 1 : idx, moving);
+						entry.IconPath = file;
 
-						TopToolbarSettings.Layout = layout;
+						TopToolbarSettings.Layout =
+							layout;
+
 						ToolbarChanged();
-					}
-					else
-					{
-						var file = DroppedIconFile(e);
-						var targetId = NodeId(target);
-
-						if (file == null || targetId == null)
-						{
-							return;
-						}
-
-						if (IconLoader.LoadFromFile(file, 16) == null)
-						{
-							return;
-						}
-
-						layout.Find(targetId).IconPath = file;
-						TopToolbarSettings.Layout = layout;
-						ToolbarChanged();
-					}
-				};
+					};
 			}
 
 			/// <summary>
-			/// The right-click menu of the toolbar: choose which edge it is docked to and lock it in place.
+			/// Builds the toolbar context menu.
 			/// </summary>
 			private ContextMenuStrip BuildToolbarMenu()
 			{
-				var menu = new ContextMenuStrip();
-				var dockItems = new List<ToolStripMenuItem>();
+				var menu =
+					new ContextMenuStrip();
 
-				foreach (ToolbarDock d in Enum.GetValues(typeof(ToolbarDock)))
+				var dockItems =
+					new List<ToolStripMenuItem>();
+
+				foreach (
+					ToolbarDock d
+					in Enum.GetValues(
+						typeof(ToolbarDock)))
 				{
 					var dock = d;
 
-					var item = new ToolStripMenuItem(
-						"Dock " + dock.ToString().ToLowerInvariant())
-					{
-						Tag = dock
-					};
+					var item =
+						new ToolStripMenuItem(
+							"Dock " +
+							dock.ToString()
+								.ToLowerInvariant())
+						{
+							Tag = dock
+						};
 
-					item.Click += (s, e) =>
-					{
-						TopToolbarSettings.Dock = dock;
-						ToolbarChanged();
-					};
+					item.Click +=
+						(s, e) =>
+						{
+							TopToolbarSettings.Dock =
+								dock;
+
+							ToolbarChanged();
+						};
 
 					dockItems.Add(item);
 					menu.Items.Add(item);
 				}
 
-				menu.Items.Add(new ToolStripSeparator());
+				menu.Items.Add(
+					new ToolStripSeparator());
 
-				var lockItem = new ToolStripMenuItem("Lock toolbar");
+				var lockItem =
+					new ToolStripMenuItem(
+						"Lock toolbar");
 
-				lockItem.Click += (s, e) =>
-				{
-					TopToolbarSettings.Locked = !TopToolbarSettings.Locked;
-					ToolbarChanged();
-				};
+				lockItem.Click +=
+					(s, e) =>
+					{
+						/*
+						 * DO NOT call ToolbarChanged() here.
+						 *
+						 * ToolbarChanged() publishes TopToolbar:Changed,
+						 * which causes the entire toolbar to be rebuilt.
+						 *
+						 * Locking should only change the grip state.
+						 */
+						TopToolbarSettings.Locked =
+							!TopToolbarSettings.Locked;
+
+						/*
+						 * Save the setting without asking the toolbar
+						 * to reconstruct itself.
+						 */
+						Oy.Publish("Settings:Save");
+
+						foreach (var strip in _joinedStrips)
+						{
+							strip.GripStyle =
+								TopToolbarSettings.Locked
+									? ToolStripGripStyle.Hidden
+									: ToolStripGripStyle.Visible;
+						}
+					};
 
 				menu.Items.Add(lockItem);
 
-				menu.Opening += (s, e) =>
-				{
-					foreach (var di in dockItems)
+				menu.Opening +=
+					(s, e) =>
 					{
-						di.Checked =
-							(ToolbarDock)di.Tag == TopToolbarSettings.Dock;
-					}
+						foreach (var di in dockItems)
+						{
+							di.Checked =
+								(ToolbarDock)di.Tag ==
+								TopToolbarSettings.Dock;
+						}
 
-					lockItem.Checked = TopToolbarSettings.Locked;
-				};
+						lockItem.Checked =
+							TopToolbarSettings.Locked;
+					};
 
 				return menu;
 			}
 
 			private static void ToolbarChanged()
 			{
-				// Persist the new position, then tell the register to lay the toolbar out again
+				/*
+				 * Dragging/docking/icon changes need a full toolbar
+				 * rebuild, because the actual ToolStrip contents changed.
+				 *
+				 * The layout is already stored in TopToolbarSettings.Layout
+				 * before this method is called.
+				 */
 				Oy.Publish("Settings:Save");
-				Oy.Publish("TopToolbar:Changed", new object());
+				Oy.Publish(
+					"TopToolbar:Changed",
+					new object());
 			}
 
-			/// <summary>
-			/// Add a section to the tree. This will create a top-level menu as well as a toolbar.
-			/// </summary>
-			private void AddSection(MenuSection ds)
+			private void AddSection(
+				MenuSection ds)
 			{
-				// Create the root
-				var rtn = new MenuTreeRoot(_context, ds.Description, ds);
+				var rtn =
+					new MenuTreeRoot(
+						_context,
+						ds.Description,
+						ds);
 
-				// When the menu is closed, push an empty string to the status bar
 				rtn.MenuMenuItem.DropDownClosed +=
-					(s, a) => { Oy.Publish("Status:Information", ""); };
+					(s, a) =>
+					{
+						Oy.Publish(
+							"Status:Information",
+							"");
+					};
 
-				// When the menu is opened, update the state of all the menu items in this section
 				rtn.MenuMenuItem.DropDownOpening +=
-					(s, a) => { rtn.Update(); };
+					(s, a) =>
+					{
+						rtn.Update();
+					};
 
-				// Add the node, menu, and toolbar
-				RootNodes.Add(ds.Name, rtn);
+				RootNodes.Add(
+					ds.Name,
+					rtn);
 			}
 
-			/// <summary>
-			/// Add an item to the tree. This will add the menu item and the toolbar button if required.
-			/// </summary>
 			private void Add(IMenuItem item)
 			{
-				// If the section isn't known, add it to the end
-				if (!RootNodes.ContainsKey(item.Section))
+				if (!RootNodes.ContainsKey(
+					item.Section))
 				{
 					AddSection(
 						new MenuSection(
@@ -712,19 +1023,25 @@ namespace Sledge.Shell.Registers
 							"Z"));
 				}
 
-				var root = RootNodes[item.Section];
+				var root =
+					RootNodes[item.Section];
 
-				root.AddDescendant(item, _declaredGroups);
+				root.AddDescendant(
+					item,
+					_declaredGroups);
 			}
 
 			public void Clear()
 			{
 				MenuStrip.Items.Clear();
+
 				DetachToolbars();
+
 				RootNodes.Clear();
 
-				// Add known sections straight away
-				foreach (var ds in _declaredSections.OrderBy(x => x.OrderHint))
+				foreach (
+					var ds in _declaredSections
+						.OrderBy(x => x.OrderHint))
 				{
 					AddSection(ds);
 				}
@@ -737,8 +1054,6 @@ namespace Sledge.Shell.Registers
 					node.Update();
 				}
 
-				// Opening a document flips many buttons between enabled/disabled at once; make sure the strips
-				// are re-laid out and fully repainted instead of leaving stale pixels until the window is reactivated
 				foreach (var strip in _joinedStrips)
 				{
 					strip.PerformLayout();
@@ -748,9 +1063,6 @@ namespace Sledge.Shell.Registers
 			}
 		}
 
-		/// <summary>
-		/// A ToolStrip that paints through a back buffer, so highlight changes don't flicker or leave stale pixels behind.
-		/// </summary>
 		private class BufferedToolStrip : ToolStrip
 		{
 			public BufferedToolStrip()
@@ -765,11 +1077,8 @@ namespace Sledge.Shell.Registers
 			}
 		}
 
-		/// <summary>
-		/// Flat renderer for the top toolbar: active (checked) buttons get a grey background,
-		/// hover and pressed get lighter/darker greys. Nothing is gradient-filled.
-		/// </summary>
-		private class ToolbarRenderer : ToolStripProfessionalRenderer
+		private class ToolbarRenderer :
+			ToolStripProfessionalRenderer
 		{
 			private readonly Color _checked;
 			private readonly Color _checkedBorder;
@@ -782,51 +1091,98 @@ namespace Sledge.Shell.Registers
 
 				if (dark)
 				{
-					_checked = Color.FromArgb(105, 105, 105);
-					_checkedBorder = Color.FromArgb(140, 140, 140);
-					_hover = Color.FromArgb(80, 80, 80);
-					_pressed = Color.FromArgb(125, 125, 125);
+					_checked =
+						Color.FromArgb(
+							105,
+							105,
+							105);
+
+					_checkedBorder =
+						Color.FromArgb(
+							140,
+							140,
+							140);
+
+					_hover =
+						Color.FromArgb(
+							80,
+							80,
+							80);
+
+					_pressed =
+						Color.FromArgb(
+							125,
+							125,
+							125);
 				}
 				else
 				{
-					_checked = Color.FromArgb(200, 200, 200);
-					_checkedBorder = Color.FromArgb(140, 140, 140);
-					_hover = Color.FromArgb(225, 225, 225);
-					_pressed = Color.FromArgb(180, 180, 180);
+					_checked =
+						Color.FromArgb(
+							200,
+							200,
+							200);
+
+					_checkedBorder =
+						Color.FromArgb(
+							140,
+							140,
+							140);
+
+					_hover =
+						Color.FromArgb(
+							225,
+							225,
+							225);
+
+					_pressed =
+						Color.FromArgb(
+							180,
+							180,
+							180);
 				}
 			}
 
-			protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e)
+			protected override void OnRenderToolStripBackground(
+				ToolStripRenderEventArgs e)
 			{
-				using (var brush = new SolidBrush(e.ToolStrip.BackColor))
+				using (var brush =
+					new SolidBrush(
+						e.ToolStrip.BackColor))
 				{
-					e.Graphics.FillRectangle(brush, e.AffectedBounds);
+					e.Graphics.FillRectangle(
+						brush,
+						e.AffectedBounds);
 				}
 			}
 
-			protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
+			protected override void OnRenderToolStripBorder(
+				ToolStripRenderEventArgs e)
 			{
-				// No border
 			}
 
-			protected override void OnRenderButtonBackground(ToolStripItemRenderEventArgs e)
+			protected override void OnRenderButtonBackground(
+				ToolStripItemRenderEventArgs e)
 			{
-				var item = e.Item as ToolStripButton;
+				var item =
+					e.Item as ToolStripButton;
 
-				if (item == null || !item.Enabled)
+				if (item == null ||
+					!item.Enabled)
 				{
-					// Disabled buttons draw no highlight (a checked one still shows its state)
-					if (item == null || !item.Checked)
+					if (item == null ||
+						!item.Checked)
 					{
 						return;
 					}
 				}
 
-				var rect = new Rectangle(
-					0,
-					0,
-					e.Item.Width - 1,
-					e.Item.Height - 1);
+				var rect =
+					new Rectangle(
+						0,
+						0,
+						e.Item.Width - 1,
+						e.Item.Height - 1);
 
 				Color? fill = null;
 
@@ -836,31 +1192,44 @@ namespace Sledge.Shell.Registers
 				}
 				else if (item.Checked)
 				{
-					fill = item.Selected ? _pressed : _checked;
+					fill =
+						item.Selected
+							? _pressed
+							: _checked;
 				}
 				else if (item.Selected)
 				{
 					fill = _hover;
 				}
 
-				if (fill == null) return;
-
-				using (var brush = new SolidBrush(fill.Value))
+				if (fill == null)
 				{
-					e.Graphics.FillRectangle(brush, rect);
+					return;
+				}
+
+				using (var brush =
+					new SolidBrush(fill.Value))
+				{
+					e.Graphics.FillRectangle(
+						brush,
+						rect);
 				}
 
 				if (item.Checked)
 				{
-					using (var pen = new Pen(_checkedBorder))
+					using (var pen =
+						new Pen(_checkedBorder))
 					{
-						e.Graphics.DrawRectangle(pen, rect);
+						e.Graphics.DrawRectangle(
+							pen,
+							rect);
 					}
 				}
 			}
 		}
 
-		public class CustomToolStripRenderer : ToolStripProfessionalRenderer
+		public class CustomToolStripRenderer :
+			ToolStripProfessionalRenderer
 		{
 			private readonly Color _pressedBackColor;
 			private readonly Color _backColor;
@@ -875,16 +1244,18 @@ namespace Sledge.Shell.Registers
 				Color pressedBackColor,
 				Color backColor)
 			{
-				_pressedBackColor = pressedBackColor;
-				_backColor = backColor;
+				_pressedBackColor =
+					pressedBackColor;
+
+				_backColor =
+					backColor;
 			}
 
 			protected override void OnRenderItemBackground(
 				ToolStripItemRenderEventArgs e)
 			{
-				//base.OnRenderItemBackground(e);
-
-				using (var brush = new SolidBrush(Color.Black))
+				using (var brush =
+					new SolidBrush(Color.Black))
 				{
 					e.Graphics.FillRectangle(
 						brush,
@@ -903,16 +1274,18 @@ namespace Sledge.Shell.Registers
 			{
 				if (e.ToolStrip is ToolStripDropDown)
 				{
-					// Custom border for the drop-down menu
-					using (var pen = new Pen(
-						ControlPaint.Dark(_backColor),
-						1))
+					using (var pen =
+						new Pen(
+							ControlPaint.Dark(
+								_backColor),
+							1))
 					{
 						e.Graphics.DrawRectangle(
 							pen,
 							new Rectangle(
 								Point.Empty,
-								e.ToolStrip.ClientSize - new Size(1, 1)));
+								e.ToolStrip.ClientSize -
+								new Size(1, 1)));
 					}
 				}
 				else
@@ -936,9 +1309,11 @@ namespace Sledge.Shell.Registers
 			protected override void OnRenderSeparator(
 				ToolStripSeparatorRenderEventArgs e)
 			{
-				using (var pen = new Pen(
-					ControlPaint.Dark(_backColor),
-					1))
+				using (var pen =
+					new Pen(
+						ControlPaint.Dark(
+							_backColor),
+						1))
 				{
 					int y =
 						e.Item.ContentRectangle.Top +
@@ -956,12 +1331,13 @@ namespace Sledge.Shell.Registers
 			protected override void OnRenderToolStripBackground(
 				ToolStripRenderEventArgs e)
 			{
-				// Custom background for the entire drop-down
 				if (e.ToolStrip is ToolStripDropDown)
 				{
-					e.ToolStrip.BackColor = _backColor;
+					e.ToolStrip.BackColor =
+						_backColor;
 
-					using (var brush = new SolidBrush(_backColor))
+					using (var brush =
+						new SolidBrush(_backColor))
 					{
 						e.Graphics.FillRectangle(
 							brush,
@@ -1064,11 +1440,11 @@ namespace Sledge.Shell.Registers
 			protected override void OnRenderMenuItemBackground(
 				ToolStripItemRenderEventArgs e)
 			{
-				// Check if the item is pressed or selected
 				if (e.Item.Pressed)
 				{
 					using (var brush =
-						new SolidBrush(_pressedBackColor))
+						new SolidBrush(
+							_pressedBackColor))
 					{
 						e.Graphics.FillRectangle(
 							brush,
@@ -1078,7 +1454,8 @@ namespace Sledge.Shell.Registers
 				else if (e.Item.Selected)
 				{
 					using (var brush =
-						new SolidBrush(Color.DimGray))
+						new SolidBrush(
+							Color.DimGray))
 					{
 						e.Graphics.FillRectangle(
 							brush,
@@ -1092,49 +1469,63 @@ namespace Sledge.Shell.Registers
 			}
 		}
 
-		/// <summary>
-		/// A root node of a menu tree
-		/// </summary>
-		private class MenuTreeRoot : BaseMenuTreeNode
+		private class MenuTreeRoot :
+			BaseMenuTreeNode
 		{
-			private MenuSection Section { get; }
+			private MenuSection Section
+			{
+				get;
+			}
 
-			public ToolStrip ToolStrip { get; }
+			public ToolStrip ToolStrip
+			{
+				get;
+			}
 
-			public override string OrderHint => Section.OrderHint;
+			public override string OrderHint =>
+				Section.OrderHint;
 
-			public string SectionName => Section.Description;
+			public string SectionName =>
+				Section.Description;
 
 			private List<MenuTreeGroup> _toolbarGroups;
 
-			/// <summary>
-			/// The nodes that have a toolbar button, in default order.
-			/// </summary>
 			public IEnumerable<BaseMenuTreeNode> ToolbarNodes =>
 				_toolbarGroups
 					.SelectMany(g => g.Nodes)
-					.Where(n => n.ToolbarButton != null);
+					.Where(
+						n => n.ToolbarButton != null);
 
 			/// <summary>
-			/// Rebuilds the toolbar strip from the user's layout: order, visibility and custom icons.
+			/// Applies the user's saved order, visibility and icons
+			/// to this section.
 			/// </summary>
 			public void ApplyLayout(
 				TopToolbarLayout layout,
 				int iconSize)
 			{
-				var nodes = ToolbarNodes
-					.Select((n, i) => new
-					{
-						Node = n,
-						Index = i,
-						Pos = layout.FindIndex(e => e.Id == n.Id)
-					})
-					.OrderBy(x => x.Pos < 0 ? int.MaxValue : x.Pos)
-					.ThenBy(x => x.Index)
-					.Select(x => x.Node)
-					.ToList();
+				var nodes =
+					ToolbarNodes
+						.Select(
+							(n, i) => new
+							{
+								Node = n,
+								Index = i,
+								Pos =
+									layout.FindIndex(
+										e => e.Id == n.Id)
+							})
+						.OrderBy(
+							x =>
+								x.Pos < 0
+									? int.MaxValue
+									: x.Pos)
+						.ThenBy(
+							x => x.Index)
+						.Select(
+							x => x.Node)
+						.ToList();
 
-				// RemoveAt rather than Clear so the buttons are kept alive
 				while (ToolStrip.Items.Count > 0)
 				{
 					ToolStrip.Items.RemoveAt(0);
@@ -1145,26 +1536,29 @@ namespace Sledge.Shell.Registers
 
 				foreach (var node in nodes)
 				{
-					var entry = layout.Find(node.Id);
+					var entry =
+						layout.Find(node.Id);
 
-					if (entry != null && !entry.Visible)
+					if (entry != null &&
+						!entry.Visible)
 					{
 						continue;
 					}
 
-					// Icon: the user's own if set and loadable, otherwise the built-in one
 					Image icon = null;
 
 					if (entry != null &&
-						!string.IsNullOrWhiteSpace(entry.IconPath))
+						!string.IsNullOrWhiteSpace(
+							entry.IconPath))
 					{
-						icon = IconLoader.LoadFromFile(
-							entry.IconPath,
-							iconSize);
+						icon =
+							IconLoader.LoadFromFile(
+								entry.IconPath,
+								iconSize);
 					}
 
-					// Same look as the left tool bar: image only, fixed square buttons sized from the icon size
-					var button = node.ToolbarButton;
+					var button =
+						node.ToolbarButton;
 
 					button.DisplayStyle =
 						ToolStripItemDisplayStyle.Image;
@@ -1176,21 +1570,29 @@ namespace Sledge.Shell.Registers
 						ContentAlignment.MiddleCenter;
 
 					button.Image =
-						icon ?? node.ScaledIcon(iconSize);
+						icon ??
+						node.ScaledIcon(iconSize);
 
 					button.AutoSize = false;
-					button.Width = iconSize + 4;
-					button.Height = iconSize + 4;
 
-					var group = node.Group?.Name ?? "";
+					button.Width =
+						iconSize + 4;
 
-					if (any && group != lastGroup)
+					button.Height =
+						iconSize + 4;
+
+					var group =
+						node.Group?.Name ?? "";
+
+					if (any &&
+						group != lastGroup)
 					{
 						ToolStrip.Items.Add(
 							new ToolStripSeparator());
 					}
 
-					ToolStrip.Items.Add(node.ToolbarButton);
+					ToolStrip.Items.Add(
+						node.ToolbarButton);
 
 					lastGroup = group;
 					any = true;
@@ -1210,52 +1612,52 @@ namespace Sledge.Shell.Registers
 						Tag = this
 					};
 
-				// Use horizontal overflow by default so resizing does not cause
-				// the buttons to flow onto additional rows.
 				ToolStrip =
 					new BufferedToolStrip
 					{
 						Tag = this,
 						LayoutStyle =
-							ToolStripLayoutStyle.HorizontalStackWithOverflow
+							ToolStripLayoutStyle
+								.HorizontalStackWithOverflow
 					};
 
 				Context = context;
-				_toolbarGroups = new List<MenuTreeGroup>();
+
+				_toolbarGroups =
+					new List<MenuTreeGroup>();
 			}
 
-			/// <summary>
-			/// Add a descendant to this root node. Searches down the path until we find the correct parent
-			/// </summary>
 			public void AddDescendant(
 				IMenuItem item,
 				List<MenuGroup> declaredGroups)
 			{
-				// Find the parent node for this item
-				// Start at the section root node
 				BaseMenuTreeNode node = this;
 
-				// Traverse the path until we get to the target
 				var path =
 					(item.Path ?? "")
 						.Split('/')
 						.Where(x => x.Length > 0)
 						.ToList();
 
-				var currentPath = new List<string>();
+				var currentPath =
+					new List<string>();
 
 				foreach (var p in path)
 				{
 					currentPath.Add(p);
 
-					// If the current node isn't found, add it in
 					if (!node.Children.ContainsKey(p))
 					{
-						var gr = declaredGroups.FirstOrDefault(
-							x =>
-								x.Name == p &&
-								x.Path == String.Join("/", currentPath) &&
-								x.Section == item.Section);
+						var gr =
+							declaredGroups.FirstOrDefault(
+								x =>
+									x.Name == p &&
+									x.Path ==
+										String.Join(
+											"/",
+											currentPath) &&
+									x.Section ==
+										item.Section);
 
 						node.AddChild(
 							p,
@@ -1265,15 +1667,16 @@ namespace Sledge.Shell.Registers
 								gr));
 					}
 
-					node = node.Children[p];
+					node =
+						node.Children[p];
 				}
 
-				// Add the node to the parent node
-				var group = declaredGroups.FirstOrDefault(
-					x =>
-						x.Name == item.Group &&
-						x.Path == item.Path &&
-						x.Section == item.Section);
+				var group =
+					declaredGroups.FirstOrDefault(
+						x =>
+							x.Name == item.Group &&
+							x.Path == item.Path &&
+							x.Section == item.Section);
 
 				var itemNode =
 					new MenuTreeNode(
@@ -1281,10 +1684,10 @@ namespace Sledge.Shell.Registers
 						item,
 						group);
 
-				node.AddChild(item.ID, itemNode);
+				node.AddChild(
+					item.ID,
+					itemNode);
 
-				// Add to the toolbar as well
-				// Items with no icon are never allowed
 				if (item.AllowedInToolbar &&
 					item.Icon != null)
 				{
@@ -1296,64 +1699,78 @@ namespace Sledge.Shell.Registers
 				BaseMenuTreeNode menuTreeNode)
 			{
 				if (_toolbarGroups.All(
-					x => x.Group.Name != menuTreeNode.Group.Name))
+					x =>
+						x.Group.Name !=
+						menuTreeNode.Group.Name))
 				{
 					_toolbarGroups.Add(
-						new MenuTreeGroup(menuTreeNode.Group));
+						new MenuTreeGroup(
+							menuTreeNode.Group));
 
 					_toolbarGroups =
 						_toolbarGroups
-							.OrderBy(x => x.Group.OrderHint)
+							.OrderBy(
+								x => x.Group.OrderHint)
 							.ToList();
 				}
 
-				// Insert the item into the correct index
 				var groupIndex =
 					_toolbarGroups.FindIndex(
-						x => x.Group.Name ==
+						x =>
+							x.Group.Name ==
 							menuTreeNode.Group.Name);
 
-				// Skip to the start of the group
 				var groupStart = 0;
 
-				for (var i = 0; i < groupIndex; i++)
+				for (var i = 0;
+					i < groupIndex;
+					i++)
 				{
-					var g = _toolbarGroups[i];
+					var g =
+						_toolbarGroups[i];
 
 					groupStart +=
 						g.Nodes.Count +
-						(g.HasSplitter ? 1 : 0);
+						(g.HasSplitter
+							? 1
+							: 0);
 				}
 
-				// Add the node to the list and sort
-				var group = _toolbarGroups[groupIndex];
+				var group =
+					_toolbarGroups[groupIndex];
 
 				group.Nodes =
 					group.Nodes
-						.Union(new[] { menuTreeNode })
-						.OrderBy(x => x.OrderHint ?? "")
+						.Union(
+							new[]
+							{
+								menuTreeNode
+							})
+						.OrderBy(
+							x =>
+								x.OrderHint ?? "")
 						.ToList();
 
-				// Skip to the start of the node and insert
 				var idx =
-					group.Nodes.IndexOf(menuTreeNode);
+					group.Nodes.IndexOf(
+						menuTreeNode);
 
 				ToolStrip.Items.Insert(
 					groupStart + idx,
 					menuTreeNode.ToolbarButton);
 
-				// Check groups for splitters
 				groupStart = 0;
 
 				for (var i = 0;
 					i < _toolbarGroups.Count - 1;
 					i++)
 				{
-					var g = _toolbarGroups[i];
+					var g =
+						_toolbarGroups[i];
 
-					groupStart += g.Nodes.Count;
+					groupStart +=
+						g.Nodes.Count;
 
-					// Add a splitter to the group if needed
 					if (!g.HasSplitter &&
 						g.Nodes.Count > 0)
 					{
@@ -1369,10 +1786,8 @@ namespace Sledge.Shell.Registers
 			}
 		}
 
-		/// <summary>
-		/// A dummy node of the virtual menu tree. This node is text only, always enabled, and does nothing.
-		/// </summary>
-		private class MenuTreeTextNode : BaseMenuTreeNode
+		private class MenuTreeTextNode :
+			BaseMenuTreeNode
 		{
 			public override string OrderHint =>
 				Group.OrderHint;
@@ -1383,9 +1798,14 @@ namespace Sledge.Shell.Registers
 				MenuGroup group)
 			{
 				Context = context;
+
 				Group =
 					group ??
-					new MenuGroup("", "", "", "T");
+					new MenuGroup(
+						"",
+						"",
+						"",
+						"T");
 
 				MenuMenuItem =
 					new ToolStripMenuItem(text)
@@ -1395,12 +1815,13 @@ namespace Sledge.Shell.Registers
 			}
 		}
 
-		/// <summary>
-		/// A normal node of the virtual tree. This node has text, an icon, and will do something when activated.
-		/// </summary>
-		private class MenuTreeNode : BaseMenuTreeNode
+		private class MenuTreeNode :
+			BaseMenuTreeNode
 		{
-			private IMenuItem MenuItem { get; set; }
+			private IMenuItem MenuItem
+			{
+				get;
+			}
 
 			public override string OrderHint =>
 				MenuItem.OrderHint;
@@ -1414,8 +1835,11 @@ namespace Sledge.Shell.Registers
 			public override Image DefaultIcon =>
 				MenuItem.Icon;
 
-			public override Image IconAtSize(int size) =>
-				(MenuItem as CommandMenuItem)?.IconAtSize?.Invoke(size);
+			public override Image IconAtSize(
+				int size) =>
+				(MenuItem as CommandMenuItem)
+					?.IconAtSize
+					?.Invoke(size);
 
 			public MenuTreeNode(
 				IContext context,
@@ -1423,24 +1847,32 @@ namespace Sledge.Shell.Registers
 				MenuGroup group)
 			{
 				var en =
-					menuItem.IsInContext(context);
+					menuItem.IsInContext(
+						context);
 
 				Group =
 					group ??
-					new MenuGroup("", "", "", "T");
+					new MenuGroup(
+						"",
+						"",
+						"",
+						"T");
 
 				Context = context;
+
 				MenuItem = menuItem;
 
 				if (menuItem is CommandMenuItem cmi &&
 					cmi.HasOptions)
 				{
-					// Clicking the entry runs the command, clicking the handle on the right opens its options popup
 					MenuMenuItem =
 						new OptionsMenuItem(
 							menuItem.Name,
 							menuItem.Icon,
-							p => cmi.ShowOptions(Context, p))
+							p =>
+								cmi.ShowOptions(
+									Context,
+									p))
 						{
 							Tag = this,
 							ShortcutKeyDisplayString =
@@ -1489,7 +1921,8 @@ namespace Sledge.Shell.Registers
 						{
 							Tag = this,
 							DisplayStyle =
-								ToolStripItemDisplayStyle.Image,
+								ToolStripItemDisplayStyle
+									.Image,
 							Enabled = en
 						};
 
@@ -1515,7 +1948,8 @@ namespace Sledge.Shell.Registers
 				if (menuItem.IsToggle)
 				{
 					MenuMenuItem.CheckState =
-						menuItem.GetToggleState(context)
+						menuItem.GetToggleState(
+							context)
 							? CheckState.Checked
 							: CheckState.Unchecked;
 
@@ -1531,23 +1965,26 @@ namespace Sledge.Shell.Registers
 				object sender,
 				EventArgs e)
 			{
-				// Refresh through a control that is guaranteed to have a handle. The menu item's parent is a drop-down
-				// that has never been opened if the button was clicked in the toolbar, and InvokeLater silently
-				// skips controls without a handle - which left the toolbar state stale until the next context change.
 				var owner =
-					(sender as ToolStripItem)?.GetCurrentParent() ??
-					ToolbarButton?.GetCurrentParent() ??
-					MenuMenuItem.GetCurrentParent();
+					(sender as ToolStripItem)
+						?.GetCurrentParent()
+					?? ToolbarButton
+						?.GetCurrentParent()
+					?? MenuMenuItem
+						.GetCurrentParent();
 
 				MenuItem?.Invoke(Context)
 					.ContinueWith(
-						t => owner?.InvokeLater(Update));
+						t =>
+							owner?.InvokeLater(
+								Update));
 			}
 
 			public override void Update()
 			{
 				var en =
-					MenuItem.IsInContext(Context);
+					MenuItem.IsInContext(
+						Context);
 
 				MenuMenuItem.Enabled = en;
 
@@ -1559,7 +1996,8 @@ namespace Sledge.Shell.Registers
 				if (MenuItem.IsToggle && en)
 				{
 					var ts =
-						MenuItem.GetToggleState(Context);
+						MenuItem.GetToggleState(
+							Context);
 
 					MenuMenuItem.CheckState =
 						ts
@@ -1568,13 +2006,16 @@ namespace Sledge.Shell.Registers
 
 					if (ToolbarButton != null &&
 						ToolbarButton.CheckState !=
-						MenuMenuItem.CheckState)
+							MenuMenuItem.CheckState)
 					{
 						ToolbarButton.CheckState =
 							MenuMenuItem.CheckState;
 
 						ToolbarButton.Invalidate();
-						ToolbarButton.GetCurrentParent()?.Invalidate();
+
+						ToolbarButton
+							.GetCurrentParent()
+							?.Invalidate();
 					}
 				}
 
@@ -1582,15 +2023,13 @@ namespace Sledge.Shell.Registers
 			}
 		}
 
-		/// <summary>
-		/// A menu entry with an options handle on the right. Clicking the entry itself behaves like a normal
-		/// menu item; clicking the handle calls the options callback with the screen position of the entry's right edge.
-		/// </summary>
-		private class OptionsMenuItem : ToolStripMenuItem
+		private class OptionsMenuItem :
+			ToolStripMenuItem
 		{
 			private const int HandleWidth = 28;
 
 			private readonly Action<Point> _showOptions;
+
 			private bool _overHandle;
 
 			public OptionsMenuItem(
@@ -1602,10 +2041,12 @@ namespace Sledge.Shell.Registers
 				_showOptions = showOptions;
 			}
 
-			private bool InHandle(Point itemPoint)
+			private bool InHandle(
+				Point itemPoint)
 			{
 				return itemPoint.X >=
-					Bounds.Width - HandleWidth;
+					Bounds.Width -
+					HandleWidth;
 			}
 
 			protected override void OnMouseMove(
@@ -1642,7 +2083,8 @@ namespace Sledge.Shell.Registers
 
 				var r =
 					new Rectangle(
-						Bounds.Width - HandleWidth,
+						Bounds.Width -
+							HandleWidth,
 						0,
 						HandleWidth,
 						Bounds.Height);
@@ -1656,7 +2098,9 @@ namespace Sledge.Shell.Registers
 				{
 					using (var hb =
 						new SolidBrush(
-							Color.FromArgb(70, Color.Gray)))
+							Color.FromArgb(
+								70,
+								Color.Gray)))
 					{
 						e.Graphics.FillRectangle(
 							hb,
@@ -1666,7 +2110,9 @@ namespace Sledge.Shell.Registers
 
 				using (var pen =
 					new Pen(
-						Color.FromArgb(120, Color.Gray)))
+						Color.FromArgb(
+							120,
+							Color.Gray)))
 				{
 					e.Graphics.DrawLine(
 						pen,
@@ -1676,12 +2122,13 @@ namespace Sledge.Shell.Registers
 						r.Bottom - 4);
 				}
 
-				// Right-pointing chevron
 				var cx =
-					r.Left + r.Width / 2;
+					r.Left +
+					r.Width / 2;
 
 				var cy =
-					r.Top + r.Height / 2;
+					r.Top +
+					r.Height / 2;
 
 				using (var brush =
 					new SolidBrush(col))
@@ -1690,16 +2137,26 @@ namespace Sledge.Shell.Registers
 						brush,
 						new[]
 						{
-							new Point(cx - 2, cy - 4),
-							new Point(cx + 3, cy),
-							new Point(cx - 2, cy + 4)
+							new Point(
+								cx - 2,
+								cy - 4),
+
+							new Point(
+								cx + 3,
+								cy),
+
+							new Point(
+								cx - 2,
+								cy + 4)
 						});
 				}
 			}
 
-			protected override void OnClick(EventArgs e)
+			protected override void OnClick(
+				EventArgs e)
 			{
-				if (Enabled && Owner != null)
+				if (Enabled &&
+					Owner != null)
 				{
 					var local =
 						Owner.PointToClient(
@@ -1718,13 +2175,15 @@ namespace Sledge.Shell.Registers
 									Bounds.Top));
 
 						var sync =
-							System.Threading.SynchronizationContext.Current;
+							System.Threading
+								.SynchronizationContext
+								.Current;
 
-						// Let the File menu finish closing first, otherwise it would take the popup down with it
 						if (sync != null)
 						{
 							sync.Post(
-								_ => _showOptions(screen),
+								_ =>
+									_showOptions(screen),
 								null);
 						}
 						else
@@ -1742,36 +2201,62 @@ namespace Sledge.Shell.Registers
 
 		private abstract class BaseMenuTreeNode
 		{
-			public MenuGroup Group { get; set; }
-			public IContext Context { get; set; }
+			public MenuGroup Group
+			{
+				get;
+				set;
+			}
 
-			public ToolStripMenuItem MenuMenuItem { get; set; }
-			public ToolStripButton ToolbarButton { get; set; }
+			public IContext Context
+			{
+				get;
+				set;
+			}
 
-			public List<MenuTreeGroup> Groups { get; protected set; }
-			public Dictionary<string, BaseMenuTreeNode> Children { get; private set; }
+			public ToolStripMenuItem MenuMenuItem
+			{
+				get;
+				set;
+			}
 
-			public abstract string OrderHint { get; }
+			public ToolStripButton ToolbarButton
+			{
+				get;
+				set;
+			}
 
-			/// <summary>
-			/// The ID of the underlying menu item, if there is one.
-			/// </summary>
+			public List<MenuTreeGroup> Groups
+			{
+				get;
+				protected set;
+			}
+
+			public Dictionary<string, BaseMenuTreeNode>
+				Children
+			{
+				get;
+				private set;
+			}
+
+			public abstract string OrderHint
+			{
+				get;
+			}
+
 			public virtual string Id => null;
 
 			public virtual string DisplayName => null;
+
 			public virtual Image DefaultIcon => null;
 
-			/// <summary>
-			/// The icon rendered natively at the given size (SVG), or null if it can't be rendered.
-			/// </summary>
-			public virtual Image IconAtSize(int size) => null;
+			public virtual Image IconAtSize(
+				int size) =>
+				null;
 
-			private readonly Dictionary<int, Image> _scaledIcons =
-				new Dictionary<int, Image>();
+			private readonly Dictionary<int, Image>
+				_scaledIcons =
+					new Dictionary<int, Image>();
 
-			/// <summary>
-			/// The built-in icon resized to a square of the given size.
-			/// </summary>
 			public Image ScaledIcon(int size)
 			{
 				var src = DefaultIcon;
@@ -1790,8 +2275,8 @@ namespace Sledge.Shell.Registers
 					return cached;
 				}
 
-				// SVG icons are drawn directly at the target size so they stay sharp
-				var native = IconAtSize(size);
+				var native =
+					IconAtSize(size);
 
 				if (native != null &&
 					native.Width == size &&
@@ -1805,18 +2290,27 @@ namespace Sledge.Shell.Registers
 					new Bitmap(
 						size,
 						size,
-						System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+						System.Drawing.Imaging
+							.PixelFormat
+							.Format32bppArgb);
 
-				using (var g = Graphics.FromImage(bmp))
+				using (var g =
+					Graphics.FromImage(bmp))
 				{
 					g.InterpolationMode =
-						System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+						System.Drawing.Drawing2D
+							.InterpolationMode
+							.HighQualityBicubic;
 
 					g.PixelOffsetMode =
-						System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+						System.Drawing.Drawing2D
+							.PixelOffsetMode
+							.HighQuality;
 
 					g.SmoothingMode =
-						System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+						System.Drawing.Drawing2D
+							.SmoothingMode
+							.HighQuality;
 
 					g.DrawImage(
 						src,
@@ -1838,7 +2332,9 @@ namespace Sledge.Shell.Registers
 					new List<MenuTreeGroup>();
 
 				Children =
-					new Dictionary<string, BaseMenuTreeNode>();
+					new Dictionary<
+						string,
+						BaseMenuTreeNode>();
 			}
 
 			public void AddChild(
@@ -1850,7 +2346,8 @@ namespace Sledge.Shell.Registers
 					menuTreeNode);
 
 				if (Groups.All(
-					x => x.Group.Name !=
+					x =>
+						x.Group.Name !=
 						menuTreeNode.Group.Name))
 				{
 					Groups.Add(
@@ -1859,17 +2356,17 @@ namespace Sledge.Shell.Registers
 
 					Groups =
 						Groups
-							.OrderBy(x => x.Group.OrderHint)
+							.OrderBy(
+								x => x.Group.OrderHint)
 							.ToList();
 				}
 
-				// Insert the item into the correct index
 				var groupIndex =
 					Groups.FindIndex(
-						x => x.Group.Name ==
+						x =>
+							x.Group.Name ==
 							menuTreeNode.Group.Name);
 
-				// Skip to the start of the group
 				var groupStart = 0;
 
 				for (var i = 0;
@@ -1880,19 +2377,25 @@ namespace Sledge.Shell.Registers
 
 					groupStart +=
 						g.Nodes.Count +
-						(g.HasSplitter ? 1 : 0);
+						(g.HasSplitter
+							? 1
+							: 0);
 				}
 
-				// Add the node to the list and sort
-				var group = Groups[groupIndex];
+				var group =
+					Groups[groupIndex];
 
 				group.Nodes =
 					group.Nodes
-						.Union(new[] { menuTreeNode })
-						.OrderBy(x => x.OrderHint ?? "")
+						.Union(
+							new[]
+							{
+								menuTreeNode
+							})
+						.OrderBy(
+							x => x.OrderHint ?? "")
 						.ToList();
 
-				// Skip to the start of the node and insert
 				var idx =
 					group.Nodes.IndexOf(
 						menuTreeNode);
@@ -1901,7 +2404,6 @@ namespace Sledge.Shell.Registers
 					groupStart + idx,
 					menuTreeNode.MenuMenuItem);
 
-				// Check groups for splitters
 				groupStart = 0;
 
 				for (var i = 0;
@@ -1910,9 +2412,9 @@ namespace Sledge.Shell.Registers
 				{
 					var g = Groups[i];
 
-					groupStart += g.Nodes.Count;
+					groupStart +=
+						g.Nodes.Count;
 
-					// Add a splitter to the group if needed
 					if (!g.HasSplitter &&
 						g.Nodes.Count > 0)
 					{
@@ -1938,15 +2440,31 @@ namespace Sledge.Shell.Registers
 
 		private class MenuTreeGroup
 		{
-			public MenuGroup Group { get; set; }
-			public List<BaseMenuTreeNode> Nodes { get; set; }
+			public MenuGroup Group
+			{
+				get;
+				set;
+			}
 
-			public bool HasSplitter { get; set; }
+			public List<BaseMenuTreeNode> Nodes
+			{
+				get;
+				set;
+			}
 
-			public MenuTreeGroup(MenuGroup group)
+			public bool HasSplitter
+			{
+				get;
+				set;
+			}
+
+			public MenuTreeGroup(
+				MenuGroup group)
 			{
 				Group = group;
-				Nodes = new List<BaseMenuTreeNode>();
+
+				Nodes =
+					new List<BaseMenuTreeNode>();
 			}
 		}
 	}
