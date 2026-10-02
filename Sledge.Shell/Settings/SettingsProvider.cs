@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.IO;
@@ -110,6 +110,7 @@ namespace Sledge.Shell.Settings
 				container.LoadValues(_values.ContainsKey(container.Name) ? _values[container.Name] : new JsonSettingsStore());
 			}
 			Log.Debug("Settings", "Settings loaded.");
+			Oy.Publish("Settings:Loaded", new object());
 			return Task.CompletedTask;
 		}
 
