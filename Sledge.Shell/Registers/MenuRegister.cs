@@ -308,8 +308,15 @@ namespace Sledge.Shell.Registers
 					strip.Size = strip.GetPreferredSize(Size.Empty);
 					strip.Location = Point.Empty;
 
-					panel.Join(strip);
+					// Vertical docks keep the panel's own placement; horizontal ones are placed explicitly below
+					if (vertical) panel.Join(strip);
 					_joinedStrips.Add(strip);
+				}
+				if (!vertical)
+				{
+					_autoPlaced = true;
+					PlaceStrips(panel);
+					HookPanelResize(panel);
 				}
 				panel.EndInit();
 				panel.ContextMenuStrip = _toolbarMenu;
@@ -320,6 +327,65 @@ namespace Sledge.Shell.Registers
 				panel.PerformLayout();
 				foreach (var strip in _joinedStrips) strip.Invalidate();
 				panel.Invalidate(true);
+			}
+
+			private bool _autoPlaced = true;
+			private bool _replacePending;
+			private int _placedWidth = -1;
+			private ToolStripPanel _hookedPanel;
+
+			/// <summary>
+			/// Puts the strips in rows that fit the panel's current width, in menu order.
+			/// Done explicitly because ToolStripPanel.Join(strip) starts a new row whenever the panel is still
+			/// narrow (window not yet maximised / laid out) and never re-flows once the window grows.
+			/// </summary>
+			private void PlaceStrips(ToolStripPanel panel)
+			{
+				var width = panel.ClientSize.Width;
+				_placedWidth = width;
+				var extent = width > 0 ? width : int.MaxValue; // not laid out yet: one row, corrected on the next resize
+
+				int x = 0, y = 0, rowHeight = 0;
+				// _joinedStrips is in descending menu order
+				foreach (var strip in Enumerable.Reverse(_joinedStrips))
+				{
+					var size = strip.GetPreferredSize(Size.Empty);
+					if (x > 0 && x + size.Width > extent)
+					{
+						x = 0;
+						y += rowHeight;
+						rowHeight = 0;
+					}
+					panel.Join(strip, x, y);
+					x += size.Width;
+					rowHeight = Math.Max(rowHeight, size.Height);
+				}
+			}
+
+			private void HookPanelResize(ToolStripPanel panel)
+			{
+				if (_hookedPanel == panel) return;
+				if (_hookedPanel != null) _hookedPanel.SizeChanged -= PanelSizeChanged;
+				_hookedPanel = panel;
+				panel.SizeChanged += PanelSizeChanged;
+			}
+
+			// Re-flows the rows when the panel's width changes, until the user drags a toolbar themselves
+			private void PanelSizeChanged(object sender, EventArgs e)
+			{
+				var panel = (ToolStripPanel) sender;
+				if (!_autoPlaced || _replacePending || _joinedStrips.Count == 0) return;
+				if (panel.ClientSize.Width == _placedWidth || !panel.IsHandleCreated) return;
+
+				_replacePending = true;
+				panel.BeginInvoke(new Action(() =>
+				{
+					_replacePending = false;
+					if (!_autoPlaced || panel.ClientSize.Width == _placedWidth) return;
+					PlaceStrips(panel);
+					panel.PerformLayout();
+					panel.Invalidate(true);
+				}));
 			}
 
 			/// <summary>
@@ -366,6 +432,7 @@ namespace Sledge.Shell.Registers
 			{
 				if (!_wired.Add(strip)) return;
 				strip.AllowDrop = true;
+				strip.EndDrag += (s, e) => _autoPlaced = false;
 
 				strip.MouseDown += (s, e) =>
 				{
