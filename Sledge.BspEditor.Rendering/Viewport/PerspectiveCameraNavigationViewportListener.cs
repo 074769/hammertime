@@ -125,8 +125,8 @@ namespace Sledge.BspEditor.Rendering.Viewport
             // These keys are used for hotkeys, don't want the 3D view to move about when trying to use hotkeys.
             var ignore = !FreeLook && KeyboardState.IsAnyKeyDown(Keys.ShiftKey, Keys.ControlKey, Keys.Alt);
 
-            // Movement keys (WASD/QE) only work while free look has been toggled on with the free look key (Z).
-            if (FreeLookToggle)
+            // Movement keys (WASD/QE) only work while the spacebar is held.
+            if (KeyboardState.IsKeyDown(Keys.Space))
             {
                 IfKey(_forwardKey, () => Camera.Advance(move), ignore);
                 IfKey(_backwardKey, () => Camera.Advance(-move), ignore);
