@@ -23,6 +23,7 @@ namespace Sledge.Shell.Settings
 
 		private readonly Dictionary<string, JsonSettingsStore> _values;
 		private readonly List<ISettingsContainer> _containers;
+		private readonly object _saveLock = new object();
 
 		[ImportingConstructor]
 		public SettingsProvider(
@@ -122,18 +123,45 @@ namespace Sledge.Shell.Settings
 		private Task SaveSettings(string name)
 		{
 			var path = _appInfo?.GetApplicationSettingsFolder("Shell");
-			if (path == null) return Task.CompletedTask;
-
-			if (!Directory.Exists(path)) Directory.CreateDirectory(path);
-
-			foreach (var container in _containers)
+			if (path == null)
 			{
-				if (name != null && container.Name != name) continue;
-				var store = _values.ContainsKey(container.Name) ? _values[container.Name] : new JsonSettingsStore();
-				container.StoreValues(store);
-				if (container.ValuesLoaded)
-					File.WriteAllText(Path.Combine(path, container.Name + ".json"), store.ToJson());
+				Log.Debug("Settings", "Save skipped: no settings folder (IApplicationInfo missing?)");
+				return Task.CompletedTask;
 			}
+
+			lock (_saveLock)
+			{
+				if (!Directory.Exists(path)) Directory.CreateDirectory(path);
+
+				foreach (var container in _containers)
+				{
+					if (name != null && container.Name != name) continue;
+
+					// One failing container must not stop the others from saving
+					try
+					{
+						var store = _values.ContainsKey(container.Name) ? _values[container.Name] : new JsonSettingsStore();
+						container.StoreValues(store);
+
+						if (!container.ValuesLoaded)
+						{
+							Log.Debug("Settings", "Not saving '" + container.Name + "': ValuesLoaded is false");
+							continue;
+						}
+
+						_values[container.Name] = store;
+
+						var file = Path.Combine(path, container.Name + ".json");
+						File.WriteAllText(file, store.ToJson());
+						Log.Debug("Settings", "Saved '" + container.Name + "' to " + file);
+					}
+					catch (Exception ex)
+					{
+						Log.Debug("Settings", "Failed to save '" + container.Name + "': " + ex);
+					}
+				}
+			}
+
 			Log.Debug("Settings", "Settings saved.");
 			return Task.CompletedTask;
 		}

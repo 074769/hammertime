@@ -619,6 +619,79 @@ namespace Sledge.Shell.Registers
 			}
 
 			/// <summary>
+			/// Called after the user drags a strip by its grip. Reads the strips'
+			/// on-screen order and stores it in TopToolbarSettings.Layout, so the
+			/// order survives rebuilds and restarts. No rebuild is triggered.
+			/// </summary>
+			private void SaveStripOrder()
+			{
+				if (_joinedStrips.Count == 0)
+				{
+					return;
+				}
+
+				var dock = TopToolbarSettings.Dock;
+
+				var vertical =
+					dock == ToolbarDock.Left ||
+					dock == ToolbarDock.Right;
+
+				var strips =
+					vertical
+						? _joinedStrips
+							.OrderBy(x => x.Location.X)
+							.ThenBy(x => x.Location.Y)
+							.ToList()
+						: _joinedStrips
+							.OrderBy(x => x.Location.Y)
+							.ThenBy(x => x.Location.X)
+							.ToList();
+
+				var layout =
+					TopToolbarSettings.Layout.Resolve(
+						AllToolbarItems.Select(x => x.Id));
+
+				var result = new TopToolbarLayout();
+
+				foreach (var strip in strips)
+				{
+					var root = strip.Tag as MenuTreeRoot;
+
+					if (root == null)
+					{
+						continue;
+					}
+
+					var ids =
+						new HashSet<string>(
+							root.ToolbarNodes.Select(n => n.Id));
+
+					// keep each strip's own button order, group by strip order
+					foreach (var entry in layout)
+					{
+						if (ids.Contains(entry.Id) &&
+							result.Find(entry.Id) == null)
+						{
+							result.Add(entry.Clone());
+						}
+					}
+				}
+
+				// entries of sections without a visible strip keep their place at the end
+				foreach (var entry in layout)
+				{
+					if (result.Find(entry.Id) == null)
+					{
+						result.Add(entry.Clone());
+					}
+				}
+
+				TopToolbarSettings.Layout = result;
+
+				Oy.Publish("Settings:Save");
+			}
+
+			/// <summary>
 			/// Enables toolbar button dragging and custom icon drops.
 			/// </summary>
 			private void WireDragDrop(
@@ -630,6 +703,19 @@ namespace Sledge.Shell.Registers
 				}
 
 				strip.AllowDrop = true;
+
+				/*
+				 * Dragging a whole strip by its grip changes the visual order,
+				 * but nothing used to record that. Save it when the drag ends.
+				 */
+				strip.EndDrag += (s, e) =>
+				{
+					if (strip.IsHandleCreated)
+					{
+						strip.BeginInvoke(
+							new Action(SaveStripOrder));
+					}
+				};
 
 				strip.MouseDown += (s, e) =>
 				{
