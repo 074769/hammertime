@@ -353,6 +353,10 @@ namespace Sledge.Shell.Registers
 
 			private void RenderToolbars()
 			{
+				_rendering = true;
+
+				_captureTimer?.Stop();
+
 				DetachToolbars();
 
 				var dock = TopToolbarSettings.Dock;
@@ -505,6 +509,20 @@ namespace Sledge.Shell.Registers
 				}
 
 				panel.Invalidate(true);
+
+				_renderedDock = dock;
+
+				// strip moves caused by this rebuild arrive as queued layout
+				// messages, so only start listening again after they ran
+				if (ToolbarContainer.IsHandleCreated)
+				{
+					ToolbarContainer.BeginInvoke(
+						new Action(() => _rendering = false));
+				}
+				else
+				{
+					_rendering = false;
+				}
 			}
 
 			/// <summary>
@@ -517,6 +535,41 @@ namespace Sledge.Shell.Registers
 			private void PlaceStrips(
 				ToolStripPanel panel)
 			{
+				var saved =
+					TopToolbarSettings.StripPositions;
+
+				// Saved positions are only used while they agree with the
+				// layout order; if the order was changed in the settings
+				// dialog the layout wins and the strips line up in one row.
+				var useSaved =
+					saved != null &&
+					_joinedStrips.All(
+						s =>
+							s.Tag is MenuTreeRoot r &&
+							saved.TryGetValue(
+								r.SectionName,
+								out var p) &&
+							p != null &&
+							p.Length == 2);
+
+				if (useSaved)
+				{
+					var bySaved =
+						_joinedStrips
+							.OrderBy(
+								s => saved[
+									((MenuTreeRoot)s.Tag)
+										.SectionName][1])
+							.ThenBy(
+								s => saved[
+									((MenuTreeRoot)s.Tag)
+										.SectionName][0])
+							.ToList();
+
+					useSaved =
+						bySaved.SequenceEqual(_joinedStrips);
+				}
+
 				int x = 0;
 
 				foreach (var strip in _joinedStrips)
@@ -525,10 +578,25 @@ namespace Sledge.Shell.Registers
 						strip.GetPreferredSize(
 							Size.Empty);
 
-					panel.Join(
-						strip,
-						x,
-						0);
+					if (useSaved)
+					{
+						var p =
+							saved[
+								((MenuTreeRoot)strip.Tag)
+									.SectionName];
+
+						panel.Join(
+							strip,
+							p[0],
+							p[1]);
+					}
+					else
+					{
+						panel.Join(
+							strip,
+							x,
+							0);
+					}
 
 					x += size.Width;
 				}
@@ -618,23 +686,58 @@ namespace Sledge.Shell.Registers
 					: null;
 			}
 
+			private bool _rendering;
+
+			private ToolbarDock _renderedDock = ToolbarDock.Top;
+
+			private System.Windows.Forms.Timer _captureTimer;
+
 			/// <summary>
-			/// Called after the user drags a strip by its grip. Reads the strips'
-			/// on-screen order and stores it in TopToolbarSettings.Layout, so the
-			/// order survives rebuilds and restarts. No rebuild is triggered.
+			/// Called whenever a strip moves. Waits until the movement has
+			/// settled, then records where the strips ended up. Strip moves
+			/// made by RenderToolbars itself are ignored.
 			/// </summary>
-			private void SaveStripOrder()
+			private void ScheduleCapture()
 			{
-				if (_joinedStrips.Count == 0)
+				if (_rendering)
 				{
 					return;
 				}
 
-				var dock = TopToolbarSettings.Dock;
+				if (_captureTimer == null)
+				{
+					_captureTimer =
+						new System.Windows.Forms.Timer
+						{
+							Interval = 400
+						};
+
+					_captureTimer.Tick +=
+						(s, e) =>
+						{
+							_captureTimer.Stop();
+							CaptureStripLayout();
+						};
+				}
+
+				_captureTimer.Stop();
+				_captureTimer.Start();
+			}
+
+			/// <summary>
+			/// Stores the strips' on-screen order (as part of the saved layout)
+			/// and their positions, then saves. No rebuild is triggered.
+			/// </summary>
+			private void CaptureStripLayout()
+			{
+				if (_rendering || _joinedStrips.Count == 0)
+				{
+					return;
+				}
 
 				var vertical =
-					dock == ToolbarDock.Left ||
-					dock == ToolbarDock.Right;
+					_renderedDock == ToolbarDock.Left ||
+					_renderedDock == ToolbarDock.Right;
 
 				var strips =
 					vertical
@@ -647,12 +750,13 @@ namespace Sledge.Shell.Registers
 							.ThenBy(x => x.Location.X)
 							.ToList();
 
-				var layout =
+				var current =
 					TopToolbarSettings.Layout.Resolve(
 						AllToolbarItems.Select(x => x.Id));
 
 				var result = new TopToolbarLayout();
 
+				// strips in on-screen order, each strip keeps its own button order
 				foreach (var strip in strips)
 				{
 					var root = strip.Tag as MenuTreeRoot;
@@ -666,8 +770,7 @@ namespace Sledge.Shell.Registers
 						new HashSet<string>(
 							root.ToolbarNodes.Select(n => n.Id));
 
-					// keep each strip's own button order, group by strip order
-					foreach (var entry in layout)
+					foreach (var entry in current)
 					{
 						if (ids.Contains(entry.Id) &&
 							result.Find(entry.Id) == null)
@@ -677,8 +780,8 @@ namespace Sledge.Shell.Registers
 					}
 				}
 
-				// entries of sections without a visible strip keep their place at the end
-				foreach (var entry in layout)
+				// entries without a visible strip keep their place at the end
+				foreach (var entry in current)
 				{
 					if (result.Find(entry.Id) == null)
 					{
@@ -686,7 +789,59 @@ namespace Sledge.Shell.Registers
 					}
 				}
 
+				var positions =
+					new Dictionary<string, int[]>();
+
+				if (!vertical)
+				{
+					foreach (var strip in strips)
+					{
+						var root = strip.Tag as MenuTreeRoot;
+
+						if (root != null)
+						{
+							positions[root.SectionName] =
+								new[]
+								{
+									strip.Location.X,
+									strip.Location.Y
+								};
+						}
+					}
+				}
+
+				var sameOrder =
+					TopToolbarSettings.Layout
+						.Select(x => x.Id)
+						.SequenceEqual(
+							result.Select(x => x.Id));
+
+				var samePositions =
+					vertical ||
+					(TopToolbarSettings.StripPositions != null &&
+					 TopToolbarSettings.StripPositions.Count ==
+						positions.Count &&
+					 positions.All(
+						p =>
+							TopToolbarSettings.StripPositions
+								.TryGetValue(
+									p.Key,
+									out var old) &&
+							old != null &&
+							old.SequenceEqual(p.Value)));
+
+				if (sameOrder && samePositions)
+				{
+					return;
+				}
+
 				TopToolbarSettings.Layout = result;
+
+				if (!vertical)
+				{
+					TopToolbarSettings.StripPositions =
+						positions;
+				}
 
 				Oy.Publish("Settings:Save");
 			}
@@ -704,18 +859,17 @@ namespace Sledge.Shell.Registers
 
 				strip.AllowDrop = true;
 
-				/*
-				 * Dragging a whole strip by its grip changes the visual order,
-				 * but nothing used to record that. Save it when the drag ends.
-				 */
-				strip.EndDrag += (s, e) =>
-				{
-					if (strip.IsHandleCreated)
+				strip.EndDrag += (s, e) => ScheduleCapture();
+				strip.LocationChanged +=
+					(s, e) =>
 					{
-						strip.BeginInvoke(
-							new Action(SaveStripOrder));
-					}
-				};
+						// only react to the user dragging, not to layout
+						// changes (window resize, startup)
+						if ((Control.MouseButtons & MouseButtons.Left) != 0)
+						{
+							ScheduleCapture();
+						}
+					};
 
 				strip.MouseDown += (s, e) =>
 				{

@@ -99,6 +99,9 @@ namespace Sledge.Shell.Settings
 		public static bool Locked { get; set; } = false;
 		public static int IconSize { get; set; } = 24;
 
+		/// <summary>Where each toolbar strip (keyed by its menu section) was left by the user: x, y inside the toolbar panel</summary>
+		public static Dictionary<string, int[]> StripPositions { get; set; } = new Dictionary<string, int[]>();
+
 		/// <summary>True once the saved values have been read (they may arrive after the menus are first built)</summary>
 		public static bool Loaded { get; private set; }
 
@@ -120,6 +123,7 @@ namespace Sledge.Shell.Settings
 			Locked = store.Get("TopToolbarLocked", false);
 			IconSize = Math.Max(16, Math.Min(64, store.Get("TopToolbarIconSize24", 24)));
 			Layout = store.Get("TopToolbarButtons", new TopToolbarLayout()) ?? new TopToolbarLayout();
+			StripPositions = store.Get("TopToolbarStripPositions", new Dictionary<string, int[]>()) ?? new Dictionary<string, int[]>();
 			ValuesLoaded = true;
 			Loaded = true;
 		}
@@ -130,6 +134,7 @@ namespace Sledge.Shell.Settings
 			store.Set("TopToolbarLocked", Locked);
 			store.Set("TopToolbarIconSize24", IconSize);
 			store.Set("TopToolbarButtons", Layout);
+			store.Set("TopToolbarStripPositions", StripPositions);
 		}
 	}
 }
