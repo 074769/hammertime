@@ -1,5 +1,6 @@
 using LogicAndTrick.Oy;
 using Sledge.BspEditor.Documents;
+using Sledge.BspEditor.Editing.Commands.Linking;
 using Sledge.BspEditor.Modification;
 using Sledge.BspEditor.Modification.Operations.Mutation;
 using Sledge.BspEditor.Modification.Operations.Selection;
@@ -268,6 +269,8 @@ namespace Sledge.BspEditor.Tools.Selection
 				b.AddCommand("BspEditor:Tools:TieToEntity");
 				b.AddCommand("BspEditor:Tools:MoveToWorld");
 				b.AddSeparator();
+
+				LinkContextMenu.Populate(b, document);
 
 				if (b.Viewport.Is2D)
 				{

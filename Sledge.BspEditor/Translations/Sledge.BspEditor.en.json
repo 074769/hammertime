@@ -194,6 +194,7 @@
         "Window": "Window"
     },
     "AutomaticVisgroups": {
-        "EntitiesByClass": "Entities by Class"
+        "EntitiesByClass": "Entities by Class",
+        "LinkedObjects": "Linked Objects"
     } 
 }
