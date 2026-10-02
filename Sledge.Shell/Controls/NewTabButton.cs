@@ -46,8 +46,9 @@ namespace Sledge.Shell.Controls
             var back = src != null ? src.TabBackColor : BackColor;
             var fore = src != null ? src.TabForeColor : ForeColor;
 
-            // Parent colour behind the tab shape
-            using (var b = new SolidBrush(src != null ? src.BackColor : BackColor)) g.FillRectangle(b, ClientRectangle);
+            // Strip colour behind the tab shape (src.BackColor is the un-themed control colour, which showed up as white above the button)
+            var strip = src != null ? src.StripColor : BackColor;
+            using (var b = new SolidBrush(strip)) g.FillRectangle(b, ClientRectangle);
 
             var tab = src != null ? src.FirstTabRect : new Rectangle(0, 2, 0, 22);
             var rect = new Rectangle(0, tab.Top, Width - 1, tab.Height);
@@ -63,9 +64,10 @@ namespace Sledge.Shell.Controls
                 new Point(rect.Left, rect.Bottom)
             };
 
-            var fill = back;
-            if (_pressed && _hover) fill = ControlPaint.Light(back, 1);
-            else if (_hover) fill = ControlPaint.Light(back, 0.8f);
+            // Flat by default so it never looks like a selected/inactive document tab; the tab colour only appears on hover
+            var fill = strip;
+            if (_pressed && _hover) fill = ControlPaint.Light(back, 0.8f);
+            else if (_hover) fill = back;
 
             using (var b = new SolidBrush(fill)) g.FillPolygon(b, points);
 

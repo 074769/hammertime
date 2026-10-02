@@ -72,6 +72,8 @@ namespace Sledge.Shell.Controls
 		private Color _backTabColor;
 
 		internal Color TabBackColor => _backTabColor;
+		/// <summary>Colour of the strip behind/between the tabs (the dark theme background, not the control's own BackColor)</summary>
+		internal Color StripColor => _backColor.IsEmpty ? BackColor : _backColor;
 		internal Color TabForeColor => _foreColor;
 
 		/// <summary>Right edge of the last tab (0 if there are no tabs)</summary>
