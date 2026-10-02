@@ -17,23 +17,68 @@ namespace Sledge.Shell.Controls
         internal ClosableTabControl Source { get; set; }
 
         private Control _colorSource;
+        private Color _insideColor = Color.Empty;
 
         /// <summary>
-        /// The control whose BackColor the inside of the button copies (the menu bar), so the "+" always matches it
+        /// The control (the menu bar) whose painted colour the inside of the button copies.
+        /// The colour is read from what the control actually draws, not from its BackColor,
+        /// because the menu bar's renderer paints its own background.
         /// </summary>
         internal Control ColorSource
         {
             get => _colorSource;
             set
             {
-                if (_colorSource != null) _colorSource.BackColorChanged -= ColorSourceChanged;
+                if (_colorSource != null)
+                {
+                    _colorSource.BackColorChanged -= ColorSourceChanged;
+                    _colorSource.SizeChanged -= ColorSourceChanged;
+                    if (_colorSource is ToolStrip oldStrip) oldStrip.RendererChanged -= ColorSourceChanged;
+                }
                 _colorSource = value;
-                if (_colorSource != null) _colorSource.BackColorChanged += ColorSourceChanged;
-                Invalidate();
+                if (_colorSource != null)
+                {
+                    _colorSource.BackColorChanged += ColorSourceChanged;
+                    _colorSource.SizeChanged += ColorSourceChanged;
+                    if (_colorSource is ToolStrip newStrip) newStrip.RendererChanged += ColorSourceChanged;
+                }
+                ColorSourceChanged(this, EventArgs.Empty);
             }
         }
 
-        private void ColorSourceChanged(object sender, EventArgs e) { Invalidate(); }
+        private void ColorSourceChanged(object sender, EventArgs e)
+        {
+            _insideColor = Color.Empty; // re-sample on next paint
+            Invalidate();
+        }
+
+        /// <summary>
+        /// Samples the menu bar's real background: renders it to a bitmap and reads a pixel from the
+        /// empty padding at its left edge (no menu item is drawn there).
+        /// </summary>
+        private Color GetInsideColor(Color fallback)
+        {
+            if (_colorSource == null) return fallback;
+            if (!_insideColor.IsEmpty) return _insideColor;
+
+            var w = _colorSource.Width;
+            var h = _colorSource.Height;
+            if (w < 2 || h < 2) return _colorSource.BackColor;
+
+            try
+            {
+                using (var bmp = new Bitmap(w, h))
+                {
+                    _colorSource.DrawToBitmap(bmp, new Rectangle(0, 0, w, h));
+                    _insideColor = bmp.GetPixel(Math.Min(2, w - 1), h / 2);
+                }
+            }
+            catch
+            {
+                _insideColor = _colorSource.BackColor;
+            }
+            return _insideColor;
+        }
 
         public NewTabButton()
         {
@@ -67,7 +112,7 @@ namespace Sledge.Shell.Controls
 
             // Strip colour behind the tab shape (src.BackColor is the un-themed control colour, which showed up as white above the button)
             var strip = src != null ? src.StripColor : BackColor;
-            var inside = _colorSource != null ? _colorSource.BackColor : strip;
+            var inside = GetInsideColor(strip);
             using (var b = new SolidBrush(strip)) g.FillRectangle(b, ClientRectangle);
 
             var tab = src != null ? src.FirstTabRect : new Rectangle(0, 2, 0, 22);
