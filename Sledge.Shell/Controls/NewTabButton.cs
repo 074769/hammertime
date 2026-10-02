@@ -16,6 +16,25 @@ namespace Sledge.Shell.Controls
 
         internal ClosableTabControl Source { get; set; }
 
+        private Control _colorSource;
+
+        /// <summary>
+        /// The control whose BackColor the inside of the button copies (the menu bar), so the "+" always matches it
+        /// </summary>
+        internal Control ColorSource
+        {
+            get => _colorSource;
+            set
+            {
+                if (_colorSource != null) _colorSource.BackColorChanged -= ColorSourceChanged;
+                _colorSource = value;
+                if (_colorSource != null) _colorSource.BackColorChanged += ColorSourceChanged;
+                Invalidate();
+            }
+        }
+
+        private void ColorSourceChanged(object sender, EventArgs e) { Invalidate(); }
+
         public NewTabButton()
         {
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
@@ -48,6 +67,7 @@ namespace Sledge.Shell.Controls
 
             // Strip colour behind the tab shape (src.BackColor is the un-themed control colour, which showed up as white above the button)
             var strip = src != null ? src.StripColor : BackColor;
+            var inside = _colorSource != null ? _colorSource.BackColor : strip;
             using (var b = new SolidBrush(strip)) g.FillRectangle(b, ClientRectangle);
 
             var tab = src != null ? src.FirstTabRect : new Rectangle(0, 2, 0, 22);
@@ -65,7 +85,7 @@ namespace Sledge.Shell.Controls
             };
 
             // Flat by default so it never looks like a selected/inactive document tab; the tab colour only appears on hover
-            var fill = strip;
+            var fill = inside;
             if (_pressed && _hover) fill = ControlPaint.Light(back, 0.8f);
             else if (_hover) fill = back;
 

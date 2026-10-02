@@ -151,6 +151,7 @@ namespace Sledge.Shell.Forms
 			NewTabButton.Name = "NewTabButton";
 			NewTabButton.Size = new System.Drawing.Size(30, 24);
 			NewTabButton.Source = DocumentTabs;
+			NewTabButton.ColorSource = MenuStrip;
 			NewTabButton.Click += RequestNewDocument;
 			// 
 			// DocumentTabs
