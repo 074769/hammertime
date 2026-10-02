@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Drawing;
@@ -69,21 +69,17 @@ namespace Sledge.Shell.Registers
 			// Re-lay out the top toolbar when its settings change (settings form, or its right-click menu)
 			Oy.Subscribe<object>("SettingsChanged", ToolbarSettingsChanged);
 			Oy.Subscribe<object>("TopToolbar:Changed", ToolbarSettingsChanged);
-			Oy.Subscribe<object>("Settings:Loaded", SettingsLoaded);
 		}
 
 		private Task ContextChanged(IContext context)
 		{
+			// The settings may finish loading after the menus were first built; apply them once they are available
+			if (!_toolbarSettingsApplied && TopToolbarSettings.Loaded)
+			{
+				_toolbarSettingsApplied = true;
+				_shell.InvokeLater(() => _tree.ApplyToolbarSettings());
+			}
 			return UpdateMenu(context);
-		}
-
-		private Task SettingsLoaded(object obj)
-		{
-			if (!TopToolbarSettings.Loaded) return Task.CompletedTask;
-
-			_toolbarSettingsApplied = true;
-			_shell.InvokeLater(() => _tree?.ApplyToolbarSettings());
-			return Task.CompletedTask;
 		}
 
 		private bool _toolbarSettingsApplied;
@@ -236,10 +232,7 @@ namespace Sledge.Shell.Registers
 				MenuStrip.Items.Clear();
 				MenuStrip.Items.AddRange(RootNodes.Values.OrderBy(x => x.OrderHint).Select(x => x.MenuMenuItem).OfType<ToolStripItem>().ToArray());
 				MenuStrip.ResumeLayout();
-
-				// SettingsProvider runs after MenuRegister alphabetically. Do not construct and place the
-				// toolbar using default settings during startup; wait until the saved settings are loaded.
-				if (TopToolbarSettings.Loaded) RenderToolbars();
+				RenderToolbars();
 			}
 
 			/// <summary>
