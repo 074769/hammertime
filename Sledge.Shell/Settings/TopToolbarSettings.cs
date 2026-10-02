@@ -56,8 +56,11 @@ namespace Sledge.Shell.Settings
 		}
 
 		/// <summary>
-		/// Saved entries first (in saved order, dropping ones that no longer exist),
-		/// then any buttons without a saved entry (default order, visible).
+		/// Saved entries first (in saved order, dropping ones that no longer exist).
+		/// Buttons without a saved entry are visible and are placed right after
+		/// the button that precedes them in the default order, so they stay next
+		/// to their neighbours instead of piling up at the end of the list.
+		/// <paramref name="ids"/> must be in the default order.
 		/// </summary>
 		public TopToolbarLayout Resolve(IEnumerable<string> ids)
 		{
@@ -68,9 +71,23 @@ namespace Sledge.Shell.Settings
 				if (e?.Id == null || !all.Contains(e.Id) || result.Find(e.Id) != null) continue;
 				result.Add(e.Clone());
 			}
-			foreach (var id in all)
+			for (var i = 0; i < all.Count; i++)
 			{
-				if (result.Find(id) == null) result.Add(new TopToolbarEntry { Id = id });
+				var id = all[i];
+				if (result.Find(id) != null) continue;
+
+				var insertAt = 0;
+				for (var j = i - 1; j >= 0; j--)
+				{
+					var prev = all[j];
+					var index = result.FindIndex(x => x.Id == prev);
+					if (index >= 0)
+					{
+						insertAt = index + 1;
+						break;
+					}
+				}
+				result.Insert(insertAt, new TopToolbarEntry { Id = id });
 			}
 			return result;
 		}
