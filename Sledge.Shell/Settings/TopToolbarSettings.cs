@@ -113,11 +113,30 @@ namespace Sledge.Shell.Settings
 		// Static so the menu register can read it directly
 		public static TopToolbarLayout Layout { get; set; } = new TopToolbarLayout();
 		public static ToolbarDock Dock { get; set; } = ToolbarDock.Top;
-		public static bool Locked { get; set; } = false;
+		public static bool Locked { get; set; } = DefaultLocked;
 		public static int IconSize { get; set; } = 24;
 
 		/// <summary>Where each toolbar strip (keyed by its menu section) was left by the user: x, y inside the toolbar panel</summary>
-		public static Dictionary<string, int[]> StripPositions { get; set; } = new Dictionary<string, int[]>();
+		public static Dictionary<string, int[]> StripPositions { get; set; } = DefaultStripPositions();
+
+		/// <summary>The toolbar starts locked for a user who has never customised it</summary>
+		private const bool DefaultLocked = true;
+
+		/// <summary>
+		/// Where the strips sit on a first run. The button order itself is the default order
+		/// (an empty layout resolves to it); these are the strip positions that go with it.
+		/// </summary>
+		private static Dictionary<string, int[]> DefaultStripPositions()
+		{
+			return new Dictionary<string, int[]>
+			{
+				{ "File", new[] { 3, 0 } },
+				{ "Edit", new[] { 245, 0 } },
+				{ "View", new[] { 555, 0 } },
+				{ "Map", new[] { 921, 0 } },
+				{ "Tools", new[] { 1461, 0 } }
+			};
+		}
 
 		/// <summary>True once the saved values have been read (they may arrive after the menus are first built)</summary>
 		public static bool Loaded { get; private set; }
@@ -142,12 +161,26 @@ namespace Sledge.Shell.Settings
 
 		public void LoadValues(ISettingsStore store)
 		{
+			// Nothing saved yet (first run): use the built-in defaults - default button order,
+			// default strip positions, locked - and don't treat the missing version as an old layout.
+			var firstRun = !store.Contains("TopToolbarButtons");
+
 			Dock = store.Get("TopToolbarPosition", ToolbarDock.Top);
-			Locked = store.Get("TopToolbarLocked", false);
+			Locked = store.Get("TopToolbarLocked", DefaultLocked);
 			IconSize = Math.Max(16, Math.Min(64, store.Get("TopToolbarIconSize24", 24)));
 			Layout = store.Get("TopToolbarButtons", new TopToolbarLayout()) ?? new TopToolbarLayout();
-			StripPositions = store.Get("TopToolbarStripPositions", new Dictionary<string, int[]>()) ?? new Dictionary<string, int[]>();
-			ResetOrder = store.Get("TopToolbarLayoutVersion", 0) < LayoutVersion;
+
+			if (firstRun)
+			{
+				StripPositions = DefaultStripPositions();
+				ResetOrder = false;
+			}
+			else
+			{
+				StripPositions = store.Get("TopToolbarStripPositions", new Dictionary<string, int[]>()) ?? new Dictionary<string, int[]>();
+				ResetOrder = store.Get("TopToolbarLayoutVersion", 0) < LayoutVersion;
+			}
+
 			ValuesLoaded = true;
 			Loaded = true;
 		}
