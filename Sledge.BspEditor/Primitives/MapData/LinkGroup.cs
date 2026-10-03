@@ -8,8 +8,8 @@ using Sledge.Common.Transport;
 namespace Sledge.BspEditor.Primitives.MapData
 {
     /// <summary>
-    /// A group of linked objects. Editing any member of the group edits all the members.
-    /// The members themselves are marked with a <see cref="MapObjectData.LinkGroupID"/>.
+    /// Either a link (a group of objects, copied as instances) or one of its slots (the matching objects across the instances).
+    /// Objects are marked with a <see cref="MapObjectData.LinkGroupID"/>.
     /// </summary>
     [Serializable]
     public class LinkGroup : IMapData
@@ -25,10 +25,10 @@ namespace Sledge.BspEditor.Primitives.MapData
         /// <summary>The colour used to draw this group's outline and label in the viewports</summary>
         public Color Colour { get; set; } = Color.Orange;
 
-        /// <summary>The ID of the origin object: the reference member of the group. 0 means "the lowest ID member".</summary>
-        public long OriginID { get; set; }
+        /// <summary>For a link: the instance that is the origin (the master copy). 0 means the lowest numbered instance.</summary>
+        public long OriginInstance { get; set; }
 
-        /// <summary>The ID of the link group this is a sublink of. 0 means this is a top level link group.</summary>
+        /// <summary>For a slot: the ID of the link it belongs to. 0 for a link itself.</summary>
         public long ParentID { get; set; }
 
         public LinkGroup()
@@ -40,7 +40,7 @@ namespace Sledge.BspEditor.Primitives.MapData
             ID = obj.Get<long>("ID");
             Name = obj.Get<string>("Name");
             Colour = obj.GetColor("Colour");
-            OriginID = obj.Get<long>("OriginID");
+            OriginInstance = obj.Get<long>("OriginInstance");
             ParentID = obj.Get<long>("ParentID");
         }
 
@@ -54,7 +54,7 @@ namespace Sledge.BspEditor.Primitives.MapData
             ID = info.GetInt64("ID");
             Name = info.GetString("Name");
             Colour = Color.FromArgb(info.GetInt32("Colour"));
-            OriginID = TryGetLong(info, "OriginID");
+            OriginInstance = TryGetLong(info, "OriginInstance");
             ParentID = TryGetLong(info, "ParentID");
         }
 
@@ -73,7 +73,7 @@ namespace Sledge.BspEditor.Primitives.MapData
             info.AddValue("ID", ID);
             info.AddValue("Name", Name);
             info.AddValue("Colour", Colour.ToArgb());
-            info.AddValue("OriginID", OriginID);
+            info.AddValue("OriginInstance", OriginInstance);
             info.AddValue("ParentID", ParentID);
         }
 
@@ -84,7 +84,7 @@ namespace Sledge.BspEditor.Primitives.MapData
                 ID = ID,
                 Name = Name,
                 Colour = Colour,
-                OriginID = OriginID,
+                OriginInstance = OriginInstance,
                 ParentID = ParentID
             };
         }
@@ -100,7 +100,7 @@ namespace Sledge.BspEditor.Primitives.MapData
             v.Set("ID", ID);
             v.Set("Name", Name);
             v.SetColor("Colour", Colour);
-            v.Set("OriginID", OriginID);
+            v.Set("OriginInstance", OriginInstance);
             v.Set("ParentID", ParentID);
             return v;
         }

@@ -3,7 +3,7 @@ using System.ComponentModel.Composition;
 using System.Linq;
 using System.Threading.Tasks;
 using Sledge.BspEditor.Linking;
-using Sledge.BspEditor.Primitives.MapData;
+using Sledge.BspEditor.Primitives.MapObjectData;
 using Sledge.BspEditor.Primitives.MapObjects;
 
 namespace Sledge.BspEditor.Modification.ChangeHandling
@@ -11,8 +11,12 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
     /// <summary>
     /// Keeps linked objects in sync.
     ///
-    /// Solids: moving or rotating a linked solid only moves that solid. Editing its shape (vertices, clipping,
-    /// scaling...) changes the shape of every solid in the link, each keeping its own position and orientation.
+    /// A link is a group of objects, and the copies of that group are its instances. Each object in an instance has a
+    /// matching object in every other instance (together they are a "slot"). Objects in the same instance are never
+    /// tied to each other: each one is edited individually, and the edit is shared with its slot only.
+    ///
+    /// Solids: moving, rotating or flipping a linked solid only affects that solid. Editing its shape (vertices,
+    /// clipping, scaling...) changes the shape of the whole slot, each solid keeping its own position and orientation.
     /// See <see cref="LinkGeometry"/> for how the two are told apart.
     ///
     /// Everything else (entities and so on): edits to properties and children are shared, position and angles are not.
@@ -30,46 +34,76 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
         public Task Changed(Change change)
         {
             var doc = change.Document;
-
             var snaps = LinkGeometry.Snapshots(doc);
 
-            // New linked solids (paste, duplicate, linking) start from how they are now
-            foreach (var added in change.Added.OfType<Solid>().Where(x => LinkedObjects.GetLinkId(x) != null))
-            {
-                lock (snaps) snaps[added.ID] = LinkGeometry.Snapshot.Take(added);
-            }
             foreach (var removed in change.Removed)
             {
                 lock (snaps) snaps.Remove(removed.ID);
             }
 
-            if (!change.Updated.Any()) return Task.CompletedTask;
+            var addedLinked = change.Added.Where(x => LinkedObjects.GetLinkId(x) != null).ToList();
+            var updatedLinked = change.Updated.Select(LinkedObjects.FindLinkedOwner).Where(x => x != null).Distinct().ToList();
+            if (addedLinked.Count == 0 && updatedLinked.Count == 0) return Task.CompletedTask;
 
-            // The linked objects touched by this change (an edit to a linked entity's brush counts as an edit to the entity)
-            var owners = change.Updated
-                .Select(LinkedObjects.FindLinkedOwner)
-                .Where(x => x != null)
-                .Distinct()
-                .ToList();
-            if (owners.Count == 0) return Task.CompletedTask;
+            var index = LinkedObjects.BuildIndex(doc);
 
-            var touched = owners.Select(x => LinkedObjects.GetLinkId(x).Value).Distinct().ToList();
-            var members = LinkedObjects.GetMembers(doc);
-            var groups = doc.Map.Data.Get<LinkGroup>().GroupBy(x => x.ID).ToDictionary(x => x.Key, x => x.First());
+            if (addedLinked.Count > 0) SeparateCopies(change, addedLinked, index);
 
-            foreach (var groupId in touched)
+            foreach (var added in addedLinked.OfType<Solid>())
             {
-                if (!members.TryGetValue(groupId, out var all)) continue;
-                groups.TryGetValue(groupId, out var group);
+                lock (snaps) snaps[added.ID] = LinkGeometry.Snapshot.Take(added);
+            }
 
-                var solids = all.OfType<Solid>().ToList();
-                if (solids.Count > 0) SyncSolids(change, group, solids, owners, snaps);
+            foreach (var slotId in updatedLinked.Select(x => LinkedObjects.GetLinkId(x).Value).Distinct())
+            {
+                if (!index.Slots.TryGetValue(slotId, out var members)) continue;
 
-                var others = all.Where(x => !(x is Solid)).ToList();
-                if (others.Count > 1) SyncOthers(change, group, others, owners);
+                var solids = members.OfType<Solid>().ToList();
+                if (solids.Count > 0) SyncSolids(change, index, slotId, solids, updatedLinked, snaps);
+
+                var others = members.Where(x => !(x is Solid)).ToList();
+                if (others.Count > 1) SyncOthers(change, index, slotId, others, updatedLinked);
             }
 
             return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// A copy of a linked object (paste, duplicate) keeps its place in the link. If that place is already taken,
+        /// the copies are a new instance of the link: all the copies that came from one instance share one new instance.
+        /// </summary>
+        private static void SeparateCopies(Change change, List<IMapObject> added, LinkedObjects.LinkIndex index)
+        {
+            var addedSet = new HashSet<IMapObject>(added);
+            var taken = new HashSet<string>();
+            foreach (var kv in index.Slots)
+            {
+                foreach (var o in kv.Value.Where(x => !addedSet.Contains(x)))
+                {
+                    taken.Add(kv.Key + ":" + LinkedObjects.GetInstance(o));
+                }
+            }
+
+            var newInstance = new Dictionary<string, long>();
+            foreach (var o in added)
+            {
+                var d = o.Data.GetOne<LinkGroupID>();
+                var top = LinkedObjects.GetTopId(o);
+                if (top == 0 || !taken.Contains(d.ID + ":" + d.Instance)) continue;
+
+                // All the copies from the same instance of the same link go to the same new instance
+                var key = top + ":" + d.Instance;
+                if (!newInstance.TryGetValue(key, out var instance))
+                {
+                    var existing = index.Links.TryGetValue(top, out var instances) ? instances.Keys.DefaultIfEmpty(0).Max() : 0;
+                    var already = newInstance.Where(x => x.Key.StartsWith(top + ":")).Select(x => x.Value).DefaultIfEmpty(0).Max();
+                    instance = System.Math.Max(existing, already) + 1;
+                    newInstance[key] = instance;
+                }
+
+                o.Data.Replace(new LinkGroupID(d.ID, d.TopID, instance));
+                change.Update(o);
+            }
         }
 
         private static bool Contains(IEnumerable<IMapObject> list, IMapObject o)
@@ -77,7 +111,14 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
             return list.Any(x => ReferenceEquals(x, o));
         }
 
-        private static void SyncSolids(Change change, LinkGroup group, List<Solid> solids, List<IMapObject> owners, Dictionary<long, LinkGeometry.Snapshot> snaps)
+        private static IMapObject PickSource(LinkedObjects.LinkIndex index, long slotId, List<IMapObject> edited)
+        {
+            // If several were edited at once the origin object wins
+            var origin = index.OriginOf(slotId);
+            return edited.FirstOrDefault(x => ReferenceEquals(x, origin)) ?? edited[0];
+        }
+
+        private static void SyncSolids(Change change, LinkedObjects.LinkIndex index, long slotId, List<Solid> solids, List<IMapObject> touched, Dictionary<long, LinkGeometry.Snapshot> snaps)
         {
             // A solid we know nothing about yet starts from how it is now
             lock (snaps)
@@ -89,8 +130,8 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
             }
 
             // Work out which of the touched solids had their shape edited
-            var edited = new List<Solid>();
-            foreach (var s in solids.Where(x => Contains(owners, x)))
+            var edited = new List<IMapObject>();
+            foreach (var s in solids.Where(x => Contains(touched, x)))
             {
                 LinkGeometry.Snapshot pre;
                 lock (snaps) pre = snaps[s.ID];
@@ -98,9 +139,9 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
                 var now = LinkGeometry.Snapshot.Take(s);
                 if (pre.SamePoints(now)) continue; // eg it was just selected
 
-                if (pre.SameTopology(now) && LinkGeometry.Rigid.Fit(pre.Points, now.Points) != null)
+                if (LinkGeometry.Rigid.Fit(pre, now) != null)
                 {
-                    // Moved or rotated: it's only a different placement, so nothing is shared
+                    // Moved, rotated or flipped: it's only a different placement, so nothing is shared
                     lock (snaps) snaps[s.ID] = now;
                     continue;
                 }
@@ -110,9 +151,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
 
             if (edited.Count == 0) return;
 
-            // If several were edited at once the origin object wins
-            var origin = LinkedObjects.GetOrigin(group, edited);
-            var source = (Solid) origin;
+            var source = (Solid) PickSource(index, slotId, edited);
 
             LinkGeometry.Snapshot sourcePre;
             lock (snaps) sourcePre = snaps[source.ID];
@@ -126,7 +165,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
                     if (ReferenceEquals(target, source)) continue;
 
                     var targetPre = snaps[target.ID];
-                    var rigid = sourcePre.SameTopology(targetPre) ? LinkGeometry.Rigid.Fit(sourcePre.Points, targetPre.Points) : null;
+                    var rigid = LinkGeometry.Rigid.Fit(sourcePre, targetPre);
 
                     // Not the same shape yet (they were linked while different): line up their centres
                     if (rigid == null) rigid = LinkGeometry.Rigid.Translation(targetPre.Center - sourcePre.Center);
@@ -147,9 +186,9 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
             }
         }
 
-        private static void SyncOthers(Change change, LinkGroup group, List<IMapObject> all, List<IMapObject> owners)
+        private static void SyncOthers(Change change, LinkedObjects.LinkIndex index, long slotId, List<IMapObject> all, List<IMapObject> touched)
         {
-            var updated = all.Where(x => Contains(owners, x)).ToList();
+            var updated = all.Where(x => Contains(touched, x)).ToList();
             var untouched = all.Where(x => !Contains(updated, x)).ToList();
 
             // If every member was changed at once (eg moving a selection) there's nothing to copy from
@@ -161,7 +200,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
             var edited = updated.Where(x => x.GetType() == baseline.GetType() && !LinkedObjects.AreEquivalent(x, baseline)).ToList();
             if (edited.Count == 0) return;
 
-            var source = LinkedObjects.GetOrigin(group, edited);
+            var source = PickSource(index, slotId, edited);
 
             foreach (var target in all)
             {

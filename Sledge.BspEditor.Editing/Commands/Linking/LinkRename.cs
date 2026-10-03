@@ -17,7 +17,7 @@ using Sledge.QuickForms;
 namespace Sledge.BspEditor.Editing.Commands.Linking
 {
     /// <summary>
-    /// Rename the link group of the selected object(s).
+    /// Rename the link of the selected object(s).
     /// </summary>
     [AutoTranslate]
     [Export(typeof(ICommand))]
@@ -25,18 +25,18 @@ namespace Sledge.BspEditor.Editing.Commands.Linking
     [MenuItem("Tools", "", "Link", "D")]
     public class LinkRename : BaseCommand
     {
-        public override string Name { get; set; } = "Rename link group";
-        public override string Details { get; set; } = "Rename the link group of the selected objects.";
+        public override string Name { get; set; } = "Rename link";
+        public override string Details { get; set; } = "Rename the link of the selected objects.";
 
-        public string Title { get; set; } = "Rename link group";
-        public string GroupNameLabel { get; set; } = "Link group name";
+        public string Title { get; set; } = "Rename link";
+        public string GroupNameLabel { get; set; } = "Link name";
         public string OK { get; set; } = "OK";
         public string Cancel { get; set; } = "Cancel";
 
         protected override bool IsInContext(IContext context, MapDocument document)
         {
             return base.IsInContext(context, document)
-                   && document.Selection.GetSelectedParents().Any(x => LinkedObjects.GetLinkId(x) != null);
+                   && document.Selection.GetSelectedParents().Any(x => LinkedObjects.GetTopId(x) != 0);
         }
 
         private class GroupChoice
@@ -48,9 +48,8 @@ namespace Sledge.BspEditor.Editing.Commands.Linking
         protected override async Task Invoke(MapDocument document, CommandParameters parameters)
         {
             var ids = document.Selection.GetSelectedParents()
-                .Select(LinkedObjects.GetLinkId)
-                .Where(x => x != null)
-                .Select(x => x.Value)
+                .Select(LinkedObjects.GetTopId)
+                .Where(x => x != 0)
                 .Distinct()
                 .ToList();
             var groups = document.Map.Data.Get<LinkGroup>().Where(x => ids.Contains(x.ID)).ToList();
@@ -83,7 +82,7 @@ namespace Sledge.BspEditor.Editing.Commands.Linking
             }
 
             if (group == null || string.IsNullOrEmpty(name) || name == group.Name) return;
-            if (document.Map.Data.Get<LinkGroup>().Any(x => x.ID != group.ID && string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase)))
+            if (document.Map.Data.Get<LinkGroup>().Any(x => x.ParentID == 0 && x.ID != group.ID && string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase)))
             {
                 name = $"{name} ({group.ID})";
             }

@@ -1,16 +1,18 @@
+using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Linq;
 using System.Threading.Tasks;
 using LogicAndTrick.Oy;
 using Sledge.BspEditor.Linking;
 using Sledge.BspEditor.Primitives.MapData;
+using Sledge.BspEditor.Primitives.MapObjects;
 
 namespace Sledge.BspEditor.Modification.ChangeHandling
 {
     /// <summary>
-    /// Maintains the "Linked Objects" automatic visgroup tree: one entry per link group that has members.
-    /// Runs before <see cref="VisgroupHandler"/> ("M"), which fills each group with its member objects.
-    /// If an object refers to a link group that doesn't exist (eg after an undo), the group is recreated.
+    /// Maintains the "Linked Objects" automatic visgroup tree: one entry per link, and a folder of entries for each
+    /// link's instances. Runs before <see cref="VisgroupHandler"/> ("M"), which fills each entry with its objects.
+    /// If an object refers to a link or slot that doesn't exist (eg after an undo), it is recreated.
     /// </summary>
     [Export(typeof(IMapDocumentChangeHandler))]
     public class LinkedObjectsVisgroupHandler : IMapDocumentChangeHandler
@@ -20,67 +22,94 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
         public async Task Changed(Change change)
         {
             var doc = change.Document;
-            var groups = doc.Map.Data.Get<LinkGroup>().GroupBy(x => x.ID).ToDictionary(x => x.Key, x => x.First());
-            var visgroups = doc.Map.Data.Get<LinkedObjectsVisgroup>().GroupBy(x => x.GroupID).ToDictionary(x => x.Key, x => x.First());
 
+            var linkedChanges = change.Added.Union(change.Updated).Any(x => LinkedObjects.GetLinkId(x) != null)
+                                || change.Removed.Any(x => LinkedObjects.GetLinkId(x) != null);
+            var dataChanges = change.AffectedData.OfType<LinkGroup>().Any();
+            if (!linkedChanges && !dataChanges) return;
+
+            var index = LinkedObjects.BuildIndex(doc);
             var changed = false;
 
-            foreach (var mo in change.Added.Union(change.Updated))
+            // Make sure every link and slot that has objects has a record
+            foreach (var kv in index.Slots)
             {
-                var id = LinkedObjects.GetLinkId(mo);
-                if (id == null) continue;
+                var top = LinkedObjects.GetTopId(kv.Value[0]);
 
-                if (!groups.TryGetValue(id.Value, out var group))
+                if (top != kv.Key && !index.Groups.ContainsKey(top))
                 {
-                    group = new LinkGroup
-                    {
-                        ID = id.Value,
-                        Name = "Link " + id.Value,
-                        Colour = LinkedObjects.ColourFor(id.Value)
-                    };
-                    doc.Map.Data.Add(group);
-                    groups[group.ID] = group;
+                    var link = new LinkGroup { ID = top, Name = "Link " + top, Colour = LinkedObjects.ColourFor(top) };
+                    doc.Map.Data.Add(link);
+                    index.Groups[top] = link;
                 }
 
-                if (!visgroups.ContainsKey(group.ID))
+                if (!index.Groups.ContainsKey(kv.Key))
                 {
-                    var av = new LinkedObjectsVisgroup(group.ID)
+                    var slot = new LinkGroup
                     {
-                        Path = LinkedObjects.GetVisgroupPath(group, groups),
-                        Key = LinkedObjects.SafeName(group.Name)
+                        ID = kv.Key,
+                        Name = (top == kv.Key ? "Link " : "Slot ") + kv.Key,
+                        Colour = LinkedObjects.ColourFor(top),
+                        ParentID = top == kv.Key ? 0 : top
                     };
-                    doc.Map.Data.Add(av);
-                    visgroups[group.ID] = av;
-                    changed = true;
+                    doc.Map.Data.Add(slot);
+                    index.Groups[kv.Key] = slot;
                 }
             }
 
-            // Keep the names and folders up to date (renames, sublinks)
-            foreach (var av in visgroups.Values)
+            var existing = doc.Map.Data.Get<LinkedObjectsVisgroup>().GroupBy(x => (x.GroupID, x.Instance)).ToDictionary(x => x.Key, x => x.First());
+            var wanted = new HashSet<(long, long)>();
+
+            foreach (var kv in index.Links)
             {
-                if (!groups.TryGetValue(av.GroupID, out var group)) continue;
+                var link = index.Groups.TryGetValue(kv.Key, out var g) ? g : null;
+                var name = LinkedObjects.SafeName(link?.Name ?? ("Link " + kv.Key));
+                var origin = index.OriginInstance(kv.Key);
 
-                var key = LinkedObjects.SafeName(group.Name);
-                if (av.Key != key)
-                {
-                    av.Key = key;
-                    changed = true;
-                }
+                changed |= Ensure(doc, existing, wanted, kv.Key, 0, LinkedObjects.AutoVisgroupPath, name);
 
-                var path = LinkedObjects.GetVisgroupPath(group, groups);
-                if (av.Path != path)
+                // The instances are only worth listing if there's more than one
+                if (kv.Value.Count > 1)
                 {
-                    av.Path = path;
-                    changed = true;
+                    foreach (var instance in kv.Value.Keys)
+                    {
+                        var key = "Instance " + instance + (instance == origin ? " (origin)" : "");
+                        changed |= Ensure(doc, existing, wanted, kv.Key, instance, LinkedObjects.GetInstancesPath(link), key);
+                    }
                 }
+            }
+
+            // Instances that are gone
+            foreach (var kv in existing.Where(x => !wanted.Contains(x.Key)).ToList())
+            {
+                doc.Map.Data.Remove(kv.Value);
+                changed = true;
             }
 
             if (changed) await Oy.Publish("MapDocument:VisgroupsChanged", doc);
         }
+
+        private static bool Ensure(Documents.MapDocument doc, Dictionary<(long, long), LinkedObjectsVisgroup> existing, HashSet<(long, long)> wanted, long groupId, long instance, string path, string key)
+        {
+            wanted.Add((groupId, instance));
+
+            if (!existing.TryGetValue((groupId, instance), out var av))
+            {
+                av = new LinkedObjectsVisgroup(groupId, instance) { Path = path, Key = key };
+                doc.Map.Data.Add(av);
+                existing[(groupId, instance)] = av;
+                return true;
+            }
+
+            if (av.Path == path && av.Key == key) return false;
+            av.Path = path;
+            av.Key = key;
+            return true;
+        }
     }
 
     /// <summary>
-    /// Removes the "Linked Objects" entries that no longer have any members.
+    /// Removes the "Linked Objects" entries that no longer have any objects.
     /// Runs after <see cref="VisgroupHandler"/> ("M"), which is what removes deleted objects from each visgroup.
     /// </summary>
     [Export(typeof(IMapDocumentChangeHandler))]

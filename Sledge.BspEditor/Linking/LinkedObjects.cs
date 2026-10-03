@@ -71,19 +71,110 @@ namespace Sledge.BspEditor.Linking
             return result;
         }
 
-        /// <summary>
-        /// The origin object of a link group: the member the group names as its origin, or the lowest ID member if
-        /// it doesn't name one (or the named one is gone).
-        /// </summary>
-        public static IMapObject GetOrigin(LinkGroup group, IReadOnlyCollection<IMapObject> members)
+        public static long GetTopId(IMapObject obj)
         {
-            if (members == null || members.Count == 0) return null;
-            if (group != null && group.OriginID != 0)
+            var d = obj?.Data.GetOne<LinkGroupID>();
+            if (d == null) return 0;
+            return d.TopID != 0 ? d.TopID : d.ID;
+        }
+
+        public static long GetInstance(IMapObject obj)
+        {
+            return obj?.Data.GetOne<LinkGroupID>()?.Instance ?? 0;
+        }
+
+        /// <summary>
+        /// A look at every link in a document at once: its slots, instances, and origin instance.
+        /// </summary>
+        public class LinkIndex
+        {
+            public Dictionary<long, LinkGroup> Groups = new Dictionary<long, LinkGroup>();
+
+            /// <summary>Slot ID to the objects in that slot (one per instance).</summary>
+            public Dictionary<long, List<IMapObject>> Slots = new Dictionary<long, List<IMapObject>>();
+
+            /// <summary>Link ID to instance number to the objects of that instance.</summary>
+            public Dictionary<long, SortedDictionary<long, List<IMapObject>>> Links = new Dictionary<long, SortedDictionary<long, List<IMapObject>>>();
+
+            public string NameOf(long id)
             {
-                var named = members.FirstOrDefault(x => x.ID == group.OriginID);
-                if (named != null) return named;
+                return Groups.TryGetValue(id, out var g) ? g.Name : "Link " + id;
             }
-            return members.OrderBy(x => x.ID).First();
+
+            public Color ColourOf(long id)
+            {
+                return Groups.TryGetValue(id, out var g) ? g.Colour : ColourFor(id);
+            }
+
+            /// <summary>The origin instance of a link: the one it names, or else the lowest numbered.</summary>
+            public long OriginInstance(long linkId)
+            {
+                if (!Links.TryGetValue(linkId, out var instances) || instances.Count == 0) return 0;
+                if (Groups.TryGetValue(linkId, out var g) && g.OriginInstance != 0 && instances.ContainsKey(g.OriginInstance)) return g.OriginInstance;
+                return instances.Keys.First();
+            }
+
+            /// <summary>The origin object of a slot: its member in the link's origin instance, or else the lowest ID member.</summary>
+            public IMapObject OriginOf(long slotId)
+            {
+                if (!Slots.TryGetValue(slotId, out var members) || members.Count == 0) return null;
+                var origin = OriginInstance(GetTopId(members[0]));
+                return members.FirstOrDefault(x => GetInstance(x) == origin) ?? members.OrderBy(x => x.ID).First();
+            }
+        }
+
+        public static LinkIndex BuildIndex(MapDocument document)
+        {
+            var index = new LinkIndex();
+            foreach (var g in document.Map.Data.Get<LinkGroup>())
+            {
+                if (!index.Groups.ContainsKey(g.ID)) index.Groups[g.ID] = g;
+            }
+
+            foreach (var o in document.Map.Root.FindAll())
+            {
+                var d = o.Data.GetOne<LinkGroupID>();
+                if (d == null) continue;
+
+                if (!index.Slots.TryGetValue(d.ID, out var slot)) index.Slots[d.ID] = slot = new List<IMapObject>();
+                slot.Add(o);
+
+                var top = GetTopId(o);
+                if (!index.Links.TryGetValue(top, out var instances)) index.Links[top] = instances = new SortedDictionary<long, List<IMapObject>>();
+                if (!instances.TryGetValue(d.Instance, out var list)) instances[d.Instance] = list = new List<IMapObject>();
+                list.Add(o);
+            }
+            return index;
+        }
+
+        /// <summary>
+        /// Move an object (and everything in it), keeping its textures stuck to its faces.
+        /// If the movement is a flip, the faces are turned so they keep facing outwards.
+        /// </summary>
+        public static void TransformObject(IMapObject obj, Matrix4x4 matrix, bool mirrored)
+        {
+            obj.Transform(matrix);
+            foreach (var o in obj.FindAll())
+            {
+                foreach (var t in o.Data.OfType<ITextured>()) t.Texture?.TransformUniform(matrix);
+                if (mirrored)
+                {
+                    foreach (var f in o.Data.OfType<Face>()) f.Vertices.Flip();
+                }
+            }
+        }
+
+        /// <summary>
+        /// True if the two objects are the same shape (position and orientation aside), so one could be a copy of the other.
+        /// </summary>
+        public static bool Congruent(IMapObject a, IMapObject b)
+        {
+            if (a.GetType() != b.GetType()) return false;
+            if (a is Solid sa && b is Solid sb)
+            {
+                return LinkGeometry.Rigid.Fit(LinkGeometry.Snapshot.Take(sa), LinkGeometry.Snapshot.Take(sb)) != null;
+            }
+            return AreEquivalent(a, b);
         }
 
         /// <summary>
@@ -106,20 +197,11 @@ namespace Sledge.BspEditor.Linking
         }
 
         /// <summary>
-        /// Get the display path of a group in the visgroup list: sublinks sit in a folder named after their parent.
+        /// The folder in the visgroup list that holds the instances of a link.
         /// </summary>
-        public static string GetVisgroupPath(LinkGroup group, IDictionary<long, LinkGroup> groups)
+        public static string GetInstancesPath(LinkGroup link)
         {
-            var folders = new List<string>();
-            var current = group;
-            var guard = 0;
-            while (current != null && current.ParentID != 0 && guard++ < 64)
-            {
-                if (!groups.TryGetValue(current.ParentID, out var parent) || parent == current) break;
-                folders.Insert(0, SafeName(parent.Name) + " (sublinks)");
-                current = parent;
-            }
-            return folders.Count == 0 ? AutoVisgroupPath : AutoVisgroupPath + "/" + string.Join("/", folders);
+            return AutoVisgroupPath + "/" + SafeName(link?.Name) + " (instances)";
         }
 
         /// <summary>

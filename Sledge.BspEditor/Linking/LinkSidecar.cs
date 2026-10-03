@@ -17,7 +17,7 @@ namespace Sledge.BspEditor.Linking
     /// The links are written to a small JSON file next to the map ("mymap.rmf.links.json") when the map is saved,
     /// and read back when it's opened. Those formats don't keep object IDs, so each linked object is recorded by
     /// its type, entity class and bounding box, and matched back up to the nearest object when the map is loaded.
-    /// The native format (.smf) stores links itself, so no file is used for it.
+    /// Each linked object is recorded with its slot and instance. The native format (.smf) stores links itself, so no file is used for it.
     /// </summary>
     public static class LinkSidecar
     {
@@ -36,7 +36,7 @@ namespace Sledge.BspEditor.Linking
             public string Type { get; set; }
             public string Class { get; set; }
             public float[] Box { get; set; }
-            public bool IsOrigin { get; set; }
+            public long Instance { get; set; }
         }
 
         private class GroupData
@@ -45,6 +45,7 @@ namespace Sledge.BspEditor.Linking
             public string Name { get; set; }
             public int Colour { get; set; }
             public long ParentID { get; set; }
+            public long OriginInstance { get; set; }
             public List<MemberData> Members { get; set; } = new List<MemberData>();
         }
 
@@ -90,33 +91,32 @@ namespace Sledge.BspEditor.Linking
                     return;
                 }
 
-                var groups = document.Map.Data.Get<LinkGroup>().GroupBy(x => x.ID).ToDictionary(x => x.Key, x => x.First());
+                var index = LinkedObjects.BuildIndex(document);
                 var data = new FileData();
 
-                // Groups with members, and the groups above them (sublinks need their parents)
+                // Slots with objects, and the links above them
                 foreach (var id in LinkedObjects.GetKeptGroupIds(document).OrderBy(x => x))
                 {
-                    groups.TryGetValue(id, out var group);
-                    members.TryGetValue(id, out var list);
-                    list = list ?? new List<IMapObject>();
-                    var origin = LinkedObjects.GetOrigin(group, list);
+                    index.Groups.TryGetValue(id, out var group);
+                    index.Slots.TryGetValue(id, out var list);
 
                     var g = new GroupData
                     {
                         ID = id,
                         Name = group?.Name ?? ("Link " + id),
                         Colour = (group?.Colour ?? LinkedObjects.ColourFor(id)).ToArgb(),
-                        ParentID = group?.ParentID ?? 0
+                        ParentID = group?.ParentID ?? 0,
+                        OriginInstance = group?.OriginInstance ?? 0
                     };
-                    foreach (var o in list)
+                    foreach (var o in list ?? new List<IMapObject>())
                     {
-                        var b = o.BoundingBox;
+                        var box = o.BoundingBox;
                         g.Members.Add(new MemberData
                         {
                             Type = o.GetType().Name,
                             Class = ClassOf(o),
-                            Box = new[] { b.Start.X, b.Start.Y, b.Start.Z, b.End.X, b.End.Y, b.End.Z },
-                            IsOrigin = ReferenceEquals(o, origin)
+                            Box = new[] { box.Start.X, box.Start.Y, box.Start.Z, box.End.X, box.End.Y, box.End.Z },
+                            Instance = LinkedObjects.GetInstance(o)
                         });
                     }
                     data.Groups.Add(g);
@@ -165,8 +165,7 @@ namespace Sledge.BspEditor.Linking
 
             foreach (var g in data.Groups)
             {
-                var matched = new List<IMapObject>();
-                IMapObject origin = null;
+                var matched = new List<KeyValuePair<IMapObject, long>>();
 
                 foreach (var m in g.Members ?? new List<MemberData>())
                 {
@@ -177,12 +176,11 @@ namespace Sledge.BspEditor.Linking
                     if (found == null) continue;
 
                     used.Add(found);
-                    matched.Add(found);
-                    if (m.IsOrigin) origin = found;
+                    matched.Add(new KeyValuePair<IMapObject, long>(found, m.Instance));
                 }
 
-                // A link of two or more needs them all to mean anything, a missing object means the map was edited elsewhere.
-                // (Groups saved with no members are the parents of sublinks.)
+                // A slot with several objects needs two of them to mean anything; a missing object means the map was edited elsewhere.
+                // (Groups saved with no objects are the links themselves.)
                 var listed = g.Members?.Count ?? 0;
                 if (matched.Count < Math.Min(2, listed)) continue;
 
@@ -191,10 +189,10 @@ namespace Sledge.BspEditor.Linking
                     ID = g.ID,
                     Name = g.Name,
                     Colour = Color.FromArgb(g.Colour),
-                    OriginID = origin?.ID ?? 0,
+                    OriginInstance = g.OriginInstance,
                     ParentID = g.ParentID
                 });
-                foreach (var o in matched) o.Data.Replace(new LinkGroupID(g.ID));
+                foreach (var kv in matched) kv.Key.Data.Replace(new LinkGroupID(g.ID, g.ParentID, kv.Value));
             }
         }
 

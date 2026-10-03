@@ -1,0 +1,122 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel.Composition;
+using System.Linq;
+using System.Numerics;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using Sledge.BspEditor.Commands;
+using Sledge.BspEditor.Documents;
+using Sledge.BspEditor.Linking;
+using Sledge.BspEditor.Modification;
+using Sledge.BspEditor.Modification.Operations.Data;
+using Sledge.BspEditor.Modification.Operations.Tree;
+using Sledge.BspEditor.Primitives.MapData;
+using Sledge.BspEditor.Primitives.MapObjectData;
+using Sledge.BspEditor.Primitives.MapObjects;
+using Sledge.Common.Shell.Commands;
+using Sledge.Common.Shell.Context;
+using Sledge.Common.Shell.Menu;
+using Sledge.Common.Translations;
+using Sledge.QuickForms;
+
+namespace Sledge.BspEditor.Editing.Commands.Linking
+{
+    /// <summary>
+    /// Add the selected objects to the origin instance of a link. The link is updated with them: every other
+    /// instance gets its own linked copy of each added object, placed the way the nearest existing object of the group is.
+    /// The right-click menu passes the link in the "GroupId" parameter; run from the menu bar, it asks which link to use.
+    /// </summary>
+    [AutoTranslate]
+    [Export(typeof(ICommand))]
+    [CommandID("BspEditor:Tools:LinkAddToOrigin")]
+    [MenuItem("Tools", "", "Link", "C")]
+    public class LinkAddToOrigin : BaseCommand
+    {
+        public override string Name { get; set; } = "Add to link origin";
+        public override string Details { get; set; } = "Add the selected objects to the origin of a link, and to every other instance of it.";
+
+        public string Title { get; set; } = "Add to link origin";
+        public string GroupLabel { get; set; } = "Link";
+        public string OK { get; set; } = "OK";
+        public string Cancel { get; set; } = "Cancel";
+
+        protected override bool IsInContext(IContext context, MapDocument document)
+        {
+            return base.IsInContext(context, document)
+                   && !document.Selection.IsEmpty
+                   && document.Map.Data.Get<LinkedObjectsVisgroup>().Any();
+        }
+
+        protected override async Task Invoke(MapDocument document, CommandParameters parameters)
+        {
+            var linkId = await LinkAddTo.ChooseLink(document, parameters, Title, GroupLabel, OK, Cancel);
+            if (linkId == 0) return;
+
+            var index = LinkedObjects.BuildIndex(document);
+            if (!index.Links.TryGetValue(linkId, out var instances) || instances.Count == 0) return;
+            index.Groups.TryGetValue(linkId, out var link);
+
+            var originInstance = index.OriginInstance(linkId);
+            var otherInstances = instances.Keys.Where(x => x != originInstance).ToList();
+
+            var targets = document.Selection.GetSelectedParents().Where(x => LinkedObjects.GetTopId(x) != linkId).ToList();
+            if (targets.Count == 0) return;
+
+            // The existing objects of the origin instance, to work out where the other instances put an added object
+            var originMembers = instances[originInstance];
+
+            var ops = new List<IOperation>();
+            var next = LinkedObjects.NextGroupId(document);
+
+            foreach (var t in targets)
+            {
+                var slotId = next++;
+                ops.Add(new AddMapData(new LinkGroup { ID = slotId, Name = (link?.Name ?? "Link") + " / " + slotId, Colour = LinkedObjects.ColourFor(linkId), ParentID = linkId }));
+
+                var existing = t.Data.GetOne<LinkGroupID>();
+                if (existing != null) ops.Add(new RemoveMapObjectData(t.ID, existing));
+                ops.Add(new AddMapObjectData(t.ID, new LinkGroupID(slotId, linkId, originInstance)));
+
+                // The closest object of the origin instance that every other instance also has: the added object sits relative to it
+                var reference = originMembers
+                    .OrderBy(x => (x.BoundingBox.Center - t.BoundingBox.Center).LengthSquared())
+                    .FirstOrDefault();
+
+                foreach (var instance in otherInstances)
+                {
+                    var counterpart = reference == null ? null : instances[instance]
+                        .FirstOrDefault(x => LinkedObjects.GetLinkId(x) == LinkedObjects.GetLinkId(reference));
+
+                    // How the other instance's object sits compared with the origin's: a rotation or flip if they're shaped alike, else just an offset
+                    var matrix = Matrix4x4.Identity;
+                    var mirrored = false;
+                    if (reference != null && counterpart != null)
+                    {
+                        LinkGeometry.Rigid rigid = null;
+                        if (reference is Solid rs && counterpart is Solid cs)
+                        {
+                            rigid = LinkGeometry.Rigid.Fit(LinkGeometry.Snapshot.Take(rs), LinkGeometry.Snapshot.Take(cs));
+                        }
+                        if (rigid == null)
+                        {
+                            rigid = LinkGeometry.Rigid.Translation(counterpart.BoundingBox.Center - reference.BoundingBox.Center);
+                        }
+                        matrix = rigid.ToMatrix();
+                        mirrored = rigid.Mirrored;
+                    }
+
+                    var copy = (IMapObject) t.Copy(document.Map.NumberGenerator);
+                    copy.Data.Remove(x => x is LinkGroupID);
+                    LinkedObjects.TransformObject(copy, matrix, mirrored);
+                    copy.Data.Add(new LinkGroupID(slotId, linkId, instance));
+
+                    var parentId = t.Hierarchy.Parent?.ID ?? document.Map.Root.ID;
+                    ops.Add(new Attach(parentId, copy));
+                }
+            }
+
+            await MapDocumentOperation.Perform(document, new Transaction(ops));
+        }
+    }
+}

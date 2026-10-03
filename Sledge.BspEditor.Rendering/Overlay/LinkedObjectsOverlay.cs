@@ -38,6 +38,9 @@ namespace Sledge.BspEditor.Rendering.Overlay
             public Color Colour;
             public bool Emphasised;
             public bool IsOrigin;
+
+            /// <summary>True for the box around a whole instance (it carries the label), false for a single object.</summary>
+            public bool IsInstance;
         }
 
         private readonly object _lock = new object();
@@ -109,32 +112,51 @@ namespace Sledge.BspEditor.Rendering.Overlay
         private static List<Entry> Build(MapDocument doc)
         {
             var list = new List<Entry>();
-            var groups = doc.Map.Data.Get<LinkGroup>().GroupBy(x => x.ID).ToDictionary(x => x.Key, x => x.First());
+            var index = LinkedObjects.BuildIndex(doc);
 
-            foreach (var kv in LinkedObjects.GetMembers(doc))
+            // Slots that have a selected object: the matching objects in the other instances are the ones an edit will also change
+            var selectedSlots = new HashSet<long>();
+            foreach (var kv in index.Slots)
             {
-                groups.TryGetValue(kv.Key, out var group);
-                var name = group?.Name ?? ("Link " + kv.Key);
-                var colour = group?.Colour ?? LinkedObjects.ColourFor(kv.Key);
-                var emphasised = kv.Value.Any(x => x.FindAll().Any(c => c.IsSelected));
-                var label = $"{name}  #{kv.Key}  ({kv.Value.Count})";
-                if (group != null && group.ParentID != 0 && groups.TryGetValue(group.ParentID, out var parent))
-                {
-                    label += "  sublink of " + parent.Name;
-                }
-                var origin = LinkedObjects.GetOrigin(group, kv.Value);
+                if (kv.Value.Any(x => x.FindAll().Any(c => c.IsSelected))) selectedSlots.Add(kv.Key);
+            }
 
-                foreach (var o in kv.Value)
+            foreach (var link in index.Links)
+            {
+                var name = index.NameOf(link.Key);
+                var colour = index.ColourOf(link.Key);
+                var origin = index.OriginInstance(link.Key);
+
+                foreach (var instance in link.Value)
                 {
-                    if (o.Data.OfType<IObjectVisibility>().Any(v => v.IsHidden)) continue;
-                    var isOrigin = ReferenceEquals(o, origin);
+                    var visible = instance.Value
+                        .Where(o => !o.Data.OfType<IObjectVisibility>().Any(v => v.IsHidden))
+                        .ToList();
+                    if (visible.Count == 0) continue;
+
+                    var instanceSelected = false;
+                    foreach (var o in visible)
+                    {
+                        var selected = o.FindAll().Any(c => c.IsSelected);
+                        instanceSelected |= selected;
+                        list.Add(new Entry
+                        {
+                            Box = o.BoundingBox,
+                            Colour = colour,
+                            Emphasised = selected || selectedSlots.Contains(LinkedObjects.GetLinkId(o).Value)
+                        });
+                    }
+
+                    // The instance is treated as a group: one box around all of it, with the label
+                    var isOrigin = instance.Key == origin;
                     list.Add(new Entry
                     {
-                        Box = o.BoundingBox,
-                        Label = isOrigin ? label + "  [origin]" : label,
+                        IsInstance = true,
+                        IsOrigin = isOrigin,
+                        Box = new Box(visible.SelectMany(o => new[] { o.BoundingBox.Start, o.BoundingBox.End })),
                         Colour = colour,
-                        Emphasised = emphasised,
-                        IsOrigin = isOrigin
+                        Emphasised = instanceSelected,
+                        Label = $"{name}  #{link.Key}  instance {instance.Key} ({instance.Value.Count})" + (isOrigin ? "  [origin]" : "")
                     });
                 }
             }
@@ -193,20 +215,22 @@ namespace Sledge.BspEditor.Rendering.Overlay
 
                 if (maxX < 0 || maxY < 0 || minX > camera.Width || minY > camera.Height) continue;
 
-                // Sit just outside the object
-                minX -= 3; minY -= 3; maxX += 3; maxY += 3;
+                // Sit just outside the object (instances sit outside their objects)
+                var pad = e.IsInstance ? 8 : 3;
+                minX -= pad; minY -= pad; maxX += pad; maxY += pad;
                 var a = new Vector2(minX, minY);
                 var b = new Vector2(maxX, maxY);
 
-                if (e.Emphasised) im.AddRectFilled(a, b, Color.FromArgb(30, e.Colour));
+                if (e.Emphasised && !e.IsInstance) im.AddRectFilled(a, b, Color.FromArgb(30, e.Colour));
 
-                var width = e.Emphasised ? 2.5f : (e.IsOrigin ? 2f : 1.5f);
+                var width = e.IsInstance ? (e.Emphasised ? 3f : 2f) : (e.Emphasised ? 2.5f : 1.5f);
                 var col = Faded(e);
                 im.AddLine(new Vector2(minX, minY), new Vector2(maxX, minY), col, width, false);
                 im.AddLine(new Vector2(maxX, minY), new Vector2(maxX, maxY), col, width, false);
                 im.AddLine(new Vector2(maxX, maxY), new Vector2(minX, maxY), col, width, false);
                 im.AddLine(new Vector2(minX, maxY), new Vector2(minX, minY), col, width, false);
 
+                if (e.Label == null) continue;
                 if (!labels && !e.Emphasised) continue;
 
                 var font = e.Emphasised ? FontType.Bold : FontType.Normal;
@@ -246,7 +270,7 @@ namespace Sledge.BspEditor.Rendering.Overlay
                 }
                 if (!any) continue;
 
-                var width = e.Emphasised ? 2.5f : (e.IsOrigin ? 2f : 1.5f);
+                var width = e.IsInstance ? (e.Emphasised ? 3f : 2f) : (e.Emphasised ? 2.5f : 1.5f);
                 var col = Faded(e);
                 for (var i = 0; i < 8; i++)
                 {
@@ -259,6 +283,7 @@ namespace Sledge.BspEditor.Rendering.Overlay
                     }
                 }
 
+                if (e.Label == null) continue;
                 if (!labels && !e.Emphasised) continue;
                 if (!e.Emphasised && distance > MaxLabelDistance3D) continue;
 

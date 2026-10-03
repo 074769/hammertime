@@ -58,6 +58,21 @@ namespace Sledge.BspEditor.Linking
                 return true;
             }
 
+            /// <summary>
+            /// The same points with each face's vertices in the opposite order (which is what flipping an object does).
+            /// </summary>
+            public Snapshot ReversedFaces()
+            {
+                var points = new Vector3[Points.Length];
+                var offset = 0;
+                foreach (var count in Counts)
+                {
+                    for (var i = 0; i < count; i++) points[offset + i] = Points[offset + count - 1 - i];
+                    offset += count;
+                }
+                return new Snapshot { Counts = Counts, Points = points };
+            }
+
             public Vector3 Center
             {
                 get
@@ -76,7 +91,7 @@ namespace Sledge.BspEditor.Linking
         }
 
         /// <summary>
-        /// A rotation and translation, or just a translation.
+        /// A rotation and translation, a mirrored rotation and translation (a flip), or just a translation.
         /// </summary>
         public class Rigid
         {
@@ -86,6 +101,10 @@ namespace Sledge.BspEditor.Linking
             private readonly Vector3 _toOrigin;
             private readonly Vector3[] _from;
             private readonly Vector3[] _to;
+            private readonly float _side = 1;
+
+            /// <summary>True if this flips the shape inside out. Face vertices have to be reversed to keep faces pointing outwards.</summary>
+            public bool Mirrored => _side < 0;
 
             private Rigid(Vector3 offset)
             {
@@ -93,8 +112,9 @@ namespace Sledge.BspEditor.Linking
                 _offset = offset;
             }
 
-            private Rigid(Vector3 fromOrigin, Vector3 toOrigin, Vector3[] from, Vector3[] to)
+            private Rigid(Vector3 fromOrigin, Vector3 toOrigin, Vector3[] from, Vector3[] to, bool mirrored)
             {
+                _side = mirrored ? -1 : 1;
                 _fromOrigin = fromOrigin;
                 _toOrigin = toOrigin;
                 _from = from;
@@ -113,7 +133,7 @@ namespace Sledge.BspEditor.Linking
                 return _toOrigin
                        + _to[0] * Vector3.Dot(_from[0], d)
                        + _to[1] * Vector3.Dot(_from[1], d)
-                       + _to[2] * Vector3.Dot(_from[2], d);
+                       + _to[2] * (_side * Vector3.Dot(_from[2], d));
             }
 
             private Vector3 Direction(Vector3 v)
@@ -121,7 +141,7 @@ namespace Sledge.BspEditor.Linking
                 if (_translateOnly) return v;
                 return _to[0] * Vector3.Dot(_from[0], v)
                        + _to[1] * Vector3.Dot(_from[1], v)
-                       + _to[2] * Vector3.Dot(_from[2], v);
+                       + _to[2] * (_side * Vector3.Dot(_from[2], v));
             }
 
             public Matrix4x4 ToMatrix()
@@ -155,12 +175,19 @@ namespace Sledge.BspEditor.Linking
             }
 
             /// <summary>
-            /// Find the rotation and translation that takes each point in <paramref name="from"/> onto the point at the same
-            /// index in <paramref name="to"/>. Returns null if there isn't one (the shapes aren't the same shape).
+            /// Find the movement that takes each point of <paramref name="from"/> onto the matching point of <paramref name="to"/>:
+            /// a rotation and translation, or a flip (mirror) and translation. Returns null if there isn't one (the shapes are different).
+            /// A flipped shape has its face vertices in the opposite order, which is accounted for.
             /// </summary>
-            public static Rigid Fit(Vector3[] from, Vector3[] to)
+            public static Rigid Fit(Snapshot from, Snapshot to)
             {
-                if (from == null || to == null || from.Length != to.Length || from.Length < 3) return null;
+                if (from == null || !from.SameTopology(to)) return null;
+                return FitPoints(from.Points, to.Points, false) ?? FitPoints(from.Points, to.ReversedFaces().Points, true);
+            }
+
+            private static Rigid FitPoints(Vector3[] from, Vector3[] to, bool mirrored)
+            {
+                if (from.Length != to.Length || from.Length < 3) return null;
 
                 // Pick a well spread triple of points so the frame is stable
                 var i0 = 0;
@@ -188,9 +215,9 @@ namespace Sledge.BspEditor.Linking
                 var tf = new Vector3[3];
                 if (!BuildFrame(from, i0, i1, i2, ff) || !BuildFrame(to, i0, i1, i2, tf)) return null;
 
-                var rigid = new Rigid(from[i0], to[i0], ff, tf);
+                var rigid = new Rigid(from[i0], to[i0], ff, tf, mirrored);
 
-                // Every point has to land where it should, otherwise it's a different shape (or a mirrored one)
+                // Every point has to land where it should, otherwise it's a different shape
                 for (var i = 0; i < from.Length; i++)
                 {
                     if ((rigid.Point(from[i]) - to[i]).Length() > Epsilon) return null;
@@ -251,7 +278,9 @@ namespace Sledge.BspEditor.Linking
                 }
 
                 var sf = srcFaces[i];
-                tf.Vertices.Reset(sf.Vertices.Select(rigid.Point).ToList());
+                var mapped = sf.Vertices.Select(rigid.Point).ToList();
+                if (rigid.Mirrored) mapped.Reverse(); // a flipped face needs its vertices the other way round to keep facing outwards
+                tf.Vertices.Reset(mapped);
 
                 var tex = sf.Texture.Clone();
                 tex.TransformUniform(matrix);
