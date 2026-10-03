@@ -59,7 +59,7 @@ namespace Sledge.BspEditor.Linking
 
         private static bool IsNative(string fileName)
         {
-            var ext = Path.GetExtension(fileName) ?? "";
+            var ext = System.IO.Path.GetExtension(fileName) ?? "";
             return NativeExtensions.Any(x => string.Equals(x, ext, StringComparison.OrdinalIgnoreCase));
         }
 
