@@ -11,6 +11,7 @@ using Sledge.BspEditor.Linking;
 using Sledge.BspEditor.Modification;
 using Sledge.BspEditor.Primitives.MapData;
 using Sledge.BspEditor.Primitives.MapObjectData;
+using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.DataStructures.Geometric;
 using Sledge.Rendering.Cameras;
 using Sledge.Rendering.Overlay;
