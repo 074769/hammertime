@@ -10,7 +10,6 @@ using Sledge.BspEditor.Linking;
 using Sledge.BspEditor.Modification;
 using Sledge.BspEditor.Modification.Operations.Mutation;
 using Sledge.BspEditor.Primitives.MapData;
-using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.Common;
 using Sledge.Common.Shell.Commands;
 using Sledge.Common.Shell.Context;
