@@ -67,22 +67,35 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
                 lock (snaps) snaps[added.ID] = LinkGeometry.Snapshot.TakeAny(added);
             }
 
-            foreach (var slotId in updatedLinked.Select(x => LinkedObjects.GetLinkId(x).Value).Distinct())
+            var slotIds = updatedLinked.Select(x => LinkedObjects.GetLinkId(x).Value).Distinct().ToList();
+
+            // Anything we know nothing about yet starts from how it is now
+            lock (snaps)
+            {
+                foreach (var m in slotIds.Where(index.Slots.ContainsKey).SelectMany(x => index.Slots[x]))
+                {
+                    if (!snaps.ContainsKey(m.ID)) snaps[m.ID] = LinkGeometry.Snapshot.TakeAny(m);
+                }
+            }
+
+            // Moving a whole instance (every object of it together) is moving the group: that's decided now, while every
+            // object still has its snapshot from before the change, because syncing refreshes the snapshots one slot at a time
+            var groupMoves = new HashSet<string>();
+            foreach (var o in updatedLinked)
+            {
+                var key = InstanceKey(o);
+                if (groupMoves.Contains(key)) continue;
+                if (IsGroupMove(index, o, updatedLinked, snaps)) groupMoves.Add(key);
+            }
+
+            foreach (var slotId in slotIds)
             {
                 if (!index.Slots.TryGetValue(slotId, out var members)) continue;
 
-                // A member we know nothing about yet starts from how it is now
-                lock (snaps)
-                {
-                    foreach (var m in members)
-                    {
-                        if (!snaps.ContainsKey(m.ID)) snaps[m.ID] = LinkGeometry.Snapshot.TakeAny(m);
-                    }
-                }
-
                 var origin = index.OriginOf(slotId);
-                if (origin is Solid) SyncSolids(change, members, origin, updatedLinked, snaps);
-                else SyncOthers(change, members, origin, updatedLinked, snaps);
+                var groupMove = groupMoves.Contains(InstanceKey(origin));
+                if (origin is Solid) SyncSolids(change, members, origin, updatedLinked, snaps, groupMove);
+                else SyncOthers(change, members, origin, updatedLinked, snaps, groupMove);
             }
 
             return Task.CompletedTask;
@@ -131,6 +144,48 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
             return list.Any(x => ReferenceEquals(x, o));
         }
 
+        private static string InstanceKey(IMapObject o)
+        {
+            return LinkedObjects.GetTopId(o) + ":" + LinkedObjects.GetInstance(o);
+        }
+
+        /// <summary>
+        /// True if every (visible) object of this object's instance was moved, rotated or flipped in this change.
+        /// That's somebody moving the whole group, which only places the group: it isn't an edit to its objects, so
+        /// nothing is passed on. (Moving some of the objects, or the only object of an instance, is an edit to those objects.)
+        /// </summary>
+        private static bool IsGroupMove(LinkedObjects.LinkIndex index, IMapObject o, List<IMapObject> touched, Dictionary<long, LinkGeometry.Snapshot> snaps)
+        {
+            if (!index.Links.TryGetValue(LinkedObjects.GetTopId(o), out var instances)) return false;
+            if (!instances.TryGetValue(LinkedObjects.GetInstance(o), out var all)) return false;
+
+            var visible = all.Where(x => !x.Data.OfType<IObjectVisibility>().Any(v => v.IsHidden)).ToList();
+            if (visible.Count < 2) return false;
+
+            foreach (var m in visible)
+            {
+                if (!Contains(touched, m)) return false;
+
+                LinkGeometry.Snapshot pre;
+                lock (snaps)
+                {
+                    if (!snaps.TryGetValue(m.ID, out pre)) return false;
+                }
+
+                if (m is Solid solid)
+                {
+                    if (Classify(pre, LinkGeometry.Snapshot.Take(solid)) != Kind.Placement) return false;
+                }
+                else
+                {
+                    var now = LinkGeometry.Snapshot.TakeAny(m);
+                    var sameForm = pre.Reference != null && LinkedObjects.Equivalent(pre.Reference, now.Reference);
+                    if (!sameForm || (pre.Center - now.Center).Length() <= 0.0001f) return false;
+                }
+            }
+            return true;
+        }
+
         private static Kind Classify(LinkGeometry.Snapshot pre, LinkGeometry.Snapshot now)
         {
             if (!pre.SameTopology(now)) return Kind.Shape;
@@ -139,7 +194,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
             return Kind.None;
         }
 
-        private static void SyncSolids(Change change, List<IMapObject> members, IMapObject originObject, List<IMapObject> touched, Dictionary<long, LinkGeometry.Snapshot> snaps)
+        private static void SyncSolids(Change change, List<IMapObject> members, IMapObject originObject, List<IMapObject> touched, Dictionary<long, LinkGeometry.Snapshot> snaps, bool groupMove)
         {
             var origin = (Solid) originObject;
             var solids = members.OfType<Solid>().ToList();
@@ -164,6 +219,13 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
             }
 
             if (!edits.TryGetValue(origin, out var originKind)) return;
+
+            // The whole group was placed somewhere else: the other instances stay where they are
+            if (originKind == Kind.Placement && groupMove)
+            {
+                lock (snaps) snaps[origin.ID] = nows[origin];
+                return;
+            }
 
             LinkGeometry.Snapshot originPre;
             lock (snaps) originPre = snaps[origin.ID];
@@ -218,7 +280,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
             }
         }
 
-        private static void SyncOthers(Change change, List<IMapObject> members, IMapObject origin, List<IMapObject> touched, Dictionary<long, LinkGeometry.Snapshot> snaps)
+        private static void SyncOthers(Change change, List<IMapObject> members, IMapObject origin, List<IMapObject> touched, Dictionary<long, LinkGeometry.Snapshot> snaps, bool groupMove)
         {
             // Objects outside the origin instance are edited locally: nothing is passed on
             foreach (var m in members.Where(x => !ReferenceEquals(x, origin) && Contains(touched, x)))
@@ -237,6 +299,13 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
             var targets = members.Where(x => !ReferenceEquals(x, origin) && x.GetType() == origin.GetType()).ToList();
 
             if (sameForm && !moved) return; // eg it was just selected
+
+            // The whole group was placed somewhere else: the other instances stay where they are
+            if (sameForm && groupMove)
+            {
+                lock (snaps) snaps[origin.ID] = now;
+                return;
+            }
 
             if (sameForm)
             {
