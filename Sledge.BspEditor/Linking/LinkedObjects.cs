@@ -279,7 +279,7 @@ namespace Sledge.BspEditor.Linking
         /// Get a copy of the object's serialised form, moved to the origin, with the per-object data left out.
         /// Two objects with equivalent shapes will have equivalent serialised forms wherever they are in the map.
         /// </summary>
-        private static SerialisedObject Normalise(IMapObject obj)
+        public static SerialisedObject NormalisedForm(IMapObject obj)
         {
             var clone = (IMapObject) obj.Clone();
             Translate(clone, -clone.BoundingBox.Center);
@@ -293,10 +293,10 @@ namespace Sledge.BspEditor.Linking
         {
             if (ReferenceEquals(a, b)) return true;
             if (a.GetType() != b.GetType()) return false;
-            return Equivalent(Normalise(a), Normalise(b));
+            return Equivalent(NormalisedForm(a), NormalisedForm(b));
         }
 
-        private static bool Equivalent(SerialisedObject a, SerialisedObject b)
+        public static bool Equivalent(SerialisedObject a, SerialisedObject b)
         {
             if (a.Name != b.Name) return false;
 

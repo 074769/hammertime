@@ -9,6 +9,7 @@ using LogicAndTrick.Oy;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Linking;
 using Sledge.BspEditor.Modification;
+using Sledge.BspEditor.Modification.Operations.Selection;
 using Sledge.BspEditor.Primitives.MapData;
 using Sledge.BspEditor.Primitives.MapObjectData;
 using Sledge.BspEditor.Primitives.MapObjects;
@@ -41,7 +42,23 @@ namespace Sledge.BspEditor.Rendering.Overlay
 
             /// <summary>True for the box around a whole instance (it carries the label), false for a single object.</summary>
             public bool IsInstance;
+
+            public long LinkId;
+            public long Instance;
         }
+
+        /// <summary>Where an instance's label was drawn in a viewport, so a click on it can be recognised.</summary>
+        private class LabelHit
+        {
+            public float X, Y, Width, Height;
+            public long LinkId;
+            public long Instance;
+        }
+
+        private readonly Dictionary<IViewport, List<LabelHit>> _hits = new Dictionary<IViewport, List<LabelHit>>();
+
+        /// <summary>The overlay in use, for the click listener to ask.</summary>
+        public static LinkedObjectsOverlay Current { get; private set; }
 
         private readonly object _lock = new object();
         private MapDocument _document;
@@ -50,6 +67,7 @@ namespace Sledge.BspEditor.Rendering.Overlay
 
         public LinkedObjectsOverlay()
         {
+            Current = this;
             Oy.Subscribe<Change>("MapDocument:Changed", Changed);
         }
 
@@ -109,16 +127,65 @@ namespace Sledge.BspEditor.Rendering.Overlay
             }
         }
 
+        private LabelHit FindHit(IViewport viewport, int x, int y)
+        {
+            lock (_hits)
+            {
+                if (!_hits.TryGetValue(viewport, out var hits)) return null;
+                return hits.LastOrDefault(h => x >= h.X && x <= h.X + h.Width && y >= h.Y && y <= h.Y + h.Height);
+            }
+        }
+
+        /// <summary>
+        /// True if there's an instance label under the mouse in this viewport.
+        /// </summary>
+        public bool IsOverLabel(IViewport viewport, int x, int y)
+        {
+            return FindHit(viewport, x, y) != null;
+        }
+
+        /// <summary>
+        /// Click on an instance label: select everything in that instance (or in the whole link).
+        /// Returns true if there was a label to click.
+        /// </summary>
+        public bool ClickLabel(IViewport viewport, int x, int y, bool add, bool wholeLink)
+        {
+            var hit = FindHit(viewport, x, y);
+            if (hit == null) return false;
+
+            MapDocument doc;
+            lock (_lock) doc = _document;
+            if (doc == null) return false;
+
+            var index = LinkedObjects.BuildIndex(doc);
+            if (!index.Links.TryGetValue(hit.LinkId, out var instances)) return true;
+
+            var objects = new List<IMapObject>();
+            foreach (var kv in instances)
+            {
+                if (!wholeLink && kv.Key != hit.Instance) continue;
+                objects.AddRange(kv.Value.Where(o => !o.Data.OfType<IObjectVisibility>().Any(v => v.IsHidden)));
+            }
+            if (objects.Count == 0) return true;
+
+            var transaction = new Transaction();
+            if (!add && !doc.Selection.IsEmpty) transaction.Add(new Deselect(doc.Selection.ToList()));
+            transaction.Add(new Select(objects));
+            MapDocumentOperation.Perform(doc, transaction);
+            return true;
+        }
+
         private static List<Entry> Build(MapDocument doc)
         {
             var list = new List<Entry>();
             var index = LinkedObjects.BuildIndex(doc);
 
-            // Slots that have a selected object: the matching objects in the other instances are the ones an edit will also change
+            // Slots whose origin object is selected: the matching objects in the other instances are the ones an edit will also change
             var selectedSlots = new HashSet<long>();
             foreach (var kv in index.Slots)
             {
-                if (kv.Value.Any(x => x.FindAll().Any(c => c.IsSelected))) selectedSlots.Add(kv.Key);
+                var slotOrigin = index.OriginOf(kv.Key);
+                if (slotOrigin != null && slotOrigin.FindAll().Any(c => c.IsSelected)) selectedSlots.Add(kv.Key);
             }
 
             foreach (var link in index.Links)
@@ -153,6 +220,8 @@ namespace Sledge.BspEditor.Rendering.Overlay
                     {
                         IsInstance = true,
                         IsOrigin = isOrigin,
+                        LinkId = link.Key,
+                        Instance = instance.Key,
                         Box = new Box(visible.SelectMany(o => new[] { o.BoundingBox.Start, o.BoundingBox.End })),
                         Colour = colour,
                         Emphasised = instanceSelected,
@@ -186,16 +255,23 @@ namespace Sledge.BspEditor.Rendering.Overlay
             return e.Emphasised ? e.Colour : Color.FromArgb(190, e.Colour);
         }
 
-        private static void DrawLabel(I2DRenderer im, Entry e, Vector2 pos)
+        private static void DrawLabel(I2DRenderer im, Entry e, Vector2 pos, List<LabelHit> hits)
         {
             var font = e.Emphasised ? FontType.Bold : FontType.Normal;
             var size = im.CalcTextSize(font, e.Label);
+            if (e.IsInstance)
+            {
+                hits.Add(new LabelHit { X = pos.X - 2, Y = pos.Y - 1, Width = size.X + 4, Height = size.Y + 2, LinkId = e.LinkId, Instance = e.Instance });
+            }
             im.AddRectFilled(pos - new Vector2(2, 1), pos + size + new Vector2(2, 1), Color.FromArgb(190, 0, 0, 0));
             im.AddText(pos, e.Colour, font, e.Label);
         }
 
         public void Render(IViewport viewport, OrthographicCamera camera, Vector3 worldMin, Vector3 worldMax, I2DRenderer im)
         {
+            var hits = new List<LabelHit>();
+            lock (_hits) _hits[viewport] = hits;
+
             var entries = GetEntries();
             if (entries.Count == 0) return;
 
@@ -237,12 +313,15 @@ namespace Sledge.BspEditor.Rendering.Overlay
                 var size = im.CalcTextSize(font, e.Label);
                 var pos = new Vector2(minX, minY - size.Y - 4);
                 if (pos.Y < 0) pos.Y = maxY + 4; // no room above, put it underneath
-                DrawLabel(im, e, pos);
+                DrawLabel(im, e, pos, hits);
             }
         }
 
         public void Render(IViewport viewport, PerspectiveCamera camera, I2DRenderer im)
         {
+            var hits = new List<LabelHit>();
+            lock (_hits) _hits[viewport] = hits;
+
             var entries = GetEntries();
             if (entries.Count == 0) return;
 
@@ -295,7 +374,7 @@ namespace Sledge.BspEditor.Rendering.Overlay
 
                 var font = e.Emphasised ? FontType.Bold : FontType.Normal;
                 var size = im.CalcTextSize(font, e.Label);
-                DrawLabel(im, e, new Vector2(a.X - size.X / 2, a.Y - size.Y - 6));
+                DrawLabel(im, e, new Vector2(a.X - size.X / 2, a.Y - size.Y - 6), hits);
             }
         }
     }

@@ -5,8 +5,11 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Modification;
+using Sledge.BspEditor.Primitives;
+using Sledge.BspEditor.Primitives.MapData;
 using Sledge.BspEditor.Primitives.MapObjectData;
 using Sledge.BspEditor.Primitives.MapObjects;
+using Sledge.Common.Transport;
 
 namespace Sledge.BspEditor.Linking
 {
@@ -33,14 +36,65 @@ namespace Sledge.BspEditor.Linking
             public int[] Counts;
             public Vector3[] Points;
 
+            /// <summary>The texture of each face, so a texture-only edit can be told apart from nothing happening.</summary>
+            public Texture[] Textures = new Texture[0];
+
+            /// <summary>For things that aren't solids: the object's normalised serialised form, to tell what kind of edit was made.</summary>
+            public SerialisedObject Reference;
+
             public static Snapshot Take(Solid solid)
             {
                 var faces = solid.Faces.ToList();
                 return new Snapshot
                 {
                     Counts = faces.Select(x => x.Vertices.Count).ToArray(),
-                    Points = faces.SelectMany(x => x.Vertices).ToArray()
+                    Points = faces.SelectMany(x => x.Vertices).ToArray(),
+                    Textures = faces.Select(x => x.Texture.Clone()).ToArray()
                 };
+            }
+
+            /// <summary>
+            /// A snapshot of anything linked: solids as <see cref="Take"/>, everything else as its bounding box and form.
+            /// </summary>
+            public static Snapshot TakeAny(IMapObject obj)
+            {
+                if (obj is Solid solid) return Take(solid);
+                var box = obj.BoundingBox;
+                return new Snapshot
+                {
+                    Counts = new[] { 2 },
+                    Points = new[] { box.Start, box.End },
+                    Reference = LinkedObjects.NormalisedForm(obj)
+                };
+            }
+
+            public bool SameTextures(Snapshot other)
+            {
+                if (other == null || Textures.Length != other.Textures.Length) return false;
+                for (var i = 0; i < Textures.Length; i++)
+                {
+                    var a = Textures[i];
+                    var b = other.Textures[i];
+                    if (a.Name != b.Name) return false;
+                    if (Math.Abs(a.Rotation - b.Rotation) > 0.001f) return false;
+                    if (Math.Abs(a.XShift - b.XShift) > 0.001f || Math.Abs(a.YShift - b.YShift) > 0.001f) return false;
+                    if (Math.Abs(a.XScale - b.XScale) > 0.0001f || Math.Abs(a.YScale - b.YScale) > 0.0001f) return false;
+                    if ((a.UAxis - b.UAxis).Length() > 0.0001f || (a.VAxis - b.VAxis).Length() > 0.0001f) return false;
+                    if (a.LightmapScale != b.LightmapScale) return false;
+                }
+                return true;
+            }
+
+            /// <summary>The average of the points.</summary>
+            public Vector3 Centroid
+            {
+                get
+                {
+                    if (Points.Length == 0) return Vector3.Zero;
+                    var sum = Vector3.Zero;
+                    foreach (var p in Points) sum += p;
+                    return sum / Points.Length;
+                }
             }
 
             public bool SameTopology(Snapshot other)
@@ -70,7 +124,7 @@ namespace Sledge.BspEditor.Linking
                     for (var i = 0; i < count; i++) points[offset + i] = Points[offset + count - 1 - i];
                     offset += count;
                 }
-                return new Snapshot { Counts = Counts, Points = points };
+                return new Snapshot { Counts = Counts, Points = points, Textures = Textures, Reference = Reference };
             }
 
             public Vector3 Center
@@ -136,7 +190,8 @@ namespace Sledge.BspEditor.Linking
                        + _to[2] * (_side * Vector3.Dot(_from[2], d));
             }
 
-            private Vector3 Direction(Vector3 v)
+            /// <summary>Turn a direction (no translation).</summary>
+            public Vector3 Direction(Vector3 v)
             {
                 if (_translateOnly) return v;
                 return _to[0] * Vector3.Dot(_from[0], v)
@@ -238,7 +293,7 @@ namespace Sledge.BspEditor.Linking
         }
 
         /// <summary>
-        /// Take a snapshot of every linked solid in the document as it is right now.
+        /// Take a snapshot of every linked object in the document as it is right now.
         /// </summary>
         public static void SeedAll(MapDocument document)
         {
@@ -247,9 +302,9 @@ namespace Sledge.BspEditor.Linking
             lock (snaps)
             {
                 snaps.Clear();
-                foreach (var solid in members.SelectMany(x => x.Value).OfType<Solid>())
+                foreach (var o in members.SelectMany(x => x.Value))
                 {
-                    snaps[solid.ID] = Snapshot.Take(solid);
+                    snaps[o.ID] = Snapshot.TakeAny(o);
                 }
             }
         }
@@ -295,6 +350,59 @@ namespace Sledge.BspEditor.Linking
             }
 
             target.DescendantsChanged();
+            change.Update(target);
+        }
+
+        /// <summary>
+        /// Move a solid the way its origin counterpart was just moved: every point is turned by the same rotation (or flip)
+        /// around the solid's own centre, and shifted by the same amount as the origin object's centre.
+        /// </summary>
+        public static void ApplyPlacement(MapDocument document, Solid target, Snapshot targetNow, Rigid delta, Vector3 centreShift, Change change)
+        {
+            var centre = targetNow.Centroid;
+            var x = delta.Direction(Vector3.UnitX);
+            var y = delta.Direction(Vector3.UnitY);
+            var z = delta.Direction(Vector3.UnitZ);
+            var t = centre + centreShift - delta.Direction(centre);
+            var matrix = new Matrix4x4(
+                x.X, x.Y, x.Z, 0,
+                y.X, y.Y, y.Z, 0,
+                z.X, z.Y, z.Z, 0,
+                t.X, t.Y, t.Z, 1
+            );
+
+            var textureLock = (document.Map.Data.GetOne<TransformationFlags>() ?? new TransformationFlags()).TextureLock;
+
+            foreach (var face in target.Faces.ToList())
+            {
+                var mapped = face.Vertices.Select(v => Vector3.Transform(v, matrix)).ToList();
+                if (delta.Mirrored) mapped.Reverse();
+                face.Vertices.Reset(mapped);
+                if (textureLock) face.Texture.TransformUniform(matrix);
+            }
+
+            target.DescendantsChanged();
+            change.Update(target);
+        }
+
+        /// <summary>
+        /// Give <paramref name="target"/> the textures of <paramref name="source"/>, face for face, turned to suit the target's orientation.
+        /// The shapes must be the same.
+        /// </summary>
+        public static void ApplyTextures(Solid source, Solid target, Rigid rigid, Change change)
+        {
+            var srcFaces = source.Faces.ToList();
+            var tgtFaces = target.Faces.ToList();
+            var matrix = rigid.ToMatrix();
+
+            for (var i = 0; i < Math.Min(srcFaces.Count, tgtFaces.Count); i++)
+            {
+                var tex = srcFaces[i].Texture.Clone();
+                tex.TransformUniform(matrix);
+                tgtFaces[i].Texture.Unclone(tex);
+                tgtFaces[i].Texture.LightmapScale = tex.LightmapScale;
+            }
+
             change.Update(target);
         }
     }
