@@ -46,8 +46,8 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
                 {
                     var av = new LinkedObjectsVisgroup(group.ID)
                     {
-                        Path = LinkedObjects.AutoVisgroupPath,
-                        Key = group.Name
+                        Path = LinkedObjects.GetVisgroupPath(group, groups),
+                        Key = LinkedObjects.SafeName(group.Name)
                     };
                     doc.Map.Data.Add(av);
                     visgroups[group.ID] = av;
@@ -55,12 +55,22 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
                 }
             }
 
-            // Keep the names up to date (renames)
+            // Keep the names and folders up to date (renames, sublinks)
             foreach (var av in visgroups.Values)
             {
-                if (groups.TryGetValue(av.GroupID, out var group) && av.Key != group.Name)
+                if (!groups.TryGetValue(av.GroupID, out var group)) continue;
+
+                var key = LinkedObjects.SafeName(group.Name);
+                if (av.Key != key)
                 {
-                    av.Key = group.Name;
+                    av.Key = key;
+                    changed = true;
+                }
+
+                var path = LinkedObjects.GetVisgroupPath(group, groups);
+                if (av.Path != path)
+                {
+                    av.Path = path;
                     changed = true;
                 }
             }

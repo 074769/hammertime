@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Forms;
 using LogicAndTrick.Oy;
@@ -33,22 +34,32 @@ namespace Sledge.BspEditor.Editing.Commands.Linking
 
             if (groups.Count > 0)
             {
-                var add = builder.AddGroup("Add to link");
-                foreach (var g in groups)
-                {
-                    var id = g.Id;
-                    var item = new ToolStripMenuItem(g.Name);
-                    item.Click += (s, e) => Oy.Publish("Command:Run", new CommandMessage("BspEditor:Tools:LinkAddTo", new { GroupId = id }));
-                    add.DropDownItems.Add(item);
-                }
+                AddGroupMenu(builder, "Add to link", "BspEditor:Tools:LinkAddTo", groups.Select(x => new KeyValuePair<long, string>(x.Id, x.Name)));
+                AddGroupMenu(builder, "Add as sublink of", "BspEditor:Tools:LinkAddSublink", groups.Select(x => new KeyValuePair<long, string>(x.Id, x.Name)));
             }
 
             if (selected.Any(x => LinkedObjects.GetLinkId(x) != null))
             {
+                if (LinkSetOrigin.GetCandidates(document).Count > 0)
+                {
+                    builder.AddCommand("BspEditor:Tools:LinkSetOrigin");
+                }
                 builder.AddCommand("BspEditor:Tools:LinkRemove");
             }
 
             builder.AddSeparator();
+        }
+
+        private static void AddGroupMenu(RightClickMenuBuilder builder, string title, string command, IEnumerable<KeyValuePair<long, string>> groups)
+        {
+            var menu = builder.AddGroup(title);
+            foreach (var g in groups)
+            {
+                var id = g.Key;
+                var item = new ToolStripMenuItem(g.Value);
+                item.Click += (s, e) => Oy.Publish("Command:Run", new CommandMessage(command, new { GroupId = id }));
+                menu.DropDownItems.Add(item);
+            }
         }
     }
 }

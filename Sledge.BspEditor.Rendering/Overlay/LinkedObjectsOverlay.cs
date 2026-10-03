@@ -37,6 +37,7 @@ namespace Sledge.BspEditor.Rendering.Overlay
             public string Label;
             public Color Colour;
             public bool Emphasised;
+            public bool IsOrigin;
         }
 
         private readonly object _lock = new object();
@@ -117,11 +118,24 @@ namespace Sledge.BspEditor.Rendering.Overlay
                 var colour = group?.Colour ?? LinkedObjects.ColourFor(kv.Key);
                 var emphasised = kv.Value.Any(x => x.FindAll().Any(c => c.IsSelected));
                 var label = $"{name}  #{kv.Key}  ({kv.Value.Count})";
+                if (group != null && group.ParentID != 0 && groups.TryGetValue(group.ParentID, out var parent))
+                {
+                    label += "  sublink of " + parent.Name;
+                }
+                var origin = LinkedObjects.GetOrigin(group, kv.Value);
 
                 foreach (var o in kv.Value)
                 {
                     if (o.Data.OfType<IObjectVisibility>().Any(v => v.IsHidden)) continue;
-                    list.Add(new Entry { Box = o.BoundingBox, Label = label, Colour = colour, Emphasised = emphasised });
+                    var isOrigin = ReferenceEquals(o, origin);
+                    list.Add(new Entry
+                    {
+                        Box = o.BoundingBox,
+                        Label = isOrigin ? label + "  [origin]" : label,
+                        Colour = colour,
+                        Emphasised = emphasised,
+                        IsOrigin = isOrigin
+                    });
                 }
             }
 
@@ -186,7 +200,7 @@ namespace Sledge.BspEditor.Rendering.Overlay
 
                 if (e.Emphasised) im.AddRectFilled(a, b, Color.FromArgb(30, e.Colour));
 
-                var width = e.Emphasised ? 2.5f : 1.5f;
+                var width = e.Emphasised ? 2.5f : (e.IsOrigin ? 2f : 1.5f);
                 var col = Faded(e);
                 im.AddLine(new Vector2(minX, minY), new Vector2(maxX, minY), col, width, false);
                 im.AddLine(new Vector2(maxX, minY), new Vector2(maxX, maxY), col, width, false);
@@ -232,7 +246,7 @@ namespace Sledge.BspEditor.Rendering.Overlay
                 }
                 if (!any) continue;
 
-                var width = e.Emphasised ? 2.5f : 1.5f;
+                var width = e.Emphasised ? 2.5f : (e.IsOrigin ? 2f : 1.5f);
                 var col = Faded(e);
                 for (var i = 0; i < 8; i++)
                 {

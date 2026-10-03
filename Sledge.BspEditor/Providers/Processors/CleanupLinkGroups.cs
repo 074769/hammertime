@@ -23,7 +23,8 @@ namespace Sledge.BspEditor.Providers.Processors
 
         public Task BeforeSave(MapDocument document)
         {
-            var used = LinkedObjects.GetMembers(document).Keys.ToList();
+            // Groups with members, and the groups above them (a sublink needs its parent)
+            var used = LinkedObjects.GetKeptGroupIds(document);
             var unused = document.Map.Data.Get<LinkGroup>().Where(x => !used.Contains(x.ID)).ToList();
             foreach (var g in unused) document.Map.Data.Remove(g);
             return Task.FromResult(0);

@@ -36,6 +36,7 @@ namespace Sledge.BspEditor.Linking
             public string Type { get; set; }
             public string Class { get; set; }
             public float[] Box { get; set; }
+            public bool IsOrigin { get; set; }
         }
 
         private class GroupData
@@ -43,6 +44,7 @@ namespace Sledge.BspEditor.Linking
             public long ID { get; set; }
             public string Name { get; set; }
             public int Colour { get; set; }
+            public long ParentID { get; set; }
             public List<MemberData> Members { get; set; } = new List<MemberData>();
         }
 
@@ -90,23 +92,31 @@ namespace Sledge.BspEditor.Linking
 
                 var groups = document.Map.Data.Get<LinkGroup>().GroupBy(x => x.ID).ToDictionary(x => x.Key, x => x.First());
                 var data = new FileData();
-                foreach (var kv in members.OrderBy(x => x.Key))
+
+                // Groups with members, and the groups above them (sublinks need their parents)
+                foreach (var id in LinkedObjects.GetKeptGroupIds(document).OrderBy(x => x))
                 {
-                    groups.TryGetValue(kv.Key, out var group);
+                    groups.TryGetValue(id, out var group);
+                    members.TryGetValue(id, out var list);
+                    list = list ?? new List<IMapObject>();
+                    var origin = LinkedObjects.GetOrigin(group, list);
+
                     var g = new GroupData
                     {
-                        ID = kv.Key,
-                        Name = group?.Name ?? ("Link " + kv.Key),
-                        Colour = (group?.Colour ?? LinkedObjects.ColourFor(kv.Key)).ToArgb()
+                        ID = id,
+                        Name = group?.Name ?? ("Link " + id),
+                        Colour = (group?.Colour ?? LinkedObjects.ColourFor(id)).ToArgb(),
+                        ParentID = group?.ParentID ?? 0
                     };
-                    foreach (var o in kv.Value)
+                    foreach (var o in list)
                     {
                         var b = o.BoundingBox;
                         g.Members.Add(new MemberData
                         {
                             Type = o.GetType().Name,
                             Class = ClassOf(o),
-                            Box = new[] { b.Start.X, b.Start.Y, b.Start.Z, b.End.X, b.End.Y, b.End.Z }
+                            Box = new[] { b.Start.X, b.Start.Y, b.Start.Z, b.End.X, b.End.Y, b.End.Z },
+                            IsOrigin = ReferenceEquals(o, origin)
                         });
                     }
                     data.Groups.Add(g);
@@ -156,6 +166,7 @@ namespace Sledge.BspEditor.Linking
             foreach (var g in data.Groups)
             {
                 var matched = new List<IMapObject>();
+                IMapObject origin = null;
 
                 foreach (var m in g.Members ?? new List<MemberData>())
                 {
@@ -167,16 +178,21 @@ namespace Sledge.BspEditor.Linking
 
                     used.Add(found);
                     matched.Add(found);
+                    if (m.IsOrigin) origin = found;
                 }
 
-                // A link needs at least two objects to mean anything, and a missing object means the map was edited elsewhere
-                if (matched.Count < 2) continue;
+                // A link of two or more needs them all to mean anything, a missing object means the map was edited elsewhere.
+                // (Groups saved with no members are the parents of sublinks.)
+                var listed = g.Members?.Count ?? 0;
+                if (matched.Count < Math.Min(2, listed)) continue;
 
                 document.Map.Data.Add(new LinkGroup
                 {
                     ID = g.ID,
                     Name = g.Name,
-                    Colour = Color.FromArgb(g.Colour)
+                    Colour = Color.FromArgb(g.Colour),
+                    OriginID = origin?.ID ?? 0,
+                    ParentID = g.ParentID
                 });
                 foreach (var o in matched) o.Data.Replace(new LinkGroupID(g.ID));
             }

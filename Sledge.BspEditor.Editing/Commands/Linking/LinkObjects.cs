@@ -20,8 +20,9 @@ using Sledge.QuickForms;
 namespace Sledge.BspEditor.Editing.Commands.Linking
 {
     /// <summary>
-    /// Link the selected objects together in a new link group. Once linked, editing one
-    /// of the objects edits all of them (each keeps its own position).
+    /// Link the selected objects together in a new link group. Once linked, editing the shape of one
+    /// of the objects edits all of them (each keeps its own position and rotation).
+    /// The first object becomes the origin object of the link.
     /// </summary>
     [AutoTranslate]
     [Export(typeof(ICommand))]
@@ -63,7 +64,14 @@ namespace Sledge.BspEditor.Editing.Commands.Linking
                 name = $"{name} ({id})";
             }
 
-            var group = new LinkGroup { ID = id, Name = name, Colour = LinkedObjects.ColourFor(id) };
+            // The first object (the one made earliest) is the origin object of the link
+            var group = new LinkGroup
+            {
+                ID = id,
+                Name = name,
+                Colour = LinkedObjects.ColourFor(id),
+                OriginID = targets.OrderBy(x => x.ID).First().ID
+            };
 
             var ops = new List<IOperation> { new AddMapData(group) };
             foreach (var t in targets)

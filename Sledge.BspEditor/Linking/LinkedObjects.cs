@@ -29,7 +29,10 @@ namespace Sledge.BspEditor.Linking
         // Numbers closer than this are considered the same when comparing objects (absorbs float error from translating)
         private const double Epsilon = 0.02;
 
-        private static readonly HashSet<string> IgnoredProperties = new HashSet<string> { "ID", "IsSelected", "ParentID" };
+        private static readonly HashSet<string> IgnoredProperties = new HashSet<string> { "ID", "IsSelected", "ParentID", "angles", "angle", "pitch", "roll" };
+
+        // Entity keys that say how the entity is turned. Like position, they belong to each object and aren't shared.
+        private static readonly string[] OrientationKeys = { "angles", "angle", "pitch", "roll" };
         private static readonly HashSet<string> IgnoredChildren = new HashSet<string> { "VisgroupID", "VisgroupHidden", "LinkGroupID", "QuickHidden" };
         private static readonly Regex Number = new Regex(@"-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?", RegexOptions.Compiled);
 
@@ -66,6 +69,65 @@ namespace Sledge.BspEditor.Linking
                 list.Add(o);
             }
             return result;
+        }
+
+        /// <summary>
+        /// The origin object of a link group: the member the group names as its origin, or the lowest ID member if
+        /// it doesn't name one (or the named one is gone).
+        /// </summary>
+        public static IMapObject GetOrigin(LinkGroup group, IReadOnlyCollection<IMapObject> members)
+        {
+            if (members == null || members.Count == 0) return null;
+            if (group != null && group.OriginID != 0)
+            {
+                var named = members.FirstOrDefault(x => x.ID == group.OriginID);
+                if (named != null) return named;
+            }
+            return members.OrderBy(x => x.ID).First();
+        }
+
+        /// <summary>
+        /// The IDs of the groups that are worth keeping: those with members, and the groups above them (sublinks hang off their parents).
+        /// </summary>
+        public static HashSet<long> GetKeptGroupIds(MapDocument document)
+        {
+            var groups = document.Map.Data.Get<LinkGroup>().GroupBy(x => x.ID).ToDictionary(x => x.Key, x => x.First());
+            var kept = new HashSet<long>();
+            foreach (var id in GetMembers(document).Keys)
+            {
+                var current = id;
+                var guard = 0;
+                while (current != 0 && kept.Add(current) && guard++ < 64)
+                {
+                    current = groups.TryGetValue(current, out var g) ? g.ParentID : 0;
+                }
+            }
+            return kept;
+        }
+
+        /// <summary>
+        /// Get the display path of a group in the visgroup list: sublinks sit in a folder named after their parent.
+        /// </summary>
+        public static string GetVisgroupPath(LinkGroup group, IDictionary<long, LinkGroup> groups)
+        {
+            var folders = new List<string>();
+            var current = group;
+            var guard = 0;
+            while (current != null && current.ParentID != 0 && guard++ < 64)
+            {
+                if (!groups.TryGetValue(current.ParentID, out var parent) || parent == current) break;
+                folders.Insert(0, SafeName(parent.Name) + " (sublinks)");
+                current = parent;
+            }
+            return folders.Count == 0 ? AutoVisgroupPath : AutoVisgroupPath + "/" + string.Join("/", folders);
+        }
+
+        /// <summary>
+        /// Names become visgroup path segments, so they can't contain the separator.
+        /// </summary>
+        public static string SafeName(string name)
+        {
+            return (name ?? "").Replace('/', '-').Replace('\\', '-').Trim();
         }
 
         /// <summary>
@@ -226,6 +288,9 @@ namespace Sledge.BspEditor.Linking
 
             var center = target.BoundingBox.Center;
             var wasSelected = target.IsSelected;
+            var ownOrientation = target.Data.GetOne<EntityData>()?.Properties
+                ?.Where(x => OrientationKeys.Contains(x.Key.ToLowerInvariant()))
+                .ToDictionary(x => x.Key, x => x.Value);
             var keep = target.Data.Where(IsPerObjectData).Select(x => (IMapObjectData) x.Clone()).ToList();
             var oldDescendants = target.FindAll().Where(x => !ReferenceEquals(x, target)).ToList();
 
@@ -237,6 +302,19 @@ namespace Sledge.BspEditor.Linking
 
             target.Unclone(copy);
             target.IsSelected = wasSelected;
+
+            var targetData = target.Data.GetOne<EntityData>();
+            if (targetData?.Properties != null)
+            {
+                foreach (var key in targetData.Properties.Keys.Where(x => OrientationKeys.Contains(x.ToLowerInvariant())).ToList())
+                {
+                    targetData.Properties.Remove(key);
+                }
+                if (ownOrientation != null)
+                {
+                    foreach (var kv in ownOrientation) targetData.Properties[kv.Key] = kv.Value;
+                }
+            }
             target.DescendantsChanged();
 
             var newDescendants = target.FindAll().Where(x => !ReferenceEquals(x, target)).ToList();
