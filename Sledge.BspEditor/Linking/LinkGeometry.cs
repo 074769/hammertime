@@ -281,15 +281,54 @@ namespace Sledge.BspEditor.Linking
             }
         }
 
-        private static readonly ConditionalWeakTable<MapDocument, Dictionary<long, Snapshot>> Store =
-            new ConditionalWeakTable<MapDocument, Dictionary<long, Snapshot>>();
+        /// <summary>
+        /// Snapshots by object. They're keyed by the object itself rather than its ID, so two objects that
+        /// somehow share an ID can't be mistaken for each other, and removed objects are forgotten automatically.
+        /// </summary>
+        public class SnapshotStore
+        {
+            private ConditionalWeakTable<IMapObject, Snapshot> _table = new ConditionalWeakTable<IMapObject, Snapshot>();
+
+            public Snapshot this[IMapObject obj]
+            {
+                get => _table.TryGetValue(obj, out var s) ? s : throw new KeyNotFoundException();
+                set
+                {
+                    _table.Remove(obj);
+                    _table.Add(obj, value);
+                }
+            }
+
+            public bool ContainsKey(IMapObject obj)
+            {
+                return _table.TryGetValue(obj, out _);
+            }
+
+            public bool TryGetValue(IMapObject obj, out Snapshot snapshot)
+            {
+                return _table.TryGetValue(obj, out snapshot);
+            }
+
+            public void Remove(IMapObject obj)
+            {
+                _table.Remove(obj);
+            }
+
+            public void Clear()
+            {
+                _table = new ConditionalWeakTable<IMapObject, Snapshot>();
+            }
+        }
+
+        private static readonly ConditionalWeakTable<MapDocument, SnapshotStore> Store =
+            new ConditionalWeakTable<MapDocument, SnapshotStore>();
 
         /// <summary>
-        /// The snapshots for a document, by object ID. Lock the dictionary while using it.
+        /// The snapshots for a document. Lock the store while using it.
         /// </summary>
-        public static Dictionary<long, Snapshot> Snapshots(MapDocument document)
+        public static SnapshotStore Snapshots(MapDocument document)
         {
-            return Store.GetValue(document, _ => new Dictionary<long, Snapshot>());
+            return Store.GetValue(document, _ => new SnapshotStore());
         }
 
         /// <summary>
@@ -304,7 +343,7 @@ namespace Sledge.BspEditor.Linking
                 snaps.Clear();
                 foreach (var o in members.SelectMany(x => x.Value))
                 {
-                    snaps[o.ID] = Snapshot.TakeAny(o);
+                    snaps[o] = Snapshot.TakeAny(o);
                 }
             }
         }

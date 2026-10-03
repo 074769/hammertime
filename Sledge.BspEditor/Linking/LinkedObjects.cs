@@ -360,6 +360,30 @@ namespace Sledge.BspEditor.Linking
         }
 
         /// <summary>
+        /// Give <paramref name="target"/> the entity properties of <paramref name="source"/>, except the ones that say how it is turned.
+        /// Nothing else about the target changes (no objects are added or removed), so this is safe for entities with brushes.
+        /// </summary>
+        public static void SyncProperties(IMapObject source, IMapObject target, Change change)
+        {
+            var from = source.Data.GetOne<EntityData>();
+            var to = target.Data.GetOne<EntityData>();
+            if (from?.Properties == null || to?.Properties == null) return;
+
+            bool Own(string key) => OrientationKeys.Contains(key.ToLowerInvariant());
+
+            var wanted = from.Properties.Where(x => !Own(x.Key)).ToDictionary(x => x.Key, x => x.Value);
+            foreach (var kv in to.Properties.Where(x => Own(x.Key))) wanted[kv.Key] = kv.Value;
+
+            var same = wanted.Count == to.Properties.Count && wanted.All(x => to.Properties.TryGetValue(x.Key, out var v) && v == x.Value);
+            if (same && to.Name == from.Name && to.Flags == from.Flags) return;
+
+            to.Name = from.Name;
+            to.Flags = from.Flags;
+            to.Properties = wanted;
+            change.Update(target);
+        }
+
+        /// <summary>
         /// Make <paramref name="target"/> the same as <paramref name="source"/> (shape, textures, properties, children),
         /// keeping the target's own position, selection state, visgroups, and link membership.
         /// The change is recorded in <paramref name="change"/>.

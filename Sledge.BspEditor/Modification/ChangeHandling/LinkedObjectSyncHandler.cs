@@ -51,7 +51,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
 
             foreach (var removed in change.Removed)
             {
-                lock (snaps) snaps.Remove(removed.ID);
+                lock (snaps) snaps.Remove(removed);
             }
 
             var addedLinked = change.Added.Where(x => LinkedObjects.GetLinkId(x) != null).ToList();
@@ -64,7 +64,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
 
             foreach (var added in addedLinked)
             {
-                lock (snaps) snaps[added.ID] = LinkGeometry.Snapshot.TakeAny(added);
+                lock (snaps) snaps[added] = LinkGeometry.Snapshot.TakeAny(added);
             }
 
             var slotIds = updatedLinked.Select(x => LinkedObjects.GetLinkId(x).Value).Distinct().ToList();
@@ -74,7 +74,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
             {
                 foreach (var m in slotIds.Where(index.Slots.ContainsKey).SelectMany(x => index.Slots[x]))
                 {
-                    if (!snaps.ContainsKey(m.ID)) snaps[m.ID] = LinkGeometry.Snapshot.TakeAny(m);
+                    if (!snaps.ContainsKey(m)) snaps[m] = LinkGeometry.Snapshot.TakeAny(m);
                 }
             }
 
@@ -154,7 +154,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
         /// That's somebody moving the whole group, which only places the group: it isn't an edit to its objects, so
         /// nothing is passed on. (Moving some of the objects, or the only object of an instance, is an edit to those objects.)
         /// </summary>
-        private static bool IsGroupMove(LinkedObjects.LinkIndex index, IMapObject o, List<IMapObject> touched, Dictionary<long, LinkGeometry.Snapshot> snaps)
+        private static bool IsGroupMove(LinkedObjects.LinkIndex index, IMapObject o, List<IMapObject> touched, LinkGeometry.SnapshotStore snaps)
         {
             if (!index.Links.TryGetValue(LinkedObjects.GetTopId(o), out var instances)) return false;
             if (!instances.TryGetValue(LinkedObjects.GetInstance(o), out var all)) return false;
@@ -169,7 +169,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
                 LinkGeometry.Snapshot pre;
                 lock (snaps)
                 {
-                    if (!snaps.TryGetValue(m.ID, out pre)) return false;
+                    if (!snaps.TryGetValue(m, out pre)) return false;
                 }
 
                 if (m is Solid solid)
@@ -194,7 +194,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
             return Kind.None;
         }
 
-        private static void SyncSolids(Change change, List<IMapObject> members, IMapObject originObject, List<IMapObject> touched, Dictionary<long, LinkGeometry.Snapshot> snaps, bool groupMove)
+        private static void SyncSolids(Change change, List<IMapObject> members, IMapObject originObject, List<IMapObject> touched, LinkGeometry.SnapshotStore snaps, bool groupMove)
         {
             var origin = (Solid) originObject;
             var solids = members.OfType<Solid>().ToList();
@@ -205,7 +205,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
             foreach (var s in solids.Where(x => Contains(touched, x)))
             {
                 LinkGeometry.Snapshot pre;
-                lock (snaps) pre = snaps[s.ID];
+                lock (snaps) pre = snaps[s];
 
                 var now = LinkGeometry.Snapshot.Take(s);
                 var kind = Classify(pre, now);
@@ -215,7 +215,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
                 edits[s] = kind;
 
                 // Objects outside the origin instance are edited locally: nothing is passed on
-                if (!ReferenceEquals(s, origin)) lock (snaps) snaps[s.ID] = now;
+                if (!ReferenceEquals(s, origin)) lock (snaps) snaps[s] = now;
             }
 
             if (!edits.TryGetValue(origin, out var originKind)) return;
@@ -223,12 +223,12 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
             // The whole group was placed somewhere else: the other instances stay where they are
             if (originKind == Kind.Placement && groupMove)
             {
-                lock (snaps) snaps[origin.ID] = nows[origin];
+                lock (snaps) snaps[origin] = nows[origin];
                 return;
             }
 
             LinkGeometry.Snapshot originPre;
-            lock (snaps) originPre = snaps[origin.ID];
+            lock (snaps) originPre = snaps[origin];
             var originNow = nows[origin];
 
             // Anything that was edited in this same change (eg a whole selection moved at once) already is where it should be
@@ -243,7 +243,8 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
 
                 foreach (var target in targets)
                 {
-                    var targetPre = snaps[target.ID];
+                    // The target wasn't edited in this change, so how it is right now is how it was before
+                    var targetPre = LinkGeometry.Snapshot.Take(target);
                     var rigid = LinkGeometry.Rigid.Fit(originPre, targetPre);
 
                     // Not the same shape (the target was edited locally): line up their centres
@@ -275,23 +276,23 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
 
             lock (snaps)
             {
-                snaps[origin.ID] = LinkGeometry.Snapshot.Take(origin);
-                foreach (var kv in plan) snaps[kv.Key.ID] = LinkGeometry.Snapshot.Take(kv.Key);
+                snaps[origin] = LinkGeometry.Snapshot.Take(origin);
+                foreach (var kv in plan) snaps[kv.Key] = LinkGeometry.Snapshot.Take(kv.Key);
             }
         }
 
-        private static void SyncOthers(Change change, List<IMapObject> members, IMapObject origin, List<IMapObject> touched, Dictionary<long, LinkGeometry.Snapshot> snaps, bool groupMove)
+        private static void SyncOthers(Change change, List<IMapObject> members, IMapObject origin, List<IMapObject> touched, LinkGeometry.SnapshotStore snaps, bool groupMove)
         {
             // Objects outside the origin instance are edited locally: nothing is passed on
             foreach (var m in members.Where(x => !ReferenceEquals(x, origin) && Contains(touched, x)))
             {
-                lock (snaps) snaps[m.ID] = LinkGeometry.Snapshot.TakeAny(m);
+                lock (snaps) snaps[m] = LinkGeometry.Snapshot.TakeAny(m);
             }
 
             if (!Contains(touched, origin)) return;
 
             LinkGeometry.Snapshot pre;
-            lock (snaps) pre = snaps[origin.ID];
+            lock (snaps) pre = snaps[origin];
             var now = LinkGeometry.Snapshot.TakeAny(origin);
 
             var sameForm = pre.Reference != null && LinkedObjects.Equivalent(pre.Reference, now.Reference);
@@ -303,7 +304,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
             // The whole group was placed somewhere else: the other instances stay where they are
             if (sameForm && groupMove)
             {
-                lock (snaps) snaps[origin.ID] = now;
+                lock (snaps) snaps[origin] = now;
                 return;
             }
 
@@ -326,20 +327,21 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
                     }
                     target.DescendantsChanged();
                     change.Update(target);
-                    lock (snaps) snaps[target.ID] = LinkGeometry.Snapshot.TakeAny(target);
+                    lock (snaps) snaps[target] = LinkGeometry.Snapshot.TakeAny(target);
                 }
             }
             else
             {
-                // Its properties or contents were edited: the others take them, each keeping its own position and angles
+                // Its properties were edited: the others take them, each keeping its own position and angles.
+                // (An entity's brushes are left alone: replacing them is what leaves ghost brushes behind.)
                 foreach (var target in targets.Where(x => !Contains(touched, x)))
                 {
-                    if (!LinkedObjects.AreEquivalent(origin, target)) LinkedObjects.Sync(change.Document, origin, target, change);
-                    lock (snaps) snaps[target.ID] = LinkGeometry.Snapshot.TakeAny(target);
+                    LinkedObjects.SyncProperties(origin, target, change);
+                    lock (snaps) snaps[target] = LinkGeometry.Snapshot.TakeAny(target);
                 }
             }
 
-            lock (snaps) snaps[origin.ID] = LinkGeometry.Snapshot.TakeAny(origin);
+            lock (snaps) snaps[origin] = LinkGeometry.Snapshot.TakeAny(origin);
         }
     }
 }
