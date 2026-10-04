@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.Composition;
+using System.ComponentModel.Composition;
+using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
 using LogicAndTrick.Oy;
@@ -48,11 +49,13 @@ namespace Sledge.BspEditor.Editing.Commands.Modification
                         * Matrix4x4.CreateFromAxisAngle(axis, radians)
                         * Matrix4x4.CreateTranslation(selBox.Center);
 
-            var transformOperation = new BspEditor.Modification.Operations.Mutation.Transform(tform, document.Selection.GetSelectedParents());
+            // Work out what's being rotated once, and turn exactly that (and the textures of exactly that), the way the other transforms do
+            var objects = document.Selection.GetSelectedParents().ToList();
+            var transformOperation = new BspEditor.Modification.Operations.Mutation.Transform(tform, objects);
             transaction.Add(transformOperation);
 
             // Check for texture transform
-            if (tl.TextureLock) transaction.Add(new TransformTexturesUniform(tform, document.Selection));
+            if (tl.TextureLock) transaction.Add(new TransformTexturesUniform(tform, objects.SelectMany(x => x.FindAll()).Distinct().ToList()));
 
             await MapDocumentOperation.Perform(document, transaction);
         }

@@ -36,17 +36,25 @@ namespace Sledge.BspEditor.Linking
             public int[] Counts;
             public Vector3[] Points;
 
+            /// <summary>
+            /// The IDs of the faces, in the order the points and textures are listed. Editing a texture takes a face out of the
+            /// solid and puts a copy back at the end, so a solid's faces can be reordered without anything about the shape changing.
+            /// Keeping this order is what lets a face of one solid keep being matched with the same face of another.
+            /// </summary>
+            public long[] FaceIds;
+
             /// <summary>The texture of each face, so a texture-only edit can be told apart from nothing happening.</summary>
             public Texture[] Textures = new Texture[0];
 
             /// <summary>For things that aren't solids: the object's normalised serialised form, to tell what kind of edit was made.</summary>
             public SerialisedObject Reference;
 
-            public static Snapshot Take(Solid solid)
+            public static Snapshot Take(Solid solid, IList<long> order = null)
             {
-                var faces = solid.Faces.ToList();
+                var faces = OrderedFaces(solid, order);
                 return new Snapshot
                 {
+                    FaceIds = faces.Select(x => x.ID).ToArray(),
                     Counts = faces.Select(x => x.Vertices.Count).ToArray(),
                     Points = faces.SelectMany(x => x.Vertices).ToArray(),
                     Textures = faces.Select(x => x.Texture.Clone()).ToArray()
@@ -56,9 +64,9 @@ namespace Sledge.BspEditor.Linking
             /// <summary>
             /// A snapshot of anything linked: solids as <see cref="Take"/>, everything else as its bounding box and form.
             /// </summary>
-            public static Snapshot TakeAny(IMapObject obj)
+            public static Snapshot TakeAny(IMapObject obj, Snapshot previous = null)
             {
-                if (obj is Solid solid) return Take(solid);
+                if (obj is Solid solid) return Take(solid, previous?.FaceIds);
                 var box = obj.BoundingBox;
                 return new Snapshot
                 {
@@ -124,7 +132,7 @@ namespace Sledge.BspEditor.Linking
                     for (var i = 0; i < count; i++) points[offset + i] = Points[offset + count - 1 - i];
                     offset += count;
                 }
-                return new Snapshot { Counts = Counts, Points = points, Textures = Textures, Reference = Reference };
+                return new Snapshot { FaceIds = FaceIds, Counts = Counts, Points = points, Textures = Textures, Reference = Reference };
             }
 
             public Vector3 Center
@@ -282,6 +290,41 @@ namespace Sledge.BspEditor.Linking
         }
 
         /// <summary>
+        /// The solid's faces in the given order (a list of face IDs), or in the solid's own order if the list doesn't fit the faces any more.
+        /// </summary>
+        public static List<Face> OrderedFaces(Solid solid, IList<long> order)
+        {
+            var faces = solid.Faces.ToList();
+            if (order == null || order.Count != faces.Count) return faces;
+
+            var byId = new Dictionary<long, Face>();
+            foreach (var f in faces)
+            {
+                if (byId.ContainsKey(f.ID)) return faces;
+                byId[f.ID] = f;
+            }
+
+            var result = new List<Face>(faces.Count);
+            foreach (var id in order)
+            {
+                if (!byId.TryGetValue(id, out var f)) return faces;
+                result.Add(f);
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// A snapshot of the solid in the face order of its last snapshot.
+        /// </summary>
+        public static Snapshot TakeOrdered(MapDocument document, Solid solid)
+        {
+            var snaps = Snapshots(document);
+            Snapshot previous;
+            lock (snaps) snaps.TryGetValue(solid, out previous);
+            return Snapshot.Take(solid, previous?.FaceIds);
+        }
+
+        /// <summary>
         /// Snapshots by object. They're keyed by the object itself rather than its ID, so two objects that
         /// somehow share an ID can't be mistaken for each other, and removed objects are forgotten automatically.
         /// </summary>
@@ -352,11 +395,12 @@ namespace Sledge.BspEditor.Linking
         /// Make <paramref name="target"/> the same shape as <paramref name="source"/>, with the target keeping its
         /// own position and orientation. <paramref name="rigid"/> takes the source's space into the target's space.
         /// </summary>
-        public static void Apply(MapDocument document, Solid source, Solid target, Rigid rigid, Change change)
+        public static List<long> Apply(MapDocument document, Solid source, Snapshot sourceOrder, Solid target, Snapshot targetOrder, Rigid rigid, Change change)
         {
-            var srcFaces = source.Faces.ToList();
-            var tgtFaces = target.Faces.ToList();
+            var srcFaces = OrderedFaces(source, sourceOrder?.FaceIds);
+            var tgtFaces = OrderedFaces(target, targetOrder?.FaceIds);
             var matrix = rigid.ToMatrix();
+            var order = new List<long>();
 
             for (var i = 0; i < srcFaces.Count; i++)
             {
@@ -370,6 +414,7 @@ namespace Sledge.BspEditor.Linking
                     tf = new Face(document.Map.NumberGenerator.Next("Face"));
                     target.Data.Add(tf);
                 }
+                order.Add(tf.ID);
 
                 var sf = srcFaces[i];
                 var mapped = sf.Vertices.Select(rigid.Point).ToList();
@@ -390,6 +435,7 @@ namespace Sledge.BspEditor.Linking
 
             target.DescendantsChanged();
             change.Update(target);
+            return order;
         }
 
         /// <summary>
@@ -428,10 +474,10 @@ namespace Sledge.BspEditor.Linking
         /// Give <paramref name="target"/> the textures of <paramref name="source"/>, face for face, turned to suit the target's orientation.
         /// The shapes must be the same.
         /// </summary>
-        public static void ApplyTextures(Solid source, Solid target, Rigid rigid, Change change)
+        public static void ApplyTextures(Solid source, Snapshot sourceOrder, Solid target, Snapshot targetOrder, Rigid rigid, Change change)
         {
-            var srcFaces = source.Faces.ToList();
-            var tgtFaces = target.Faces.ToList();
+            var srcFaces = OrderedFaces(source, sourceOrder?.FaceIds);
+            var tgtFaces = OrderedFaces(target, targetOrder?.FaceIds);
             var matrix = rigid.ToMatrix();
 
             for (var i = 0; i < Math.Min(srcFaces.Count, tgtFaces.Count); i++)

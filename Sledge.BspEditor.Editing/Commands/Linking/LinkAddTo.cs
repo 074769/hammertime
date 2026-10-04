@@ -139,6 +139,22 @@ namespace Sledge.BspEditor.Editing.Commands.Linking
                 var existing = t.Data.GetOne<LinkGroupID>();
                 if (existing != null) ops.Add(new RemoveMapObjectData(t.ID, existing));
                 ops.Add(new AddMapObjectData(t.ID, new LinkGroupID(slotId, linkId, newInstance)));
+
+                // The brushes inside it match the brushes inside the object it matched
+                var counterpart = slots.FirstOrDefault(x => x.Id == slotId)?.Origin;
+                var childSlots = counterpart != null ? LinkedObjects.MatchChildren(t, counterpart) : new Dictionary<Solid, long>();
+                foreach (var child in LinkedObjects.ChildSolids(t))
+                {
+                    if (!childSlots.TryGetValue(child, out var childSlot))
+                    {
+                        childSlot = next++;
+                        ops.Add(new AddMapData(new LinkGroup { ID = childSlot, Name = (link?.Name ?? "Link") + " / " + childSlot, Colour = LinkedObjects.ColourFor(linkId), ParentID = linkId }));
+                    }
+
+                    var childExisting = child.Data.GetOne<LinkGroupID>();
+                    if (childExisting != null) ops.Add(new RemoveMapObjectData(child.ID, childExisting));
+                    ops.Add(new AddMapObjectData(child.ID, new LinkGroupID(childSlot, linkId, newInstance)));
+                }
             }
 
             await MapDocumentOperation.Perform(document, new Transaction(ops));

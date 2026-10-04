@@ -98,6 +98,17 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
                 else SyncOthers(change, members, origin, updatedLinked, snaps, groupMove);
             }
 
+            // Anything that isn't a solid is measured by its bounding box, which moves with the brushes inside it:
+            // take its snapshot again now that they've all been dealt with
+            foreach (var slotId in slotIds)
+            {
+                if (!index.Slots.TryGetValue(slotId, out var members)) continue;
+                foreach (var m in members.Where(x => !(x is Solid)))
+                {
+                    lock (snaps) snaps[m] = LinkGeometry.Snapshot.TakeAny(m);
+                }
+            }
+
             return Task.CompletedTask;
         }
 
@@ -174,7 +185,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
 
                 if (m is Solid solid)
                 {
-                    if (Classify(pre, LinkGeometry.Snapshot.Take(solid)) != Kind.Placement) return false;
+                    if (Classify(pre, LinkGeometry.Snapshot.Take(solid, pre.FaceIds)) != Kind.Placement) return false;
                 }
                 else
                 {
@@ -207,7 +218,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
                 LinkGeometry.Snapshot pre;
                 lock (snaps) pre = snaps[s];
 
-                var now = LinkGeometry.Snapshot.Take(s);
+                var now = LinkGeometry.Snapshot.Take(s, pre.FaceIds);
                 var kind = Classify(pre, now);
                 if (kind == Kind.None) continue;
 
@@ -236,6 +247,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
 
             // Take each target's frame from the old snapshots before anything is overwritten
             var plan = new List<KeyValuePair<Solid, LinkGeometry.Rigid>>();
+            var targetPres = new Dictionary<Solid, LinkGeometry.Snapshot>();
             LinkGeometry.Rigid delta = null;
             lock (snaps)
             {
@@ -243,41 +255,48 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
 
                 foreach (var target in targets)
                 {
-                    // The target wasn't edited in this change, so how it is right now is how it was before
-                    var targetPre = LinkGeometry.Snapshot.Take(target);
+                    // The target wasn't edited in this change, so how it is right now is how it was before.
+                    // Its faces are listed in the order they were last matched with the origin's, whatever order they're stored in now.
+                    snaps.TryGetValue(target, out var last);
+                    var targetPre = LinkGeometry.Snapshot.Take(target, last?.FaceIds);
                     var rigid = LinkGeometry.Rigid.Fit(originPre, targetPre);
 
                     // Not the same shape (the target was edited locally): line up their centres
                     if (rigid == null) rigid = LinkGeometry.Rigid.Translation(targetPre.Center - originPre.Center);
 
+                    targetPres[target] = targetPre;
                     plan.Add(new KeyValuePair<Solid, LinkGeometry.Rigid>(target, rigid));
                 }
             }
 
+            var newOrders = new Dictionary<Solid, IList<long>>();
             foreach (var kv in plan)
             {
                 var target = kv.Key;
+                var targetPre = targetPres[target];
+                newOrders[target] = targetPre.FaceIds;
+
                 switch (originKind)
                 {
                     case Kind.Placement:
                         if (delta == null) break;
-                        LinkGeometry.ApplyPlacement(change.Document, target, LinkGeometry.Snapshot.Take(target), delta, originNow.Centroid - originPre.Centroid, change);
+                        LinkGeometry.ApplyPlacement(change.Document, target, targetPre, delta, originNow.Centroid - originPre.Centroid, change);
                         break;
 
                     case Kind.Shape:
-                        LinkGeometry.Apply(change.Document, origin, target, kv.Value, change);
+                        newOrders[target] = LinkGeometry.Apply(change.Document, origin, originNow, target, targetPre, kv.Value, change);
                         break;
 
                     case Kind.Texture:
-                        LinkGeometry.ApplyTextures(origin, target, kv.Value, change);
+                        LinkGeometry.ApplyTextures(origin, originNow, target, targetPre, kv.Value, change);
                         break;
                 }
             }
 
             lock (snaps)
             {
-                snaps[origin] = LinkGeometry.Snapshot.Take(origin);
-                foreach (var kv in plan) snaps[kv.Key] = LinkGeometry.Snapshot.Take(kv.Key);
+                snaps[origin] = LinkGeometry.Snapshot.Take(origin, originNow.FaceIds);
+                foreach (var kv in plan) snaps[kv.Key] = LinkGeometry.Snapshot.Take(kv.Key, newOrders[kv.Key]);
             }
         }
 
@@ -317,12 +336,21 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
 
                 foreach (var target in targets.Where(x => !Contains(touched, x)))
                 {
-                    target.Transform(matrix);
-                    if (textureLock)
+                    // The brushes inside a linked entity have slots of their own and follow the origin's brushes themselves
+                    var ownBrushes = target.FindAll().Any(x => !ReferenceEquals(x, target) && LinkedObjects.GetLinkId(x) != null);
+                    if (ownBrushes)
                     {
-                        foreach (var o in target.FindAll())
+                        foreach (var d in target.Data.OfType<ITransformable>()) d.Transform(matrix);
+                    }
+                    else
+                    {
+                        target.Transform(matrix);
+                        if (textureLock)
                         {
-                            foreach (var t in o.Data.OfType<ITextured>()) t.Texture?.TransformUniform(matrix);
+                            foreach (var o in target.FindAll())
+                            {
+                                foreach (var t in o.Data.OfType<ITextured>()) t.Texture?.TransformUniform(matrix);
+                            }
                         }
                     }
                     target.DescendantsChanged();

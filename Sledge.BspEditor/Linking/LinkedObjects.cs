@@ -78,6 +78,58 @@ namespace Sledge.BspEditor.Linking
             return d.TopID != 0 ? d.TopID : d.ID;
         }
 
+        /// <summary>
+        /// True if this object isn't inside another linked object (eg a brush of a linked brush entity).
+        /// </summary>
+        public static bool IsTopLevel(IMapObject obj)
+        {
+            return FindLinkedOwner(obj.Hierarchy.Parent) == null;
+        }
+
+        /// <summary>
+        /// The brushes inside an object (a brush entity or group), at any depth.
+        /// </summary>
+        public static List<Solid> ChildSolids(IMapObject obj)
+        {
+            return obj.FindAll().Where(x => !ReferenceEquals(x, obj)).OfType<Solid>().ToList();
+        }
+
+        /// <summary>
+        /// Match the brushes inside <paramref name="obj"/> to the brushes inside <paramref name="counterpart"/>
+        /// (which is already linked): the same shape, and the closest to the same place inside its entity.
+        /// Returns the slot of the counterpart brush each brush matches. Brushes that match nothing aren't in the result.
+        /// </summary>
+        public static Dictionary<Solid, long> MatchChildren(IMapObject obj, IMapObject counterpart)
+        {
+            var result = new Dictionary<Solid, long>();
+            var mine = ChildSolids(obj);
+            var theirs = ChildSolids(counterpart).Where(x => GetLinkId(x) != null).ToList();
+            if (mine.Count == 0 || theirs.Count == 0) return result;
+
+            var myCentre = obj.BoundingBox.Center;
+            var theirCentre = counterpart.BoundingBox.Center;
+
+            var pairs = new List<Tuple<float, Solid, Solid>>();
+            foreach (var m in mine)
+            {
+                foreach (var t in theirs)
+                {
+                    if (!Congruent(m, t)) continue;
+                    var distance = ((m.BoundingBox.Center - myCentre) - (t.BoundingBox.Center - theirCentre)).Length();
+                    pairs.Add(Tuple.Create(distance, m, t));
+                }
+            }
+
+            var used = new HashSet<Solid>();
+            foreach (var p in pairs.OrderBy(x => x.Item1))
+            {
+                if (result.ContainsKey(p.Item2) || used.Contains(p.Item3)) continue;
+                result[p.Item2] = GetLinkId(p.Item3).Value;
+                used.Add(p.Item3);
+            }
+            return result;
+        }
+
         public static long GetInstance(IMapObject obj)
         {
             return obj?.Data.GetOne<LinkGroupID>()?.Instance ?? 0;
@@ -138,6 +190,10 @@ namespace Sledge.BspEditor.Linking
 
                 if (!index.Slots.TryGetValue(d.ID, out var slot)) index.Slots[d.ID] = slot = new List<IMapObject>();
                 slot.Add(o);
+
+                // The instances list the objects of the group. The brushes inside a linked entity are parts of that
+                // entity (they have slots of their own so they can be edited, but they aren't separate objects of the group).
+                if (!IsTopLevel(o)) continue;
 
                 var top = GetTopId(o);
                 if (!index.Links.TryGetValue(top, out var instances)) index.Links[top] = instances = new SortedDictionary<long, List<IMapObject>>();

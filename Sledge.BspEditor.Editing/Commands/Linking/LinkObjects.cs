@@ -83,6 +83,17 @@ namespace Sledge.BspEditor.Editing.Commands.Linking
                 var existing = t.Data.GetOne<LinkGroupID>();
                 if (existing != null) ops.Add(new RemoveMapObjectData(t.ID, existing));
                 ops.Add(new AddMapObjectData(t.ID, new LinkGroupID(slotId, linkId, 1)));
+
+                // The brushes inside an entity (or group) are linked too, each with a slot of its own, so they can be edited individually
+                foreach (var child in LinkedObjects.ChildSolids(t))
+                {
+                    var childSlot = ++next;
+                    ops.Add(new AddMapData(new LinkGroup { ID = childSlot, Name = name + " / " + childSlot, Colour = colour, ParentID = linkId }));
+
+                    var childExisting = child.Data.GetOne<LinkGroupID>();
+                    if (childExisting != null) ops.Add(new RemoveMapObjectData(child.ID, childExisting));
+                    ops.Add(new AddMapObjectData(child.ID, new LinkGroupID(childSlot, linkId, 1)));
+                }
             }
 
             await MapDocumentOperation.Perform(document, new Transaction(ops));

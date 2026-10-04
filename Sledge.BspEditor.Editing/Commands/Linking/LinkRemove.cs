@@ -38,8 +38,12 @@ namespace Sledge.BspEditor.Editing.Commands.Linking
             var ops = new List<IOperation>();
             foreach (var t in document.Selection.GetSelectedParents().ToList())
             {
-                var existing = t.Data.GetOne<LinkGroupID>();
-                if (existing != null) ops.Add(new RemoveMapObjectData(t.ID, existing));
+                // The brushes inside a linked entity are removed along with it
+                foreach (var o in t.FindAll())
+                {
+                    var existing = o.Data.GetOne<LinkGroupID>();
+                    if (existing != null) ops.Add(new RemoveMapObjectData(o.ID, existing));
+                }
             }
 
             if (ops.Count == 0) return;

@@ -78,6 +78,19 @@ namespace Sledge.BspEditor.Editing.Commands.Linking
                 if (existing != null) ops.Add(new RemoveMapObjectData(t.ID, existing));
                 ops.Add(new AddMapObjectData(t.ID, new LinkGroupID(slotId, linkId, originInstance)));
 
+                // The brushes inside it get slots of their own
+                var childSlots = new Dictionary<Solid, long>();
+                foreach (var child in LinkedObjects.ChildSolids(t))
+                {
+                    var childSlot = next++;
+                    childSlots[child] = childSlot;
+                    ops.Add(new AddMapData(new LinkGroup { ID = childSlot, Name = (link?.Name ?? "Link") + " / " + childSlot, Colour = LinkedObjects.ColourFor(linkId), ParentID = linkId }));
+
+                    var childExisting = child.Data.GetOne<LinkGroupID>();
+                    if (childExisting != null) ops.Add(new RemoveMapObjectData(child.ID, childExisting));
+                    ops.Add(new AddMapObjectData(child.ID, new LinkGroupID(childSlot, linkId, originInstance)));
+                }
+
                 // The closest object of the origin instance that every other instance also has: the added object sits relative to it
                 var reference = originMembers
                     .OrderBy(x => (x.BoundingBox.Center - t.BoundingBox.Center).LengthSquared())
@@ -107,9 +120,22 @@ namespace Sledge.BspEditor.Editing.Commands.Linking
                     }
 
                     var copy = (IMapObject) t.Copy(document.Map.NumberGenerator);
-                    copy.Data.Remove(x => x is LinkGroupID);
+                    foreach (var o in copy.FindAll()) o.Data.Remove(x => x is LinkGroupID);
+
+                    // Which brush of the copy is which brush of the original (they're still the same size and place)
+                    var copyChildren = new Dictionary<Solid, long>();
+                    var unmatched = LinkedObjects.ChildSolids(t).ToList();
+                    foreach (var cc in LinkedObjects.ChildSolids(copy))
+                    {
+                        var original = unmatched.FirstOrDefault(x => x.BoundingBox.Start == cc.BoundingBox.Start && x.BoundingBox.End == cc.BoundingBox.End);
+                        if (original == null) continue;
+                        unmatched.Remove(original);
+                        copyChildren[cc] = childSlots[original];
+                    }
+
                     LinkedObjects.TransformObject(copy, matrix, mirrored);
                     copy.Data.Add(new LinkGroupID(slotId, linkId, instance));
+                    foreach (var kv in copyChildren) kv.Key.Data.Add(new LinkGroupID(kv.Value, linkId, instance));
 
                     var parentId = t.Hierarchy.Parent?.ID ?? document.Map.Root.ID;
                     ops.Add(new Attach(parentId, copy));
