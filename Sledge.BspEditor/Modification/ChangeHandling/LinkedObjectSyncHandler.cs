@@ -4,6 +4,7 @@ using System.ComponentModel.Composition;
 using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
+using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Linking;
 using Sledge.BspEditor.Primitives;
 using Sledge.BspEditor.Primitives.MapData;
@@ -49,6 +50,8 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
             var doc = change.Document;
             var snaps = LinkGeometry.Snapshots(doc);
 
+            LinkGroupSelection.Update(change);
+
             foreach (var removed in change.Removed)
             {
                 lock (snaps) snaps.Remove(removed);
@@ -85,7 +88,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
             {
                 var key = InstanceKey(o);
                 if (groupMoves.Contains(key)) continue;
-                if (IsGroupMove(index, o, updatedLinked, snaps)) groupMoves.Add(key);
+                if (IsGroupMove(doc, index, o, updatedLinked, snaps)) groupMoves.Add(key);
             }
 
             foreach (var slotId in slotIds)
@@ -165,16 +168,37 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
         /// That's somebody moving the whole group, which only places the group: it isn't an edit to its objects, so
         /// nothing is passed on. (Moving some of the objects, or the only object of an instance, is an edit to those objects.)
         /// </summary>
-        private static bool IsGroupMove(LinkedObjects.LinkIndex index, IMapObject o, List<IMapObject> touched, LinkGeometry.SnapshotStore snaps)
+        private static bool IsGroupMove(MapDocument doc, LinkedObjects.LinkIndex index, IMapObject o, List<IMapObject> touched, LinkGeometry.SnapshotStore snaps)
         {
             if (!index.Links.TryGetValue(LinkedObjects.GetTopId(o), out var instances)) return false;
             if (!instances.TryGetValue(LinkedObjects.GetInstance(o), out var all)) return false;
 
             var visible = all.Where(x => !x.Data.OfType<IObjectVisibility>().Any(v => v.IsHidden)).ToList();
+
+            // The whole instance was selected as a group (by clicking its label): that is the group, however many objects it has
+            if (LinkGroupSelection.Covers(doc, LinkedObjects.GetTopId(o), LinkedObjects.GetInstance(o), visible)) return true;
+
             if (visible.Count < 2) return false;
 
             foreach (var m in visible)
             {
+                // An entity with brushes of its own: it was only placed if every one of its brushes was only placed
+                var brushes = LinkedObjects.ChildSolids(m).Where(x => LinkedObjects.GetLinkId(x) != null).ToList();
+                if (!(m is Solid) && brushes.Count > 0)
+                {
+                    if (!Contains(touched, m) && !brushes.Any(x => Contains(touched, x))) return false;
+                    foreach (var b in brushes)
+                    {
+                        LinkGeometry.Snapshot brushPre;
+                        lock (snaps)
+                        {
+                            if (!snaps.TryGetValue(b, out brushPre)) return false;
+                        }
+                        if (Classify(brushPre, LinkGeometry.Snapshot.Take(b, brushPre.FaceIds)) != Kind.Placement) return false;
+                    }
+                    continue;
+                }
+
                 if (!Contains(touched, m)) return false;
 
                 LinkGeometry.Snapshot pre;

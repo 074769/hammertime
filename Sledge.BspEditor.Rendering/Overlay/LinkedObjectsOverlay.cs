@@ -168,6 +168,10 @@ namespace Sledge.BspEditor.Rendering.Overlay
             }
             if (objects.Count == 0) return true;
 
+            // Remember that this was a whole instance selected as a group, so moving it doesn't move the other instances
+            if (!add && !wholeLink) LinkGroupSelection.Set(doc, hit.LinkId, hit.Instance, objects);
+            else LinkGroupSelection.Clear(doc);
+
             var transaction = new Transaction();
             if (!add && !doc.Selection.IsEmpty) transaction.Add(new Deselect(doc.Selection.ToList()));
             transaction.Add(new Select(objects));
