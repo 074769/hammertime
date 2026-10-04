@@ -112,10 +112,9 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
             return Task.CompletedTask;
         }
 
-                /// <summary>
+        /// <summary>
         /// A copy of a linked object (paste, duplicate) keeps its place in the link. If that place is already taken,
         /// the copies are a new instance of the link: all the copies that came from one instance share one new instance.
-        /// A linked entity's brushes come along with it and share the same new instance.
         /// </summary>
         private static void SeparateCopies(Change change, List<IMapObject> added, LinkedObjects.LinkIndex index)
         {
@@ -128,30 +127,15 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
                     taken.Add(kv.Key + ":" + LinkedObjects.GetInstance(o));
                 }
             }
-        
+
             var newInstance = new Dictionary<string, long>();
-        
-            foreach (var o in added.ToList())
+            foreach (var o in added)
             {
                 var d = o.Data.GetOne<LinkGroupID>();
-                if (d == null) continue;
                 var top = LinkedObjects.GetTopId(o);
-                if (top == 0) continue;
-        
-                var slotKey = d.ID + ":" + d.Instance;
-                var isTaken = taken.Contains(slotKey);
-        
-                if (!isTaken)
-                {
-                    var descendantKey = top + ":" + d.Instance;
-                    if (newInstance.TryGetValue(descendantKey, out var assigned))
-                    {
-                        o.Data.Replace(new LinkGroupID(d.ID, d.TopID, assigned));
-                        change.Update(o);
-                    }
-                    continue;
-                }
-        
+                if (top == 0 || !taken.Contains(d.ID + ":" + d.Instance)) continue;
+
+                // All the copies from the same instance of the same link go to the same new instance
                 var key = top + ":" + d.Instance;
                 if (!newInstance.TryGetValue(key, out var instance))
                 {
@@ -159,26 +143,10 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
                     var already = newInstance.Where(x => x.Key.StartsWith(top + ":")).Select(x => x.Value).DefaultIfEmpty(0).Max();
                     instance = Math.Max(existing, already) + 1;
                     newInstance[key] = instance;
-        
-                    foreach (var descendant in EnumerateLinked(o))
-                    {
-                        var dd = descendant.Data.GetOne<LinkGroupID>();
-                        if (dd == null) continue;
-                        descendant.Data.Replace(new LinkGroupID(dd.ID, dd.TopID, instance));
-                        change.Update(descendant);
-                    }
                 }
-            }
-        }
-        
-        /// <summary>The object and everything under it that carries a link.</summary>
-        private static IEnumerable<IMapObject> EnumerateLinked(IMapObject root)
-        {
-            if (LinkedObjects.GetLinkId(root) != null) yield return root;
-            foreach (var child in root.FindAll())
-            {
-                if (ReferenceEquals(child, root)) continue;
-                if (LinkedObjects.GetLinkId(child) != null) yield return child;
+
+                o.Data.Replace(new LinkGroupID(d.ID, d.TopID, instance));
+                change.Update(o);
             }
         }
 
