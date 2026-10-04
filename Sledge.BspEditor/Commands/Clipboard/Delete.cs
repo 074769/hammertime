@@ -2,6 +2,7 @@ using System.ComponentModel.Composition;
 using System.Linq;
 using System.Threading.Tasks;
 using Sledge.BspEditor.Documents;
+using Sledge.BspEditor.Linking;
 using Sledge.BspEditor.Modification;
 using Sledge.BspEditor.Modification.Operations.Tree;
 using Sledge.BspEditor.Properties;
@@ -28,7 +29,9 @@ namespace Sledge.BspEditor.Commands.Clipboard
             var sel = document.Selection.GetSelectedParents().ToList();
             if (sel.Any())
             {
-                var t = new Transaction(sel.GroupBy(x => x.Hierarchy.Parent.ID).Select(x => new Detatch(x.Key, x)));
+                // Deleting an object of a link's origin instance deletes its copies in the other instances too
+                var removing = sel.Concat(LinkedObjects.GetCounterpartsToDelete(document, sel)).ToList();
+                var t = new Transaction(removing.GroupBy(x => x.Hierarchy.Parent.ID).Select(x => new Detatch(x.Key, x)));
                 await MapDocumentOperation.Perform(document, t);
             }
         }

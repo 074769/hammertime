@@ -175,6 +175,44 @@ namespace Sledge.BspEditor.Linking
             }
         }
 
+        /// <summary>
+        /// The objects in the other instances that go when the given objects are deleted: an object of a link's origin instance
+        /// is what the other instances are copies of, so with it gone they are no longer connected to anything and go too.
+        /// Objects deleted from the other instances are deleted on their own, as they are edited freely and locally.
+        /// </summary>
+        public static List<IMapObject> GetCounterpartsToDelete(MapDocument document, IEnumerable<IMapObject> deleting)
+        {
+            var result = new List<IMapObject>();
+            var gone = new HashSet<IMapObject>(deleting.SelectMany(x => x.FindAll()));
+            if (!gone.Any(x => GetLinkId(x) != null)) return result;
+
+            var index = BuildIndex(document);
+            var found = new HashSet<IMapObject>();
+            foreach (var o in gone)
+            {
+                var slot = GetLinkId(o);
+                if (slot == null || !index.Slots.TryGetValue(slot.Value, out var members)) continue;
+                if (GetInstance(o) != index.OriginInstance(GetTopId(o))) continue;
+
+                foreach (var m in members)
+                {
+                    if (!gone.Contains(m) && GetInstance(m) != GetInstance(o)) found.Add(m);
+                }
+            }
+
+            // Anything inside another object that goes anyway doesn't need to go on its own
+            foreach (var m in found)
+            {
+                var inside = false;
+                for (var p = m.Hierarchy.Parent; p != null && !inside; p = p.Hierarchy.Parent)
+                {
+                    inside = found.Contains(p) || gone.Contains(p);
+                }
+                if (!inside && m.Hierarchy.Parent != null) result.Add(m);
+            }
+            return result;
+        }
+
         public static LinkIndex BuildIndex(MapDocument document)
         {
             var index = new LinkIndex();
