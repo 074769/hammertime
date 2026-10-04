@@ -26,6 +26,12 @@ namespace Sledge.BspEditor.Environment
         IEnumerable<string> ManuallyDisabledTexturePackages { get; }
 
         /// <summary>
+        /// The texture packages the environment settings leave unticked (not loaded by default).
+        /// A new map starts with exactly these unticked and everything else ticked.
+        /// </summary>
+        IEnumerable<string> EnvironmentDisabledTexturePackages { get; }
+
+        /// <summary>
         /// Records which texture packages the user wants unloaded WITHOUT reloading anything.
         /// The choice is applied the next time <see cref="RefreshTexturePackages"/> is called.
         /// </summary>

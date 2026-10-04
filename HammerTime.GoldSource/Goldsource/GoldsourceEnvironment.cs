@@ -231,6 +231,8 @@ namespace Sledge.BspEditor.Environment.Goldsource
 			return _wadProvider.GetPackagesInFile(Root).Select(x => x.Name).Distinct(StringComparer.InvariantCultureIgnoreCase);
 		}
 
+		public IEnumerable<string> EnvironmentDisabledTexturePackages => (ExcludedWads ?? new List<string>()).ToList();
+
 		public IEnumerable<string> ManuallyDisabledTexturePackages => _pendingDisabledWads;
 
 		public void SetPendingDisabledTexturePackages(IEnumerable<string> packageNames)

@@ -139,10 +139,11 @@ namespace Sledge.BspEditor.Documents
 			var env = await GetEnvironment();
 			if (env == null) return null;
 
-			// New projects start with every texture package (WAD) unticked; the user picks what to load.
+			// New projects load the WADs ticked in the environment settings; the browser shows
+			// exactly those ticked. Nothing extra is unloaded.
 			if (env is ITexturePackageManager newMapPackages)
 			{
-				newMapPackages.SetManuallyDisabledTexturePackages(newMapPackages.GetAllTexturePackageNames().ToList());
+				newMapPackages.SetPendingDisabledTexturePackages(newMapPackages.EnvironmentDisabledTexturePackages.ToList());
 			}
 
 			var md = new MapDocument(new Map(), env)
