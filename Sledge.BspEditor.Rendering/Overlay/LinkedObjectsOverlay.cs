@@ -172,9 +172,13 @@ namespace Sledge.BspEditor.Rendering.Overlay
             if (!add && !wholeLink) LinkGroupSelection.Set(doc, hit.LinkId, hit.Instance, objects);
             else LinkGroupSelection.Clear(doc);
 
+            // Select what a normal click on these would: each object together with everything inside it (an entity's brushes, a group's members).
+            // Without those, flipping or texture-locking the selection skips the brushes inside, which are left inside out.
+            var everything = objects.SelectMany(o => o.FindAll()).Distinct().ToList();
+
             var transaction = new Transaction();
             if (!add && !doc.Selection.IsEmpty) transaction.Add(new Deselect(doc.Selection.ToList()));
-            transaction.Add(new Select(objects));
+            transaction.Add(new Select(everything));
             MapDocumentOperation.Perform(doc, transaction);
             return true;
         }
