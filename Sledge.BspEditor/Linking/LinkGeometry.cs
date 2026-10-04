@@ -658,19 +658,15 @@ namespace Sledge.BspEditor.Linking
         /// Move a solid the way its origin counterpart was just moved: every point is turned by the same rotation (or flip)
         /// around the solid's own centre, and shifted by the same amount as the origin object's centre.
         /// </summary>
-        public static void ApplyPlacement(MapDocument document, Solid target, Snapshot targetNow, Rigid delta, Vector3 centreShift, Change change)
+        public static void ApplyPlacement(MapDocument document, Solid target, Rigid delta, Rigid instance, Change change)
         {
-            var centre = targetNow.Centroid;
-            var x = delta.Direction(Vector3.UnitX);
-            var y = delta.Direction(Vector3.UnitY);
-            var z = delta.Direction(Vector3.UnitZ);
-            var t = centre + centreShift - delta.Direction(centre);
-            var matrix = new Matrix4x4(
-                x.X, x.Y, x.Z, 0,
-                y.X, y.Y, y.Z, 0,
-                z.X, z.Y, z.Z, 0,
-                t.X, t.Y, t.Z, 1
-            );
+            // The origin was moved by delta. The target is a copy of the origin that was turned and moved by instance, so the
+            // same movement for the target is the origin's as seen from the target: back into the origin's frame, move, and out again.
+            // (Moving the origin along its x axis moves a copy that was turned a quarter turn along its own y axis.)
+            var movement = delta.ToMatrix();
+            var toTarget = instance.ToMatrix();
+            if (!Matrix4x4.Invert(toTarget, out var fromTarget)) return;
+            var matrix = fromTarget * movement * toTarget;
 
             var textureLock = (document.Map.Data.GetOne<TransformationFlags>() ?? new TransformationFlags()).TextureLock;
 

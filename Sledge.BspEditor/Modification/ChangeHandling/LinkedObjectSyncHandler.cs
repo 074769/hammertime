@@ -304,7 +304,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
                 {
                     case Kind.Placement:
                         if (delta == null) break;
-                        LinkGeometry.ApplyPlacement(change.Document, target, targetPre, delta, originNow.Centroid - originPre.Centroid, change);
+                        LinkGeometry.ApplyPlacement(change.Document, target, delta, kv.Value, change);
                         break;
 
                     case Kind.Shape:
