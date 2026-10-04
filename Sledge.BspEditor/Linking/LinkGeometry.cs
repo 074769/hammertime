@@ -324,58 +324,66 @@ namespace Sledge.BspEditor.Linking
             return Snapshot.Take(solid, previous?.FaceIds);
         }
 
-        /// <summary>
+                /// <summary>
         /// Snapshots by object. They're keyed by the object itself rather than its ID, so two objects that
         /// somehow share an ID can't be mistaken for each other, and removed objects are forgotten automatically.
+        /// Internally thread-safe: callers do not need to lock this.
         /// </summary>
         public class SnapshotStore
         {
+            private readonly object _lock = new object();
             private ConditionalWeakTable<IMapObject, Snapshot> _table = new ConditionalWeakTable<IMapObject, Snapshot>();
         
             public Snapshot this[IMapObject obj]
             {
-                get => _table.TryGetValue(obj, out var s) ? s : throw new KeyNotFoundException();
+                get { lock (_lock) return _table.TryGetValue(obj, out var s) ? s : throw new KeyNotFoundException(); }
                 set
                 {
-                    _table.Remove(obj);
-                    _table.Add(obj, value);
+                    lock (_lock)
+                    {
+                        _table.Remove(obj);
+                        _table.Add(obj, value);
+                    }
                 }
             }
         
             public bool ContainsKey(IMapObject obj)
             {
-                return _table.TryGetValue(obj, out _);
+                lock (_lock) return _table.TryGetValue(obj, out _);
             }
         
             public bool TryGetValue(IMapObject obj, out Snapshot snapshot)
             {
-                return _table.TryGetValue(obj, out snapshot);
+                lock (_lock) return _table.TryGetValue(obj, out snapshot);
             }
         
             public void Remove(IMapObject obj)
             {
-                _table.Remove(obj);
+                lock (_lock) _table.Remove(obj);
             }
         
             public void Clear()
             {
-                _table = new ConditionalWeakTable<IMapObject, Snapshot>();
+                lock (_lock) _table = new ConditionalWeakTable<IMapObject, Snapshot>();
             }
         }
         
         private static readonly ConditionalWeakTable<MapDocument, SnapshotStore> Store =
             new ConditionalWeakTable<MapDocument, SnapshotStore>();
+        private static readonly object StoreLock = new object();
         
         /// <summary>
-        /// The snapshots for a document. Lock the store while using it.
+        /// The snapshots for a document.
         /// </summary>
         public static SnapshotStore Snapshots(MapDocument document)
         {
-            return Store.GetValue(document, _ => new SnapshotStore());
+            lock (StoreLock) return Store.GetValue(document, _ => new SnapshotStore());
         }
         
         /// <summary>
-        /// Take a snapshot of every linked object in the document as it is right now.
+        /// Take a snapshot of every linked object in the document that doesn't have one yet.
+        /// (Re-activating a document must not reset snapshots that are already in use, or the
+        /// first edit after switching back is treated as no change and doesn't propagate.)
         /// </summary>
         public static void SeedAll(MapDocument document)
         {
@@ -383,22 +391,9 @@ namespace Sledge.BspEditor.Linking
             var members = LinkedObjects.GetMembers(document);
             lock (snaps)
             {
-                snaps.Clear();
                 foreach (var o in members.SelectMany(x => x.Value))
                 {
-                    snaps[o] = Snapshot.TakeAny(o);
-                }
-            }
-        }
-        {
-            var snaps = Snapshots(document);
-            var members = LinkedObjects.GetMembers(document);
-            lock (snaps)
-            {
-                snaps.Clear();
-                foreach (var o in members.SelectMany(x => x.Value))
-                {
-                    snaps[o] = Snapshot.TakeAny(o);
+                    if (!snaps.ContainsKey(o)) snaps[o] = Snapshot.TakeAny(o);
                 }
             }
         }
