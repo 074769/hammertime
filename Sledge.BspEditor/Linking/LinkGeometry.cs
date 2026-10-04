@@ -331,7 +331,7 @@ namespace Sledge.BspEditor.Linking
         public class SnapshotStore
         {
             private ConditionalWeakTable<IMapObject, Snapshot> _table = new ConditionalWeakTable<IMapObject, Snapshot>();
-
+        
             public Snapshot this[IMapObject obj]
             {
                 get => _table.TryGetValue(obj, out var s) ? s : throw new KeyNotFoundException();
@@ -341,31 +341,31 @@ namespace Sledge.BspEditor.Linking
                     _table.Add(obj, value);
                 }
             }
-
+        
             public bool ContainsKey(IMapObject obj)
             {
                 return _table.TryGetValue(obj, out _);
             }
-
+        
             public bool TryGetValue(IMapObject obj, out Snapshot snapshot)
             {
                 return _table.TryGetValue(obj, out snapshot);
             }
-
+        
             public void Remove(IMapObject obj)
             {
                 _table.Remove(obj);
             }
-
+        
             public void Clear()
             {
                 _table = new ConditionalWeakTable<IMapObject, Snapshot>();
             }
         }
-
+        
         private static readonly ConditionalWeakTable<MapDocument, SnapshotStore> Store =
             new ConditionalWeakTable<MapDocument, SnapshotStore>();
-
+        
         /// <summary>
         /// The snapshots for a document. Lock the store while using it.
         /// </summary>
@@ -373,11 +373,23 @@ namespace Sledge.BspEditor.Linking
         {
             return Store.GetValue(document, _ => new SnapshotStore());
         }
-
+        
         /// <summary>
         /// Take a snapshot of every linked object in the document as it is right now.
         /// </summary>
         public static void SeedAll(MapDocument document)
+        {
+            var snaps = Snapshots(document);
+            var members = LinkedObjects.GetMembers(document);
+            lock (snaps)
+            {
+                snaps.Clear();
+                foreach (var o in members.SelectMany(x => x.Value))
+                {
+                    snaps[o] = Snapshot.TakeAny(o);
+                }
+            }
+        }
         {
             var snaps = Snapshots(document);
             var members = LinkedObjects.GetMembers(document);
