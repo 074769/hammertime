@@ -257,9 +257,9 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
                 {
                     // The target wasn't edited in this change, so how it is right now is how it was before.
                     // Its faces are listed in the order they were last matched with the origin's, whatever order they're stored in now.
+                    // If that order has been lost (eg the map was saved and reopened), the faces are matched by where they are.
                     snaps.TryGetValue(target, out var last);
-                    var targetPre = LinkGeometry.Snapshot.Take(target, last?.FaceIds);
-                    var rigid = LinkGeometry.Rigid.Fit(originPre, targetPre);
+                    var targetPre = LinkGeometry.AlignTo(originPre, target, last, out var rigid);
 
                     // Not the same shape (the target was edited locally): line up their centres
                     if (rigid == null) rigid = LinkGeometry.Rigid.Translation(targetPre.Center - originPre.Center);
@@ -290,6 +290,12 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
                     case Kind.Texture:
                         LinkGeometry.ApplyTextures(origin, originNow, target, targetPre, kv.Value, change);
                         break;
+                }
+
+                // Keep the target's faces stored in the origin's order, so they stay matched after saving and reopening
+                if (originKind == Kind.Texture || originKind == Kind.Shape)
+                {
+                    LinkGeometry.MirrorFaceOrder(origin, originNow.FaceIds, target, newOrders[target]);
                 }
             }
 

@@ -51,7 +51,12 @@ namespace Sledge.BspEditor.Linking
 
             public static Snapshot Take(Solid solid, IList<long> order = null)
             {
-                var faces = OrderedFaces(solid, order);
+                return FromFaces(OrderedFaces(solid, order));
+            }
+
+            /// <summary>A snapshot of the given faces, in the given order.</summary>
+            public static Snapshot FromFaces(IList<Face> faces)
+            {
                 return new Snapshot
                 {
                     FaceIds = faces.Select(x => x.ID).ToArray(),
@@ -248,6 +253,75 @@ namespace Sledge.BspEditor.Linking
                 return FitPoints(from.Points, to.Points, false) ?? FitPoints(from.Points, to.ReversedFaces().Points, true);
             }
 
+            /// <summary>
+            /// Every movement (rotation / flip and translation) that takes the set of points <paramref name="from"/> onto the set
+            /// of points <paramref name="to"/>, in any order. A symmetrical shape has several (a cube has 24 rotations).
+            /// </summary>
+            public static List<Rigid> FitSets(Vector3[] from, Vector3[] to)
+            {
+                var result = new List<Rigid>();
+                if (from.Length != to.Length || from.Length < 3) return result;
+
+                var i0 = 0;
+                var i1 = 0;
+                var best = 0f;
+                for (var i = 1; i < from.Length; i++)
+                {
+                    var d = (from[i] - from[i0]).LengthSquared();
+                    if (d > best) { best = d; i1 = i; }
+                }
+                if (i1 == 0) return result;
+
+                var i2 = -1;
+                best = 0f;
+                var edge = from[i1] - from[i0];
+                for (var i = 1; i < from.Length; i++)
+                {
+                    if (i == i1) continue;
+                    var a = Vector3.Cross(edge, from[i] - from[i0]).LengthSquared();
+                    if (a > best) { best = a; i2 = i; }
+                }
+                if (i2 < 0) return result;
+
+                var ff = new Vector3[3];
+                if (!BuildFrame(from, i0, i1, i2, ff)) return result;
+
+                var d01 = (from[i1] - from[i0]).Length();
+                var d02 = (from[i2] - from[i0]).Length();
+                var d12 = (from[i2] - from[i1]).Length();
+                const float tol = 0.1f;
+
+                for (var a = 0; a < to.Length; a++)
+                {
+                    for (var b = 0; b < to.Length; b++)
+                    {
+                        if (b == a || Math.Abs((to[b] - to[a]).Length() - d01) > tol) continue;
+                        for (var c = 0; c < to.Length; c++)
+                        {
+                            if (c == a || c == b) continue;
+                            if (Math.Abs((to[c] - to[a]).Length() - d02) > tol) continue;
+                            if (Math.Abs((to[c] - to[b]).Length() - d12) > tol) continue;
+
+                            var tf = new Vector3[3];
+                            if (!BuildFrame(to, a, b, c, tf)) continue;
+
+                            foreach (var mirrored in new[] { false, true })
+                            {
+                                var rigid = new Rigid(from[i0], to[a], ff, tf, mirrored);
+                                var ok = true;
+                                foreach (var p in from)
+                                {
+                                    var m = rigid.Point(p);
+                                    if (!to.Any(t => (t - m).Length() <= Epsilon)) { ok = false; break; }
+                                }
+                                if (ok) result.Add(rigid);
+                            }
+                        }
+                    }
+                }
+                return result;
+            }
+
             private static Rigid FitPoints(Vector3[] from, Vector3[] to, bool mirrored)
             {
                 if (from.Length != to.Length || from.Length < 3) return null;
@@ -311,6 +385,148 @@ namespace Sledge.BspEditor.Linking
                 result.Add(f);
             }
             return result;
+        }
+
+        private static Vector3[] UniquePoints(IEnumerable<Vector3> points)
+        {
+            var result = new List<Vector3>();
+            foreach (var p in points)
+            {
+                if (!result.Any(x => (x - p).Length() <= Epsilon)) result.Add(p);
+            }
+            return result.ToArray();
+        }
+
+        private static bool SameTexture(Texture a, Texture b)
+        {
+            return a.Name == b.Name
+                   && Math.Abs(a.XShift - b.XShift) <= 0.01f && Math.Abs(a.YShift - b.YShift) <= 0.01f
+                   && Math.Abs(a.XScale - b.XScale) <= 0.0001f && Math.Abs(a.YScale - b.YScale) <= 0.0001f
+                   && (a.UAxis - b.UAxis).Length() <= 0.001f && (a.VAxis - b.VAxis).Length() <= 0.001f;
+        }
+
+        /// <summary>
+        /// Lists the faces of <paramref name="target"/> in the order that matches the faces of <paramref name="originPre"/>,
+        /// and finds the movement that takes the one onto the other, working it out from where the faces actually are.
+        /// Used when the face order the two solids were last matched with has been lost (eg the map was saved and reopened,
+        /// which stores the faces in the order they happen to be in). Returns null if the shapes aren't the same.
+        /// </summary>
+        private static Snapshot MatchByGeometry(Snapshot originPre, Solid target, out Rigid rigid)
+        {
+            rigid = null;
+            var tFaces = target.Faces.ToList();
+            if (originPre == null || tFaces.Count != originPre.Counts.Length) return null;
+
+            var oPts = UniquePoints(originPre.Points);
+            var tPts = UniquePoints(tFaces.SelectMany(x => x.Vertices));
+            if (oPts.Length != tPts.Length) return null;
+
+            // Where each face of the origin starts in its list of points
+            var starts = new int[originPre.Counts.Length];
+            for (var i = 1; i < starts.Length; i++) starts[i] = starts[i - 1] + originPre.Counts[i - 1];
+
+            Snapshot bestSnap = null;
+            Rigid bestRigid = null;
+            var bestScore = -1;
+
+            foreach (var candidate in Rigid.FitSets(oPts, tPts))
+            {
+                var matrix = candidate.ToMatrix();
+                var used = new HashSet<int>();
+                var order = new List<Face>();
+                var score = 0;
+                var ok = true;
+
+                for (var f = 0; f < starts.Length && ok; f++)
+                {
+                    var mapped = new List<Vector3>();
+                    for (var k = 0; k < originPre.Counts[f]; k++) mapped.Add(candidate.Point(originPre.Points[starts[f] + k]));
+
+                    var found = -1;
+                    for (var t = 0; t < tFaces.Count && found < 0; t++)
+                    {
+                        if (used.Contains(t) || tFaces[t].Vertices.Count != mapped.Count) continue;
+                        var verts = tFaces[t].Vertices.ToList();
+                        if (mapped.All(m => verts.Any(v => (v - m).Length() <= Epsilon))) found = t;
+                    }
+
+                    if (found < 0) { ok = false; break; }
+                    used.Add(found);
+                    order.Add(tFaces[found]);
+
+                    // A symmetrical shape fits several ways: the way the textures line up decides
+                    if (f < originPre.Textures.Length)
+                    {
+                        var tex = originPre.Textures[f].Clone();
+                        tex.TransformUniform(matrix);
+                        var other = tFaces[found].Texture;
+                        if (tex.Name == other.Name) score++;
+                        if (SameTexture(tex, other)) score++;
+                    }
+                }
+
+                if (!ok || score <= bestScore) continue;
+                bestScore = score;
+                bestRigid = candidate;
+                bestSnap = Snapshot.FromFaces(order);
+            }
+
+            rigid = bestRigid;
+            return bestSnap;
+        }
+
+        /// <summary>
+        /// The target's faces listed in the order that matches the origin's snapshot (face for face), with the movement that takes
+        /// the origin onto the target. If the order the two were last matched with still holds, that is used. Otherwise
+        /// the faces are matched by where they are. The rigid is null if the target isn't the same shape as the origin.
+        /// </summary>
+        public static Snapshot AlignTo(Snapshot originPre, Solid target, Snapshot targetLast, out Rigid rigid)
+        {
+            var plain = Snapshot.Take(target, targetLast?.FaceIds);
+            rigid = Rigid.Fit(originPre, plain);
+            if (rigid != null) return plain;
+
+            var matched = MatchByGeometry(originPre, target, out rigid);
+            if (matched != null && rigid != null) return matched;
+
+            rigid = null;
+            return plain;
+        }
+
+        /// <summary>
+        /// Stores the target's faces in the same order as the origin's, so that the pairing of the two survives the map being
+        /// saved and reopened (the faces are stored in this order, and that order is what pairs them up on loading).
+        /// </summary>
+        public static void MirrorFaceOrder(Solid origin, IList<long> originOrder, Solid target, IList<long> targetOrder)
+        {
+            if (originOrder == null || targetOrder == null || originOrder.Count != targetOrder.Count) return;
+
+            var pair = new Dictionary<long, long>();
+            for (var i = 0; i < originOrder.Count; i++)
+            {
+                if (pair.ContainsKey(originOrder[i])) return;
+                pair[originOrder[i]] = targetOrder[i];
+            }
+
+            var current = target.Faces.ToList();
+            var byId = new Dictionary<long, Face>();
+            foreach (var f in current)
+            {
+                if (byId.ContainsKey(f.ID)) return;
+                byId[f.ID] = f;
+            }
+
+            var desired = new List<Face>();
+            foreach (var of in origin.Faces)
+            {
+                if (!pair.TryGetValue(of.ID, out var tid) || !byId.TryGetValue(tid, out var tf)) return;
+                if (desired.Contains(tf)) return;
+                desired.Add(tf);
+            }
+            if (desired.Count != current.Count || desired.SequenceEqual(current)) return;
+
+            foreach (var f in current) target.Data.Remove(f);
+            foreach (var f in desired) target.Data.Add(f);
         }
 
         /// <summary>
