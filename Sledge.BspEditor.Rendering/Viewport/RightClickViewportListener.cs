@@ -125,6 +125,10 @@ namespace Sledge.BspEditor.Rendering.Viewport
             var windowVisible = _menuWindow != IntPtr.Zero && IsWindowVisible(_menuWindow);
             Log("hidden detected: minimized=" + minimized + " otherApp=" + otherApp + " tick=" + _hiddenTicks + " windowVisible=" + windowVisible);
 
+            // The menu we know about reports as not visible, so look for any popup window of ours that is
+            // still on screen while the app is minimized and hide it.
+            SweepVisiblePopups(_hiddenTicks == 1);
+
             try
             {
                 if (_hiddenTicks <= 2)
@@ -152,6 +156,59 @@ namespace Sledge.BspEditor.Rendering.Viewport
                 Log("BeginInvoke failed: " + ex.GetType().Name + ": " + ex.Message);
             }
         }
+
+        private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
+
+        private void SweepVisiblePopups(bool logAll)
+        {
+            try
+            {
+                EnumWindows((hwnd, lParam) =>
+                {
+                    GetWindowThreadProcessId(hwnd, out var pid);
+                    if (pid != ProcessId || !IsWindowVisible(hwnd)) return true;
+
+                    var style = GetWindowLong(hwnd, GWL_STYLE);
+                    var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+                    var isPopup = (style & WS_POPUP) != 0;
+                    var isTopmost = (exStyle & WS_EX_TOPMOST) != 0;
+                    var isMainWindow = hwnd == _rootWindow;
+
+                    if (logAll)
+                    {
+                        var cls = new System.Text.StringBuilder(128);
+                        GetClassName(hwnd, cls, cls.Capacity);
+                        GetWindowRect(hwnd, out var r);
+                        Log("  visible window " + hwnd + " class=" + cls + " style=0x" + style.ToString("X") + " ex=0x" + exStyle.ToString("X") + " rect=" + r.Left + "," + r.Top + "," + r.Right + "," + r.Bottom + (isMainWindow ? " (shell)" : ""));
+                    }
+
+                    if (!isMainWindow && isPopup && isTopmost)
+                    {
+                        Log("  hiding stray popup " + hwnd);
+                        ShowWindow(hwnd, SW_HIDE);
+                    }
+
+                    return true;
+                }, IntPtr.Zero);
+            }
+            catch (Exception ex)
+            {
+                Log("sweep failed: " + ex.Message);
+            }
+        }
+
+        private const int GWL_STYLE = -16;
+        private const int GWL_EXSTYLE = -20;
+        private const int WS_POPUP = unchecked((int) 0x80000000);
+        private const int WS_EX_TOPMOST = 0x8;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT { public int Left, Top, Right, Bottom; }
+
+        [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc proc, IntPtr lParam);
+        [DllImport("user32.dll", EntryPoint = "GetWindowLongW")] private static extern int GetWindowLong(IntPtr hwnd, int index);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(IntPtr hwnd, System.Text.StringBuilder text, int count);
+        [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
 
         private const uint GA_ROOTOWNER = 3;
         private const int SW_HIDE = 0;
