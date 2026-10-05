@@ -140,6 +140,9 @@ namespace Sledge.BspEditor.Linking
                 return new Snapshot { FaceIds = FaceIds, Counts = Counts, Points = points, Textures = Textures, Reference = Reference };
             }
 
+            /// <summary>False if any point isn't a real number (a broken edit can leave NaN / infinity behind).</summary>
+            public bool IsFinite => Points.All(IsFinitePoint);
+
             public Vector3 Center
             {
                 get
@@ -172,6 +175,9 @@ namespace Sledge.BspEditor.Linking
 
             /// <summary>True if this flips the shape inside out. Face vertices have to be reversed to keep faces pointing outwards.</summary>
             public bool Mirrored => _side < 0;
+
+            /// <summary>False if the movement has NaN / infinity in it, which would wreck everything it is applied to.</summary>
+            public bool IsFinite => LinkGeometry.IsFinite(ToMatrix());
 
             private Rigid(Vector3 offset)
             {
@@ -357,9 +363,10 @@ namespace Sledge.BspEditor.Linking
                 // Every point has to land where it should, otherwise it's a different shape
                 for (var i = 0; i < from.Length; i++)
                 {
-                    if ((rigid.Point(from[i]) - to[i]).Length() > Epsilon) return null;
+                    // Written so that NaN fails too: a comparison with NaN is never true
+                    if (!((rigid.Point(from[i]) - to[i]).Length() <= Epsilon)) return null;
                 }
-                return rigid;
+                return rigid.IsFinite ? rigid : null;
             }
         }
 
@@ -385,6 +392,84 @@ namespace Sledge.BspEditor.Linking
                 result.Add(f);
             }
             return result;
+        }
+
+        private static Vector3[] PointsOf(Solid solid)
+        {
+            var result = new List<Vector3>();
+            foreach (var v in solid.Faces.SelectMany(x => x.Vertices))
+            {
+                if (!result.Any(x => (x - v).Length() <= 0.05f)) result.Add(v);
+            }
+            return result.ToArray();
+        }
+
+        /// <summary>
+        /// How the given instance sits compared with the origin instance (the movement that takes the origin onto it), found from
+        /// the brushes the two have in common. A symmetrical brush fits several movements on its own, so the movement
+        /// that suits the most brushes is the one used. Brushes with broken geometry take no part.
+        /// </summary>
+        public static Rigid InstanceTransform(LinkedObjects.LinkIndex index, long linkId, long originInstance, long instance, IMapObject near)
+        {
+            var pairs = new List<(Solid origin, Solid other)>();
+            foreach (var members in index.Slots.Values)
+            {
+                var o = members.FirstOrDefault(x => LinkedObjects.GetTopId(x) == linkId && LinkedObjects.GetInstance(x) == originInstance) as Solid;
+                var c = members.FirstOrDefault(x => LinkedObjects.GetTopId(x) == linkId && LinkedObjects.GetInstance(x) == instance) as Solid;
+                if (o == null || c == null) continue;
+                if (o.Faces.Any(f => f.Vertices.Any(v => !IsFinitePoint(v))) || c.Faces.Any(f => f.Vertices.Any(v => !IsFinitePoint(v)))) continue;
+                pairs.Add((o, c));
+            }
+            if (pairs.Count == 0) return null;
+
+            var centre = near.BoundingBox.Center;
+            if (!IsFinitePoint(centre)) centre = Vector3.Zero;
+            pairs = pairs.OrderBy(p => (p.origin.BoundingBox.Center - centre).LengthSquared()).ToList();
+
+            var originPoints = pairs.Select(p => PointsOf(p.origin)).ToList();
+            var otherPoints = pairs.Select(p => PointsOf(p.other)).ToList();
+
+            // Candidates: what the nearest brushes fit exactly (face for face), then every other way they could be placed on each other
+            var candidates = new List<Rigid>();
+            for (var i = 0; i < Math.Min(6, pairs.Count); i++)
+            {
+                var exact = Rigid.Fit(Snapshot.Take(pairs[i].origin), Snapshot.Take(pairs[i].other));
+                if (exact != null) candidates.Add(exact);
+            }
+            for (var i = 0; i < Math.Min(6, pairs.Count); i++)
+            {
+                candidates.AddRange(Rigid.FitSets(originPoints[i], otherPoints[i]));
+            }
+
+            Rigid best = null;
+            var bestScore = 0;
+            foreach (var candidate in candidates)
+            {
+                var score = 0;
+                for (var i = 0; i < pairs.Count; i++)
+                {
+                    if (originPoints[i].Length != otherPoints[i].Length) continue;
+                    if (originPoints[i].All(v => { var m = candidate.Point(v); return otherPoints[i].Any(w => (w - m).Length() <= 0.1f); })) score++;
+                }
+                if (score > bestScore)
+                {
+                    best = candidate;
+                    bestScore = score;
+                }
+            }
+            return best;
+        }
+
+        public static bool IsFinitePoint(Vector3 v)
+        {
+            return !(float.IsNaN(v.X) || float.IsNaN(v.Y) || float.IsNaN(v.Z)
+                     || float.IsInfinity(v.X) || float.IsInfinity(v.Y) || float.IsInfinity(v.Z));
+        }
+
+        private static bool IsFinite(Matrix4x4 m)
+        {
+            return IsFinitePoint(new Vector3(m.M11, m.M12, m.M13)) && IsFinitePoint(new Vector3(m.M21, m.M22, m.M23))
+                   && IsFinitePoint(new Vector3(m.M31, m.M32, m.M33)) && IsFinitePoint(new Vector3(m.M41, m.M42, m.M43));
         }
 
         private static Vector3[] UniquePoints(IEnumerable<Vector3> points)
@@ -618,6 +703,12 @@ namespace Sledge.BspEditor.Linking
             var matrix = rigid.ToMatrix();
             var order = new List<long>();
 
+            // Never write a broken shape into the other instances: leave them as they are
+            if (!IsFinite(matrix) || srcFaces.Any(f => f.Vertices.Any(v => !IsFinitePoint(v))))
+            {
+                return tgtFaces.Select(x => x.ID).ToList();
+            }
+
             for (var i = 0; i < srcFaces.Count; i++)
             {
                 Face tf;
@@ -667,6 +758,7 @@ namespace Sledge.BspEditor.Linking
             var toTarget = instance.ToMatrix();
             if (!Matrix4x4.Invert(toTarget, out var fromTarget)) return;
             var matrix = fromTarget * movement * toTarget;
+            if (!IsFinite(matrix)) return;
 
             var textureLock = (document.Map.Data.GetOne<TransformationFlags>() ?? new TransformationFlags()).TextureLock;
 

@@ -97,7 +97,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
 
                 var origin = index.OriginOf(slotId);
                 var groupMove = groupMoves.Contains(InstanceKey(origin));
-                if (origin is Solid) SyncSolids(change, members, origin, updatedLinked, snaps, groupMove);
+                if (origin is Solid) SyncSolids(change, members, origin, updatedLinked, snaps, groupMove, index);
                 else SyncOthers(change, members, origin, updatedLinked, snaps, groupMove);
             }
 
@@ -229,7 +229,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
             return Kind.None;
         }
 
-        private static void SyncSolids(Change change, List<IMapObject> members, IMapObject originObject, List<IMapObject> touched, LinkGeometry.SnapshotStore snaps, bool groupMove)
+        private static void SyncSolids(Change change, List<IMapObject> members, IMapObject originObject, List<IMapObject> touched, LinkGeometry.SnapshotStore snaps, bool groupMove, LinkedObjects.LinkIndex index)
         {
             var origin = (Solid) originObject;
             var solids = members.OfType<Solid>().ToList();
@@ -266,6 +266,14 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
             lock (snaps) originPre = snaps[origin];
             var originNow = nows[origin];
 
+            // The origin was left with broken geometry (NaN / infinity): there is nothing sensible to copy, so the others stay as they are.
+            // Undoing the edit later copes with this, as the others are fitted to the origin from the rest of the instance.
+            if (!originNow.IsFinite)
+            {
+                lock (snaps) snaps[origin] = originNow;
+                return;
+            }
+
             // Anything that was edited in this same change (eg a whole selection moved at once) already is where it should be
             var targets = solids.Where(x => !ReferenceEquals(x, origin) && !edits.ContainsKey(x)).ToList();
 
@@ -285,8 +293,11 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
                     snaps.TryGetValue(target, out var last);
                     var targetPre = LinkGeometry.AlignTo(originPre, target, last, out var rigid);
 
-                    // Not the same shape (the target was edited locally): line up their centres
-                    if (rigid == null) rigid = LinkGeometry.Rigid.Translation(targetPre.Center - originPre.Center);
+                    // Not the same shape (the target was edited locally, or one of them was left broken): take how the instance as a whole
+                    // sits compared with the origin, and failing that line up their centres
+                    if (rigid == null) rigid = LinkGeometry.InstanceTransform(index, LinkedObjects.GetTopId(origin), LinkedObjects.GetInstance(origin), LinkedObjects.GetInstance(target), origin);
+                    if (rigid == null && originPre.IsFinite && targetPre.IsFinite) rigid = LinkGeometry.Rigid.Translation(targetPre.Center - originPre.Center);
+                    if (rigid == null) continue; // no safe way to place it: leave it alone
 
                     targetPres[target] = targetPre;
                     plan.Add(new KeyValuePair<Solid, LinkGeometry.Rigid>(target, rigid));

@@ -340,6 +340,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 
 					// No matching polygon: leave these faces alone rather than guess
 					if (pg == null) continue;
+					if (pg.Vertices.Any(v => float.IsNaN(v.X) || float.IsNaN(v.Y) || float.IsNaN(v.Z) || float.IsInfinity(v.X) || float.IsInfinity(v.Y) || float.IsInfinity(v.Z))) continue;
 
 					if (faces.Count() == 1)
 					{

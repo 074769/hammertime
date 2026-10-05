@@ -86,6 +86,13 @@ namespace Sledge.BspEditor.Tools.Vertex.Selection
             {
                 foreach (var solid in _selectedSolids.Where(x => x.IsDirty))
                 {
+                    // An edit that left NaN / infinity in a solid would wreck it (and every copy of it): drop that edit instead
+                    if (solid.Copy.Faces.Any(f => f.Vertices.Any(v => !IsFinite(v.Position))))
+                    {
+                        solid.Reset();
+                        continue;
+                    }
+
                     tran.Add(new RemoveMapObjectData(solid.Real.ID, solid.Real.Faces));
                     //TODO:should validate solid with polyhedron??
                     tran.Add(new AddMapObjectData(solid.Real.ID, solid.Copy.Faces.Select(x => x.ToFace(document.Map.NumberGenerator))));
@@ -97,6 +104,11 @@ namespace Sledge.BspEditor.Tools.Vertex.Selection
             {
                 await MapDocumentOperation.Perform(document, tran);
             }
+        }
+
+        private static bool IsFinite(System.Numerics.Vector3 v)
+        {
+            return !(float.IsNaN(v.X) || float.IsNaN(v.Y) || float.IsNaN(v.Z) || float.IsInfinity(v.X) || float.IsInfinity(v.Y) || float.IsInfinity(v.Z));
         }
 
         public async Task Reset(MapDocument document)

@@ -106,7 +106,7 @@ namespace Sledge.BspEditor.Editing.Commands.Linking
                     // not from one object: an entity or a group has no shape of its own to compare, and would only give an offset.
                     var matrix = Matrix4x4.Identity;
                     var mirrored = false;
-                    var rigid = reference == null ? null : InstanceTransform(index, linkId, originInstance, instance, t);
+                    var rigid = reference == null ? null : LinkGeometry.InstanceTransform(index, linkId, originInstance, instance, t);
                     if (rigid == null && reference != null && counterpart != null)
                     {
                         if (reference is Solid rs && counterpart is Solid cs)
@@ -148,69 +148,6 @@ namespace Sledge.BspEditor.Editing.Commands.Linking
             }
 
             await MapDocumentOperation.Perform(document, new Transaction(ops));
-        }
-
-        private static Vector3[] PointsOf(Solid solid)
-        {
-            var result = new List<Vector3>();
-            foreach (var v in solid.Faces.SelectMany(x => x.Vertices))
-            {
-                if (!result.Any(x => (x - v).Length() <= 0.05f)) result.Add(v);
-            }
-            return result.ToArray();
-        }
-
-        /// <summary>
-        /// How the given instance sits compared with the origin instance (the movement that takes the origin onto it), found from
-        /// the brushes the two have in common. A symmetrical brush fits several movements on its own, so the movement
-        /// that suits the most brushes is the one used.
-        /// </summary>
-        private static LinkGeometry.Rigid InstanceTransform(LinkedObjects.LinkIndex index, long linkId, long originInstance, long instance, IMapObject near)
-        {
-            var pairs = new List<(Solid origin, Solid other)>();
-            foreach (var members in index.Slots.Values)
-            {
-                var o = members.FirstOrDefault(x => LinkedObjects.GetTopId(x) == linkId && LinkedObjects.GetInstance(x) == originInstance) as Solid;
-                var c = members.FirstOrDefault(x => LinkedObjects.GetTopId(x) == linkId && LinkedObjects.GetInstance(x) == instance) as Solid;
-                if (o != null && c != null) pairs.Add((o, c));
-            }
-            if (pairs.Count == 0) return null;
-
-            var centre = near.BoundingBox.Center;
-            pairs = pairs.OrderBy(p => (p.origin.BoundingBox.Center - centre).LengthSquared()).ToList();
-
-            var originPoints = pairs.Select(p => PointsOf(p.origin)).ToList();
-            var otherPoints = pairs.Select(p => PointsOf(p.other)).ToList();
-
-            // Candidates: what the nearest brushes fit exactly (face for face), then every other way they could be placed on each other
-            var candidates = new List<LinkGeometry.Rigid>();
-            for (var i = 0; i < Math.Min(6, pairs.Count); i++)
-            {
-                var exact = LinkGeometry.Rigid.Fit(LinkGeometry.Snapshot.Take(pairs[i].origin), LinkGeometry.Snapshot.Take(pairs[i].other));
-                if (exact != null) candidates.Add(exact);
-            }
-            for (var i = 0; i < Math.Min(6, pairs.Count); i++)
-            {
-                candidates.AddRange(LinkGeometry.Rigid.FitSets(originPoints[i], otherPoints[i]));
-            }
-
-            LinkGeometry.Rigid best = null;
-            var bestScore = 0;
-            foreach (var candidate in candidates)
-            {
-                var score = 0;
-                for (var i = 0; i < pairs.Count; i++)
-                {
-                    if (originPoints[i].Length != otherPoints[i].Length) continue;
-                    if (originPoints[i].All(v => { var m = candidate.Point(v); return otherPoints[i].Any(w => (w - m).Length() <= 0.1f); })) score++;
-                }
-                if (score > bestScore)
-                {
-                    best = candidate;
-                    bestScore = score;
-                }
-            }
-            return best;
         }
     }
 }
