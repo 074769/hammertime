@@ -34,6 +34,13 @@ namespace Sledge.BspEditor.Environment.Goldsource
 		{
 			InitializeComponent();
 
+			// Additional texture packages: fixed column widths that don't collapse or get dragged
+			lstAdditionalTextures.ColumnWidthChanging += (s, e) =>
+			{
+				e.Cancel = true;
+				e.NewWidth = lstAdditionalTextures.Columns[e.ColumnIndex].Width;
+			};
+
 			txtGameDir.TextChanged += OnEnvironmentChanged;
 			cmbBaseGame.SelectedIndexChanged += OnEnvironmentChanged;
 			cmbGameMod.SelectedIndexChanged += OnEnvironmentChanged;
@@ -608,7 +615,7 @@ namespace Sledge.BspEditor.Environment.Goldsource
 
 		private void UpdateWadList()
 		{
-			lstAdditionalTextures.AutoResizeColumns(ColumnHeaderAutoResizeStyle.ColumnContent);
+			// Column widths are static (set in the designer); intentionally no auto-resize.
 		}
 
 		private void cklTexturePackages_KeyPress(object sender, KeyPressEventArgs e)

@@ -821,10 +821,12 @@ namespace Sledge.BspEditor.Environment.Goldsource
 			// colWadName
 			// 
 			colWadName.Text = "Name";
+			colWadName.Width = 140;
 			// 
 			// colWadPath
 			// 
 			colWadPath.Text = "Path";
+			colWadPath.Width = 260;
 			// 
 			// btnRemoveTextures
 			// 
