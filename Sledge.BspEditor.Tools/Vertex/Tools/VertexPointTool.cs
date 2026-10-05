@@ -320,12 +320,15 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 
 		public override Task PreToolDeselect()
 		{
-			List<VertexSolid> objects = new List<VertexSolid>(_vertices.Keys);
-			List<MutableFace> facesToRemove = new List<MutableFace>();
+			// Tidies up the solids that were edited (faces left on the same plane, vertices that no longer meet cleanly).
+			// Solids that weren't edited are left exactly as they are: rebuilding their faces from their planes only adds
+			// rounding error, and puts every selected solid through a full replace of its faces (slow, and it can leave them invalid).
+			List<VertexSolid> objects = new List<VertexSolid>(_vertices.Keys.Where(x => x.IsDirty));
 			foreach (var solid in objects)
 			{
 				var currentSolid = solid.Copy;
 				var poly = new Polyhedron(currentSolid.Faces.Select(x => x.Plane));
+				List<MutableFace> facesToRemove = new List<MutableFace>();
 
 				var groupedFaces = currentSolid.Faces.GroupBy(x => x.Plane);
 
@@ -334,7 +337,11 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 					var face = faces.First();
 
 					var pg = poly.Polygons.FirstOrDefault(x => x.Plane.EquivalentTo(face.Plane, 0.0075f)); // Magic number that seems to match VHE
-					if (pg != null&&faces.Count() == 1)
+
+					// No matching polygon: leave these faces alone rather than guess
+					if (pg == null) continue;
+
+					if (faces.Count() == 1)
 					{
 						face.Vertices.Clear();
 
@@ -343,14 +350,12 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 					}
 					else
 					{
-						facesToRemove.AddRange(faces.Where(f=>f!=face));
-						if(faces.Count()>1)
-						{
-							face.Vertices.Clear();
+						facesToRemove.AddRange(faces.Where(f => f != face));
 
-							foreach (var vertx in pg.Vertices)
-								face.Vertices.Add(new MutableVertex(vertx));
-						}
+						face.Vertices.Clear();
+
+						foreach (var vertx in pg.Vertices)
+							face.Vertices.Add(new MutableVertex(vertx));
 					}
 				}
 				foreach (var face in facesToRemove)
