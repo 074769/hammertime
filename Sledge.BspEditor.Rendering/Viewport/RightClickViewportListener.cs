@@ -129,27 +129,18 @@ namespace Sledge.BspEditor.Rendering.Viewport
             // still on screen while the app is minimized and hide it.
             SweepVisiblePopups(_hiddenTicks == 1);
 
+            // When the app is minimized, Windows hides the menu's popup window along with its owner but
+            // keeps it "shown" internally, and brings it back when the app is restored. Close() doesn't
+            // clear that, so destroy the menu window and make a fresh menu. Do it once, right away.
+            StopWatching();
             try
             {
-                if (_hiddenTicks <= 2)
+                menu.BeginInvoke(new Action(() =>
                 {
-                    // WinForms can report the menu as not visible while its window is still on screen,
-                    // so close and hide it regardless of the Visible property.
-                    menu.BeginInvoke(new Action(() =>
-                    {
-                        Log("closing menu (Visible=" + menu.Visible + ")");
-                        try { menu.Close(ToolStripDropDownCloseReason.AppFocusChange); } catch (Exception ex) { Log("Close failed: " + ex.Message); }
-                        try { menu.Hide(); } catch (Exception ex) { Log("Hide failed: " + ex.Message); }
-                        if (_menuWindow != IntPtr.Zero && IsWindowVisible(_menuWindow)) ShowWindow(_menuWindow, SW_HIDE);
-                    }));
-                }
-                else
-                {
-                    // Closing didn't end the watch (WinForms never saw the menu as open), so destroy the
-                    // menu and its native window and create a fresh one
-                    StopWatching();
-                    menu.BeginInvoke(new Action(RecreateMenu));
-                }
+                    Log("closing and recreating menu (Visible=" + menu.Visible + ")");
+                    try { menu.Close(ToolStripDropDownCloseReason.AppFocusChange); } catch (Exception ex) { Log("Close failed: " + ex.Message); }
+                    RecreateMenu();
+                }));
             }
             catch (Exception ex)
             {
