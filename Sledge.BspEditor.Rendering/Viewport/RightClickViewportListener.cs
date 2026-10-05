@@ -1,3 +1,6 @@
+using System;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using LogicAndTrick.Oy;
@@ -15,39 +18,55 @@ namespace Sledge.BspEditor.Rendering.Viewport
         {
             Viewport = viewport;
             _contextMenu = new ContextMenuStrip();
-            _contextMenu.Closed += (s, e) => UnhookForm();
+            _contextMenu.Closed += (s, e) => StopWatching();
+            _watchTimer = new Timer { Interval = 150 };
+            _watchTimer.Tick += (s, e) => CloseMenuIfAppHidden();
         }
 
         // The menu is its own popup window, so Windows doesn't close it when the main window is
-        // minimized (e.g. clicking the taskbar button) or the app loses focus. Close it ourselves.
-        private Form _hookedForm;
+        // minimized (e.g. clicking the taskbar button) or the app loses focus. The viewport lives in a
+        // docked panel (not the shell window itself), so form events on it are unreliable.
+        // Instead, poll the real top-level window while the menu is open.
+        private readonly Timer _watchTimer;
 
-        private void HookForm()
-        {
-            UnhookForm();
-            _hookedForm = Viewport.Control?.FindForm();
-            if (_hookedForm == null) return;
-            _hookedForm.Resize += CloseMenuIfHidden;
-            _hookedForm.Deactivate += CloseMenuIfHidden;
-        }
+        private void StartWatching() => _watchTimer.Start();
 
-        private void UnhookForm()
-        {
-            if (_hookedForm == null) return;
-            _hookedForm.Resize -= CloseMenuIfHidden;
-            _hookedForm.Deactivate -= CloseMenuIfHidden;
-            _hookedForm = null;
-        }
+        private void StopWatching() => _watchTimer.Stop();
 
-        private void CloseMenuIfHidden(object sender, System.EventArgs e)
+        private void CloseMenuIfAppHidden()
         {
-            var form = _hookedForm;
-            if (form == null || !_contextMenu.Visible) return;
-            if (form.WindowState == FormWindowState.Minimized || Form.ActiveForm == null)
+            if (!_contextMenu.Visible)
+            {
+                StopWatching();
+                return;
+            }
+
+            var control = Viewport.Control;
+            if (control == null || control.IsDisposed || !control.IsHandleCreated)
+            {
+                _contextMenu.Close(ToolStripDropDownCloseReason.AppFocusChange);
+                return;
+            }
+
+            var root = GetAncestor(control.Handle, GA_ROOTOWNER);
+            var minimized = root != IntPtr.Zero && IsIconic(root);
+
+            var fg = GetForegroundWindow();
+            GetWindowThreadProcessId(fg, out var fgProcess);
+            var otherApp = fg != IntPtr.Zero && fgProcess != (uint) Process.GetCurrentProcess().Id;
+
+            if (minimized || otherApp)
             {
                 _contextMenu.Close(ToolStripDropDownCloseReason.AppFocusChange);
             }
         }
+
+        private const uint GA_ROOTOWNER = 3;
+
+        [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
+        [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr hwnd);
+        [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+        [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
 
         public void MouseClick(ViewportEvent e)
         {
@@ -64,7 +83,7 @@ namespace Sledge.BspEditor.Rendering.Viewport
             if (mb.Intercepted || mb.IsEmpty) return;
             mb.Populate(_contextMenu);
             _contextMenu.Show(Viewport.Control, e.X, e.Y);
-            HookForm();
+            StartWatching();
         }
 
         public bool IsActive()
@@ -139,7 +158,8 @@ namespace Sledge.BspEditor.Rendering.Viewport
 
         public void Dispose()
         {
-            UnhookForm();
+            StopWatching();
+            _watchTimer.Dispose();
         }
 
         public void UpdateFrame(long frame)
