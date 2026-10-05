@@ -12,13 +12,28 @@ namespace Sledge.BspEditor.Rendering.Viewport
         public string OrderHint => "U";
         public MapViewport Viewport { get; set; }
 
-        private readonly ContextMenuStrip _contextMenu;
+        private ContextMenuStrip _contextMenu;
 
         public RightClickViewportListener(MapViewport viewport)
         {
             Viewport = viewport;
-            _contextMenu = new ContextMenuStrip();
-            _contextMenu.Closed += (s, e) => StopWatching();
+            _contextMenu = CreateMenu();
+        }
+
+        private ContextMenuStrip CreateMenu()
+        {
+            var menu = new ContextMenuStrip();
+            menu.Closed += (s, e) => StopWatching();
+            return menu;
+        }
+
+        // Last resort: throw the menu (and its native window) away and make a fresh one
+        private void RecreateMenu()
+        {
+            var old = _contextMenu;
+            _contextMenu = CreateMenu();
+            try { old.Dispose(); } catch { /* ignore */ }
+            Log("menu recreated");
         }
 
         // The menu is its own popup window, so Windows doesn't close it when the main window is
@@ -31,7 +46,6 @@ namespace Sledge.BspEditor.Rendering.Viewport
         private IntPtr _rootWindow;
         private IntPtr _menuWindow;
         private volatile bool _menuOpen;
-        private volatile bool _forceHidden;
         private int _hiddenTicks;
         private static readonly uint ProcessId = (uint) Process.GetCurrentProcess().Id;
 
@@ -107,34 +121,35 @@ namespace Sledge.BspEditor.Rendering.Viewport
             }
 
             _hiddenTicks++;
-            Log("hidden detected: minimized=" + minimized + " otherApp=" + otherApp + " tick=" + _hiddenTicks);
+            var menu = _contextMenu;
+            var windowVisible = _menuWindow != IntPtr.Zero && IsWindowVisible(_menuWindow);
+            Log("hidden detected: minimized=" + minimized + " otherApp=" + otherApp + " tick=" + _hiddenTicks + " windowVisible=" + windowVisible);
 
-            if (_hiddenTicks <= 2)
+            try
             {
-                // Normal path: ask the menu to close on its own thread
-                try
+                if (_hiddenTicks <= 2)
                 {
-                    _contextMenu.BeginInvoke(new Action(() =>
+                    // WinForms can report the menu as not visible while its window is still on screen,
+                    // so close and hide it regardless of the Visible property.
+                    menu.BeginInvoke(new Action(() =>
                     {
-                        Log("closing menu (visible=" + _contextMenu.Visible + ")");
-                        if (_contextMenu.Visible) _contextMenu.Close(ToolStripDropDownCloseReason.AppFocusChange);
+                        Log("closing menu (Visible=" + menu.Visible + ")");
+                        try { menu.Close(ToolStripDropDownCloseReason.AppFocusChange); } catch (Exception ex) { Log("Close failed: " + ex.Message); }
+                        try { menu.Hide(); } catch (Exception ex) { Log("Hide failed: " + ex.Message); }
+                        if (_menuWindow != IntPtr.Zero && IsWindowVisible(_menuWindow)) ShowWindow(_menuWindow, SW_HIDE);
                     }));
                 }
-                catch (Exception ex)
+                else
                 {
-                    Log("BeginInvoke failed: " + ex.GetType().Name + ": " + ex.Message);
+                    // Closing didn't end the watch (WinForms never saw the menu as open), so destroy the
+                    // menu and its native window and create a fresh one
+                    StopWatching();
+                    menu.BeginInvoke(new Action(RecreateMenu));
                 }
             }
-            else
+            catch (Exception ex)
             {
-                // The menu is still open after a few tries: hide its window directly
-                Log("force hiding menu window " + _menuWindow);
-                if (_menuWindow != IntPtr.Zero)
-                {
-                    _forceHidden = true;
-                    ShowWindow(_menuWindow, SW_HIDE);
-                }
-                StopWatching();
+                Log("BeginInvoke failed: " + ex.GetType().Name + ": " + ex.Message);
             }
         }
 
@@ -143,6 +158,7 @@ namespace Sledge.BspEditor.Rendering.Viewport
 
         [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
         [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr hwnd);
+        [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hwnd);
         [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hwnd, int cmdShow);
         [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
         [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
@@ -160,12 +176,6 @@ namespace Sledge.BspEditor.Rendering.Viewport
             var mb = new RightClickMenuBuilder(Viewport, e);
             await Oy.Publish("MapViewport:RightClick", mb);
             if (mb.Intercepted || mb.IsEmpty) return;
-            if (_forceHidden)
-            {
-                // we hid the window behind WinForms' back; let it catch up before showing again
-                _forceHidden = false;
-                _contextMenu.Close();
-            }
             mb.Populate(_contextMenu);
             _contextMenu.Show(Viewport.Control, e.X, e.Y);
             StartWatching();
