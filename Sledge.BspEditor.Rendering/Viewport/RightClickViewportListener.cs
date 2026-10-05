@@ -15,6 +15,38 @@ namespace Sledge.BspEditor.Rendering.Viewport
         {
             Viewport = viewport;
             _contextMenu = new ContextMenuStrip();
+            _contextMenu.Closed += (s, e) => UnhookForm();
+        }
+
+        // The menu is its own popup window, so Windows doesn't close it when the main window is
+        // minimized (e.g. clicking the taskbar button) or the app loses focus. Close it ourselves.
+        private Form _hookedForm;
+
+        private void HookForm()
+        {
+            UnhookForm();
+            _hookedForm = Viewport.Control?.FindForm();
+            if (_hookedForm == null) return;
+            _hookedForm.Resize += CloseMenuIfHidden;
+            _hookedForm.Deactivate += CloseMenuIfHidden;
+        }
+
+        private void UnhookForm()
+        {
+            if (_hookedForm == null) return;
+            _hookedForm.Resize -= CloseMenuIfHidden;
+            _hookedForm.Deactivate -= CloseMenuIfHidden;
+            _hookedForm = null;
+        }
+
+        private void CloseMenuIfHidden(object sender, System.EventArgs e)
+        {
+            var form = _hookedForm;
+            if (form == null || !_contextMenu.Visible) return;
+            if (form.WindowState == FormWindowState.Minimized || Form.ActiveForm == null)
+            {
+                _contextMenu.Close(ToolStripDropDownCloseReason.AppFocusChange);
+            }
         }
 
         public void MouseClick(ViewportEvent e)
@@ -32,6 +64,7 @@ namespace Sledge.BspEditor.Rendering.Viewport
             if (mb.Intercepted || mb.IsEmpty) return;
             mb.Populate(_contextMenu);
             _contextMenu.Show(Viewport.Control, e.X, e.Y);
+            HookForm();
         }
 
         public bool IsActive()
@@ -106,7 +139,7 @@ namespace Sledge.BspEditor.Rendering.Viewport
 
         public void Dispose()
         {
-            // 
+            UnhookForm();
         }
 
         public void UpdateFrame(long frame)
