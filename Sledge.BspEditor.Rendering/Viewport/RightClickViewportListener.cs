@@ -41,7 +41,7 @@ namespace Sledge.BspEditor.Rendering.Viewport
             {
                 System.IO.File.AppendAllText(
                     System.IO.Path.Combine(System.IO.Path.GetTempPath(), "hammertime-contextmenu.log"),
-                    DateTime.Now.ToString("HH:mm:ss.fff") + " [t" + Environment.CurrentManagedThreadId + "] " + message + Environment.NewLine);
+                    DateTime.Now.ToString("HH:mm:ss.fff") + " [t" + System.Threading.Thread.CurrentThread.ManagedThreadId + "] " + message + System.Environment.NewLine);
             }
             catch
             {
