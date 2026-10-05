@@ -19,45 +19,65 @@ namespace Sledge.BspEditor.Rendering.Viewport
             Viewport = viewport;
             _contextMenu = new ContextMenuStrip();
             _contextMenu.Closed += (s, e) => StopWatching();
-            _watchTimer = new Timer { Interval = 150 };
-            _watchTimer.Tick += (s, e) => CloseMenuIfAppHidden();
         }
 
         // The menu is its own popup window, so Windows doesn't close it when the main window is
-        // minimized (e.g. clicking the taskbar button) or the app loses focus. The viewport lives in a
-        // docked panel (not the shell window itself), so form events on it are unreliable.
-        // Instead, poll the real top-level window while the menu is open.
-        private readonly Timer _watchTimer;
+        // minimized (e.g. clicking the taskbar button) or the app loses focus. While the menu is open,
+        // a background timer watches the real top-level window and asks the menu to close.
+        // (A background timer is used on purpose: this class may be created off the UI thread, where a
+        // WinForms timer would never tick. Only Win32 calls run on the timer thread; the close itself
+        // is marshalled to the menu's own thread.)
+        private System.Threading.Timer _watchTimer;
+        private IntPtr _rootWindow;
+        private volatile bool _menuOpen;
 
-        private void StartWatching() => _watchTimer.Start();
-
-        private void StopWatching() => _watchTimer.Stop();
-
-        private void CloseMenuIfAppHidden()
+        private void StartWatching()
         {
-            if (!_contextMenu.Visible)
+            StopWatching();
+            try
             {
-                StopWatching();
-                return;
+                var control = Viewport.Control;
+                _rootWindow = control != null && control.IsHandleCreated ? GetAncestor(control.Handle, GA_ROOTOWNER) : IntPtr.Zero;
+            }
+            catch
+            {
+                _rootWindow = IntPtr.Zero;
             }
 
-            var control = Viewport.Control;
-            if (control == null || control.IsDisposed || !control.IsHandleCreated)
-            {
-                _contextMenu.Close(ToolStripDropDownCloseReason.AppFocusChange);
-                return;
-            }
+            _menuOpen = true;
+            _watchTimer = new System.Threading.Timer(_ => Watch(), null, 150, 150);
+        }
 
-            var root = GetAncestor(control.Handle, GA_ROOTOWNER);
-            var minimized = root != IntPtr.Zero && IsIconic(root);
+        private void StopWatching()
+        {
+            _menuOpen = false;
+            var timer = _watchTimer;
+            _watchTimer = null;
+            timer?.Dispose();
+        }
+
+        private void Watch()
+        {
+            if (!_menuOpen) return;
+
+            var minimized = _rootWindow != IntPtr.Zero && IsIconic(_rootWindow);
 
             var fg = GetForegroundWindow();
             GetWindowThreadProcessId(fg, out var fgProcess);
             var otherApp = fg != IntPtr.Zero && fgProcess != (uint) Process.GetCurrentProcess().Id;
 
-            if (minimized || otherApp)
+            if (!minimized && !otherApp) return;
+
+            try
             {
-                _contextMenu.Close(ToolStripDropDownCloseReason.AppFocusChange);
+                _contextMenu.BeginInvoke(new Action(() =>
+                {
+                    if (_contextMenu.Visible) _contextMenu.Close(ToolStripDropDownCloseReason.AppFocusChange);
+                }));
+            }
+            catch
+            {
+                // handle not available (menu already closed/disposed)
             }
         }
 
@@ -159,7 +179,6 @@ namespace Sledge.BspEditor.Rendering.Viewport
         public void Dispose()
         {
             StopWatching();
-            _watchTimer.Dispose();
         }
 
         public void UpdateFrame(long frame)
