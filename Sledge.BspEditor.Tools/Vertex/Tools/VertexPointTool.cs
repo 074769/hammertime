@@ -237,7 +237,11 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 			base.KeyDown(document, viewport, camera, e);
 
 
-			var nudge = GetNudgeValue(e.KeyCode);
+			// Arrow keys move the vertices only when the view isn't taking them: the 2D view pans on Shift+arrow, and on plain arrows
+			// when arrow-key movement is switched off, so the vertices move exactly when it doesn't (never both at once).
+			var altMovement = KeyboardState.Alt && CameraNavigationViewportSettings.EnableAltArrowKeyMovement;
+			var movesGeometry = altMovement || (CameraNavigationViewportSettings.EnableArrowKeyMovement && !KeyboardState.Shift);
+			var nudge = movesGeometry ? GetNudgeValue(e.KeyCode) : null;
 			if (nudge != null)
 			{
 				var translate = camera.Expand(nudge.Value);
