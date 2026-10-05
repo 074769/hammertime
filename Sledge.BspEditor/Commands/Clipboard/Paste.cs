@@ -92,7 +92,7 @@ namespace Sledge.BspEditor.Commands.Clipboard
 				var translation = Matrix4x4.CreateTranslation(_random.Next(-4, 5) * step.X * (moveLock == "X" ? 0 : 1), _random.Next(-4, 5) * step.Y * (moveLock == "Y" ? 0 : 1), 0);
 				//without random moving
 
-				var content = _clipboard.Value.GetPastedContent(_document, (d, o) => Copy(d, o)).ToList();
+				var content = _clipboard.Value.GetPastedContent(_document, (d, o) => Copy(d, o), true).ToList();
 
 				var newcontent = RetriveNonGroupedObjectsRecursively(content);
 
@@ -137,12 +137,16 @@ namespace Sledge.BspEditor.Commands.Clipboard
 					}
 				}
 
+				// The copies come out with the selection state they were copied with, which doesn't match what is selected here: start them
+				// unselected, then select them with everything inside them, the way a click on them would
+				foreach (var o in content.SelectMany(x => x.FindAll())) o.IsSelected = false;
+
 				var transaction = new Transaction(
 				new Deselect(_document.Selection),
 				new Attach(_document.Map.Root.ID, content),
 				new Transform(translation, content),
 				new TransformTexturesUniform(translation, content.SelectMany(x => x.FindAll())),
-				new Select(content)
+				new Select(content.SelectMany(x => x.FindAll()))
 			);
 
 				await MapDocumentOperation.Perform(_document, transaction);

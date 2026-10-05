@@ -115,7 +115,11 @@ namespace Sledge.BspEditor.Components
             return GetPastedContent(document, (d, o) => o);
         }
 
-        public IEnumerable<IMapObject> GetPastedContent(MapDocument document, Func<MapDocument, IMapObject, IMapObject> existingIdTransform)
+        /// <param name="transformAll">
+        /// True to put every pasted object through the callback, not only the ones whose ID is already in the map. IDs that came from
+        /// somewhere else (another map) are not known to this map's ID counter, so it would go on to hand out the same numbers again.
+        /// </param>
+        public IEnumerable<IMapObject> GetPastedContent(MapDocument document, Func<MapDocument, IMapObject, IMapObject> existingIdTransform, bool transformAll = false)
         {
             if (!System.Windows.Forms.Clipboard.ContainsText()) return null;
 
@@ -123,15 +127,15 @@ namespace Sledge.BspEditor.Components
             if (!str.StartsWith(SerialisedName)) return null;
 
             var ecc = ExtractCopyStream(str);
-            return ReIndex(ecc, document, existingIdTransform);
+            return ReIndex(ecc, document, existingIdTransform, transformAll);
         }
 
-        private IEnumerable<IMapObject> ReIndex(IEnumerable<IMapObject> objects, MapDocument document, Func<MapDocument, IMapObject, IMapObject> existingIdTransform)
+        private IEnumerable<IMapObject> ReIndex(IEnumerable<IMapObject> objects, MapDocument document, Func<MapDocument, IMapObject, IMapObject> existingIdTransform, bool transformAll)
         {
             var rand = new Random();
             foreach (var o in objects)
             {
-                if (document.Map.Root.Hierarchy.HasDescendant(o.ID))
+                if (transformAll || document.Map.Root.Hierarchy.HasDescendant(o.ID))
                 {
                     // If this object already exists in the tree, transform it through the callback
                     yield return existingIdTransform(document, o);
