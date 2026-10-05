@@ -29,7 +29,25 @@ namespace Sledge.BspEditor.Rendering.Viewport
         // is marshalled to the menu's own thread.)
         private System.Threading.Timer _watchTimer;
         private IntPtr _rootWindow;
+        private IntPtr _menuWindow;
         private volatile bool _menuOpen;
+        private volatile bool _forceHidden;
+        private int _hiddenTicks;
+        private static readonly uint ProcessId = (uint) Process.GetCurrentProcess().Id;
+
+        private static void Log(string message)
+        {
+            try
+            {
+                System.IO.File.AppendAllText(
+                    System.IO.Path.Combine(System.IO.Path.GetTempPath(), "hammertime-contextmenu.log"),
+                    DateTime.Now.ToString("HH:mm:ss.fff") + " [t" + Environment.CurrentManagedThreadId + "] " + message + Environment.NewLine);
+            }
+            catch
+            {
+                // logging must never break the editor
+            }
+        }
 
         private void StartWatching()
         {
@@ -38,13 +56,18 @@ namespace Sledge.BspEditor.Rendering.Viewport
             {
                 var control = Viewport.Control;
                 _rootWindow = control != null && control.IsHandleCreated ? GetAncestor(control.Handle, GA_ROOTOWNER) : IntPtr.Zero;
+                _menuWindow = _contextMenu.IsHandleCreated ? _contextMenu.Handle : IntPtr.Zero;
             }
-            catch
+            catch (Exception ex)
             {
                 _rootWindow = IntPtr.Zero;
+                _menuWindow = IntPtr.Zero;
+                Log("start: could not read handles: " + ex.Message);
             }
 
+            _hiddenTicks = 0;
             _menuOpen = true;
+            Log("start: root=" + _rootWindow + " menu=" + _menuWindow + " messageLoop=" + Application.MessageLoop);
             _watchTimer = new System.Threading.Timer(_ => Watch(), null, 150, 150);
         }
 
@@ -62,29 +85,65 @@ namespace Sledge.BspEditor.Rendering.Viewport
 
             var minimized = _rootWindow != IntPtr.Zero && IsIconic(_rootWindow);
 
-            var fg = GetForegroundWindow();
-            GetWindowThreadProcessId(fg, out var fgProcess);
-            var otherApp = fg != IntPtr.Zero && fgProcess != (uint) Process.GetCurrentProcess().Id;
-
-            if (!minimized && !otherApp) return;
-
+            // The main window handle is a second opinion in case the viewport's own root window isn't the shell
             try
             {
-                _contextMenu.BeginInvoke(new Action(() =>
-                {
-                    if (_contextMenu.Visible) _contextMenu.Close(ToolStripDropDownCloseReason.AppFocusChange);
-                }));
+                var main = Process.GetCurrentProcess().MainWindowHandle;
+                if (main != IntPtr.Zero && IsIconic(main)) minimized = true;
             }
             catch
             {
-                // handle not available (menu already closed/disposed)
+                // ignore
+            }
+
+            var fg = GetForegroundWindow();
+            GetWindowThreadProcessId(fg, out var fgProcess);
+            var otherApp = fg != IntPtr.Zero && fgProcess != ProcessId;
+
+            if (!minimized && !otherApp)
+            {
+                _hiddenTicks = 0;
+                return;
+            }
+
+            _hiddenTicks++;
+            Log("hidden detected: minimized=" + minimized + " otherApp=" + otherApp + " tick=" + _hiddenTicks);
+
+            if (_hiddenTicks <= 2)
+            {
+                // Normal path: ask the menu to close on its own thread
+                try
+                {
+                    _contextMenu.BeginInvoke(new Action(() =>
+                    {
+                        Log("closing menu (visible=" + _contextMenu.Visible + ")");
+                        if (_contextMenu.Visible) _contextMenu.Close(ToolStripDropDownCloseReason.AppFocusChange);
+                    }));
+                }
+                catch (Exception ex)
+                {
+                    Log("BeginInvoke failed: " + ex.GetType().Name + ": " + ex.Message);
+                }
+            }
+            else
+            {
+                // The menu is still open after a few tries: hide its window directly
+                Log("force hiding menu window " + _menuWindow);
+                if (_menuWindow != IntPtr.Zero)
+                {
+                    _forceHidden = true;
+                    ShowWindow(_menuWindow, SW_HIDE);
+                }
+                StopWatching();
             }
         }
 
         private const uint GA_ROOTOWNER = 3;
+        private const int SW_HIDE = 0;
 
         [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
         [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr hwnd);
+        [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hwnd, int cmdShow);
         [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
         [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
 
@@ -101,6 +160,12 @@ namespace Sledge.BspEditor.Rendering.Viewport
             var mb = new RightClickMenuBuilder(Viewport, e);
             await Oy.Publish("MapViewport:RightClick", mb);
             if (mb.Intercepted || mb.IsEmpty) return;
+            if (_forceHidden)
+            {
+                // we hid the window behind WinForms' back; let it catch up before showing again
+                _forceHidden = false;
+                _contextMenu.Close();
+            }
             mb.Populate(_contextMenu);
             _contextMenu.Show(Viewport.Control, e.X, e.Y);
             StartWatching();
