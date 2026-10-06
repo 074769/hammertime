@@ -93,8 +93,37 @@ namespace Sledge.BspEditor.Environment.Goldsource
 				{
 					Log.Error(this.Name, ex.Message, ex);
 				}
-				this.InvokeLater(() => OnEnvironmentChanged(s, e));
+				if (_bulkChecking) return; // ToggleAllTextures notifies once at the end
+
+				this.InvokeLater(() =>
+				{
+					SyncToggleAll();
+					OnEnvironmentChanged(s, e);
+				});
 			};
+		}
+
+		// Set while "Toggle all" changes every item, so each item doesn't notify and re-sync on its own
+		private bool _bulkChecking;
+		private bool _syncingToggleAll;
+
+		/// <summary>
+		/// "Toggle all" is only ticked when every WAD in the list is ticked.
+		/// </summary>
+		private void SyncToggleAll()
+		{
+			var allChecked = cklTexturePackages.Items.Count > 0 && cklTexturePackages.CheckedIndices.Count == cklTexturePackages.Items.Count;
+			if (chkToggleAllTextures.Checked == allChecked) return;
+
+			_syncingToggleAll = true;
+			try
+			{
+				chkToggleAllTextures.Checked = allChecked;
+			}
+			finally
+			{
+				_syncingToggleAll = false;
+			}
 		}
 
 		public void Translate(ITranslationStringProvider strings)
@@ -571,15 +600,29 @@ namespace Sledge.BspEditor.Environment.Goldsource
 
 			cklTexturePackages.EndUpdate();
 
+			SyncToggleAll();
 		}
 
 		private void ToggleAllTextures(object sender, EventArgs e)
 		{
+			// Ignore the checkbox changing because the list changed (see SyncToggleAll)
+			if (_syncingToggleAll) return;
+
 			var on = chkToggleAllTextures.Checked;
-			for (var i = 0; i < cklTexturePackages.Items.Count; i++)
+			_bulkChecking = true;
+			try
 			{
-				cklTexturePackages.SetItemChecked(i, on);
+				for (var i = 0; i < cklTexturePackages.Items.Count; i++)
+				{
+					cklTexturePackages.SetItemChecked(i, on);
+				}
 			}
+			finally
+			{
+				_bulkChecking = false;
+			}
+
+			OnEnvironmentChanged(this, EventArgs.Empty);
 		}
 
 		public string WadFilesLabel { get; set; } = "WAD texture packages";
@@ -633,6 +676,7 @@ namespace Sledge.BspEditor.Environment.Goldsource
 			{
 				cklTexturePackages.Items.Add(item.Key, item.Value);
 			}
+			SyncToggleAll();
 			this.InvokeLater(() => OnEnvironmentChanged(sender, e));
 		}
 
