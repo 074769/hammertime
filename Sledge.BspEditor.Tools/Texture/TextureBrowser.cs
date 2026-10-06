@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Drawing;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using LogicAndTrick.Oy;
@@ -50,7 +51,8 @@ namespace Sledge.BspEditor.Tools.Texture
 			SortOrderCombo.SelectedIndex = so;
 			SortDescendingCheckbox.Checked = GetMemory("SortDescending", false);
 
-			PackageTree.NodeMouseClick += PackageTreeNodeMouseClick;
+			PackageTree.MouseDown += PackageTreeMouseDown;
+			PackageTree.HandleCreated += (s, e) => PackageTree.BeginInvoke(new Action(HideAllPackagesCheckBox)); // after the nodes exist natively
 			_textureList.TextureSelected += TextureSelected;
 			_textureList.HighlightedTexturesChanged += HighlightedTexturesChanged;
 			SizeCombo.SelectedIndex = 1;
@@ -247,26 +249,63 @@ namespace Sledge.BspEditor.Tools.Texture
 			UpdateTextureList();
 		}
 
-		private long _packageSelectionChangedAt;
-
-		// Ctrl+click on the package that is already selected = deselect it and go back to "All Packages"
-		private void PackageTreeNodeMouseClick(object sender, TreeNodeMouseClickEventArgs e)
+		// Clicking the empty space in the package list goes back to "All Packages" (all textures)
+		private void PackageTreeMouseDown(object sender, MouseEventArgs e)
 		{
-			if (e.Button != MouseButtons.Left || (ModifierKeys & Keys.Control) == 0) return;
-			if (e.Node == null || e.Node.Parent == null || e.Node != PackageTree.SelectedNode) return;
-			if (PackageTree.HitTest(e.Location).Location != TreeViewHitTestLocations.Label) return;
+			if (e.Button != MouseButtons.Left) return;
 
-			// This same click just selected the node: nothing to undo
-			var sinceChangeMs = (System.Diagnostics.Stopwatch.GetTimestamp() - _packageSelectionChangedAt) * 1000 / System.Diagnostics.Stopwatch.Frequency;
-			if (sinceChangeMs < 700) return;
+			var hit = PackageTree.HitTest(e.Location);
+			var empty = hit.Node == null
+			            || hit.Location == TreeViewHitTestLocations.None
+			            || hit.Location == TreeViewHitTestLocations.RightOfLabel;
+			if (!empty) return;
 
 			var root = PackageTree.Nodes.Cast<TreeNode>().FirstOrDefault();
-			if (root != null) PackageTree.SelectedNode = root;
+			if (root != null && PackageTree.SelectedNode != root) PackageTree.SelectedNode = root;
+		}
+
+		// "All Packages" only selects the "show everything" view, so it gets no checkbox
+		[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+		private struct TVITEM
+		{
+			public uint mask;
+			public IntPtr hItem;
+			public uint state;
+			public uint stateMask;
+			public IntPtr pszText;
+			public int cchTextMax;
+			public int iImage;
+			public int iSelectedImage;
+			public int cChildren;
+			public IntPtr lParam;
+		}
+
+		[DllImport("user32.dll", CharSet = CharSet.Unicode)]
+		private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, ref TVITEM lParam);
+
+		private void HideAllPackagesCheckBox()
+		{
+			if (!PackageTree.IsHandleCreated || !PackageTree.CheckBoxes) return;
+			var root = PackageTree.Nodes.Cast<TreeNode>().FirstOrDefault();
+			if (root == null || root.Handle == IntPtr.Zero) return;
+
+			const int TVM_SETITEMW = 0x1100 + 63;
+			const uint TVIF_STATE = 0x8;
+			const uint TVIF_HANDLE = 0x10;
+			const uint TVIS_STATEIMAGEMASK = 0xF000;
+
+			var item = new TVITEM
+			{
+				mask = TVIF_STATE | TVIF_HANDLE,
+				hItem = root.Handle,
+				state = 0, // state image 0 = no checkbox
+				stateMask = TVIS_STATEIMAGEMASK
+			};
+			SendMessage(PackageTree.Handle, TVM_SETITEMW, IntPtr.Zero, ref item);
 		}
 
 		private void SelectedPackageChanged(object sender, TreeViewEventArgs e)
 		{
-			_packageSelectionChangedAt = System.Diagnostics.Stopwatch.GetTimestamp();
 			FavouritesTree.SelectedNode = null;
 			var package = PackageTree.SelectedNode;
 			var key = package?.Name;
@@ -334,11 +373,11 @@ namespace Sledge.BspEditor.Tools.Texture
 					node.Checked = !disabled.Contains(name);
 					if (selectedKey == node.Name) reselect = node;
 				}
-				parent.Checked = parent.Nodes.Count > 0 && parent.Nodes.Cast<TreeNode>().All(n => n.Checked);
 				// No remembered package: show everything ("All Packages"), unless a favourites folder is being viewed
 				var viewingFavourite = FavouritesTree.SelectedNode != null || GetMemory<string>("SelectedFavourite") != null;
 				PackageTree.SelectedNode = reselect ?? (viewingFavourite ? null : parent);
 				PackageTree.ExpandAll();
+				HideAllPackagesCheckBox();
 			}
 			finally
 			{
@@ -361,32 +400,8 @@ namespace Sledge.BspEditor.Tools.Texture
 
 		private void PackageTreeAfterCheck(object sender, TreeViewEventArgs e)
 		{
-			// Ignore checkbox changes we made ourselves (rebuilding the tree, syncing "All Packages").
-			if (_updatingPackageList || e.Node == null) return;
-			if (!(_document?.Environment is ITexturePackageManager)) return;
-
-			// Ticking only changes what is shown here. Nothing is applied or saved until
-			// "Reload Textures" is clicked.
-			var root = e.Node.Parent == null ? e.Node : e.Node.Parent;
-
-			_updatingPackageList = true;
-			try
-			{
-				if (e.Node.Parent == null)
-				{
-					// "All Packages": check/uncheck every package
-					foreach (TreeNode child in root.Nodes) child.Checked = root.Checked;
-				}
-				else
-				{
-					// A single package: "All Packages" is ticked only when every package is
-					root.Checked = root.Nodes.Cast<TreeNode>().All(n => n.Checked);
-				}
-			}
-			finally
-			{
-				_updatingPackageList = false;
-			}
+			// Ticking a package only changes what is shown here. Nothing is applied or saved until
+			// "Reload Textures" is clicked, so there is nothing to do per click.
 		}
 
 		private async Task RefreshTexturesFromEnvironment()
