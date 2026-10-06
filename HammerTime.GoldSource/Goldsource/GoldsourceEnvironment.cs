@@ -230,8 +230,11 @@ namespace Sledge.BspEditor.Environment.Goldsource
 		public IEnumerable<string> GetAllTexturePackageNames()
 		{
 			var excluded = ExcludedWads ?? new List<string>();
+			// Game-internal packages that can't be used for mapping (the environment editor never lists them either)
+			var internalWads = new[] { "cached.wad", "fonts.wad", "gfx.wad", "tempdecal.wad" };
 			var environmentWads = _wadProvider.GetPackagesInFile(Root)
-				.Where(x => !excluded.Contains(x.Name, StringComparer.InvariantCultureIgnoreCase))
+				.Where(x => !excluded.Contains(x.Name, StringComparer.InvariantCultureIgnoreCase)
+				            && !internalWads.Contains(x.Name, StringComparer.InvariantCultureIgnoreCase))
 				.Select(x => x.Name);
 			var extraWads = (AdditionalTextureFiles ?? new List<string>())
 				.Where(System.IO.File.Exists)
