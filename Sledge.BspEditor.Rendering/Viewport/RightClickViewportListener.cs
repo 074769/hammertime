@@ -33,7 +33,6 @@ namespace Sledge.BspEditor.Rendering.Viewport
             var old = _contextMenu;
             _contextMenu = CreateMenu();
             try { old.Dispose(); } catch { /* ignore */ }
-            Log("menu recreated");
         }
 
         // The menu is its own popup window, so Windows doesn't close it when the main window is
@@ -49,20 +48,6 @@ namespace Sledge.BspEditor.Rendering.Viewport
         private int _hiddenTicks;
         private static readonly uint ProcessId = (uint) Process.GetCurrentProcess().Id;
 
-        private static void Log(string message)
-        {
-            try
-            {
-                System.IO.File.AppendAllText(
-                    System.IO.Path.Combine(System.IO.Path.GetTempPath(), "hammertime-contextmenu.log"),
-                    DateTime.Now.ToString("HH:mm:ss.fff") + " [t" + System.Threading.Thread.CurrentThread.ManagedThreadId + "] " + message + System.Environment.NewLine);
-            }
-            catch
-            {
-                // logging must never break the editor
-            }
-        }
-
         private void StartWatching()
         {
             StopWatching();
@@ -72,16 +57,14 @@ namespace Sledge.BspEditor.Rendering.Viewport
                 _rootWindow = control != null && control.IsHandleCreated ? GetAncestor(control.Handle, GA_ROOTOWNER) : IntPtr.Zero;
                 _menuWindow = _contextMenu.IsHandleCreated ? _contextMenu.Handle : IntPtr.Zero;
             }
-            catch (Exception ex)
+            catch
             {
                 _rootWindow = IntPtr.Zero;
                 _menuWindow = IntPtr.Zero;
-                Log("start: could not read handles: " + ex.Message);
             }
 
             _hiddenTicks = 0;
             _menuOpen = true;
-            Log("start: root=" + _rootWindow + " menu=" + _menuWindow + " messageLoop=" + Application.MessageLoop);
             _watchTimer = new System.Threading.Timer(_ => Watch(), null, 150, 150);
         }
 
@@ -122,12 +105,10 @@ namespace Sledge.BspEditor.Rendering.Viewport
 
             _hiddenTicks++;
             var menu = _contextMenu;
-            var windowVisible = _menuWindow != IntPtr.Zero && IsWindowVisible(_menuWindow);
-            Log("hidden detected: minimized=" + minimized + " otherApp=" + otherApp + " tick=" + _hiddenTicks + " windowVisible=" + windowVisible);
 
             // The menu we know about reports as not visible, so look for any popup window of ours that is
             // still on screen while the app is minimized and hide it.
-            SweepVisiblePopups(_hiddenTicks == 1);
+            SweepVisiblePopups();
 
             // When the app is minimized, Windows hides the menu's popup window along with its owner but
             // keeps it "shown" internally, and brings it back when the app is restored. Close() doesn't
@@ -137,20 +118,19 @@ namespace Sledge.BspEditor.Rendering.Viewport
             {
                 menu.BeginInvoke(new Action(() =>
                 {
-                    Log("closing and recreating menu (Visible=" + menu.Visible + ")");
-                    try { menu.Close(ToolStripDropDownCloseReason.AppFocusChange); } catch (Exception ex) { Log("Close failed: " + ex.Message); }
+                    try { menu.Close(ToolStripDropDownCloseReason.AppFocusChange); } catch { /* ignore */ }
                     RecreateMenu();
                 }));
             }
-            catch (Exception ex)
+            catch
             {
-                Log("BeginInvoke failed: " + ex.GetType().Name + ": " + ex.Message);
+                // handle not available (menu already closed/disposed)
             }
         }
 
         private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
 
-        private void SweepVisiblePopups(bool logAll)
+        private void SweepVisiblePopups()
         {
             try
             {
@@ -165,26 +145,14 @@ namespace Sledge.BspEditor.Rendering.Viewport
                     var isTopmost = (exStyle & WS_EX_TOPMOST) != 0;
                     var isMainWindow = hwnd == _rootWindow;
 
-                    if (logAll)
-                    {
-                        var cls = new System.Text.StringBuilder(128);
-                        GetClassName(hwnd, cls, cls.Capacity);
-                        GetWindowRect(hwnd, out var r);
-                        Log("  visible window " + hwnd + " class=" + cls + " style=0x" + style.ToString("X") + " ex=0x" + exStyle.ToString("X") + " rect=" + r.Left + "," + r.Top + "," + r.Right + "," + r.Bottom + (isMainWindow ? " (shell)" : ""));
-                    }
-
-                    if (!isMainWindow && isPopup && isTopmost)
-                    {
-                        Log("  hiding stray popup " + hwnd);
-                        ShowWindow(hwnd, SW_HIDE);
-                    }
+                    if (!isMainWindow && isPopup && isTopmost) ShowWindow(hwnd, SW_HIDE);
 
                     return true;
                 }, IntPtr.Zero);
             }
-            catch (Exception ex)
+            catch
             {
-                Log("sweep failed: " + ex.Message);
+                // ignore
             }
         }
 
@@ -193,13 +161,8 @@ namespace Sledge.BspEditor.Rendering.Viewport
         private const int WS_POPUP = unchecked((int) 0x80000000);
         private const int WS_EX_TOPMOST = 0x8;
 
-        [StructLayout(LayoutKind.Sequential)]
-        private struct RECT { public int Left, Top, Right, Bottom; }
-
         [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc proc, IntPtr lParam);
         [DllImport("user32.dll", EntryPoint = "GetWindowLongW")] private static extern int GetWindowLong(IntPtr hwnd, int index);
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(IntPtr hwnd, System.Text.StringBuilder text, int count);
-        [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
 
         private const uint GA_ROOTOWNER = 3;
         private const int SW_HIDE = 0;
