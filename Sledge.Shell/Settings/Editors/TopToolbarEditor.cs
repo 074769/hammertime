@@ -74,16 +74,23 @@ namespace Sledge.Shell.Settings.Editors
 
 			var previewLabel = new Label { Dock = DockStyle.Fill, Text = "Toolbar preview", TextAlign = ContentAlignment.BottomLeft };
 
+			// the preview shows every button: when they do not fit, the panel scrolls sideways
+			// (scroll bar, or the mouse wheel after clicking the preview) instead of hiding buttons in a drop down
 			_preview = new ToolStrip
 			{
-				Dock = DockStyle.Fill,
+				Dock = DockStyle.None,
+				AutoSize = true,
+				Location = Point.Empty,
 				GripStyle = ToolStripGripStyle.Hidden,
-				CanOverflow = true,
+				CanOverflow = false,
 				ShowItemToolTips = true,
 				LayoutStyle = ToolStripLayoutStyle.HorizontalStackWithOverflow
 			};
-			_previewPanel = new Panel { Dock = DockStyle.Fill, BorderStyle = BorderStyle.FixedSingle };
+			_previewPanel = new ScrollPanel { Dock = DockStyle.Fill, BorderStyle = BorderStyle.FixedSingle, AutoScroll = true };
 			_previewPanel.Controls.Add(_preview);
+			_previewPanel.MouseDown += (s, e) => _previewPanel.Focus();
+			_preview.MouseDown += (s, e) => _previewPanel.Focus();
+			_previewPanel.MouseWheel += (s, e) => ScrollPreviewBy(-e.Delta / 3);
 
 			// available buttons (left)
 			_search = new TextBox { Dock = DockStyle.Top };
@@ -131,7 +138,11 @@ namespace Sledge.Shell.Settings.Editors
 			_list.Columns.Add("Button", 210);
 			_list.Columns.Add("Menu", 90);
 			_list.Columns.Add("Icon", 70);
-			_list.SelectedIndexChanged += (s, e) => UpdateButtons();
+			_list.SelectedIndexChanged += (s, e) =>
+			{
+				UpdateButtons();
+				if (!_updating) SyncPreviewSelection();
+			};
 			_list.DoubleClick += (s, e) => RemoveSelected();
 			_list.ItemDrag += (s, e) => _list.DoDragDrop(e.Item, DragDropEffects.Move);
 			_list.DragEnter += (s, e) => e.Effect = CanDrop(e) ? DragDropEffects.Move : DragDropEffects.None;
@@ -198,6 +209,21 @@ namespace Sledge.Shell.Settings.Editors
 			UpdateButtons();
 		}
 
+		/// <summary>A panel that can take the focus, so that it receives the mouse wheel.</summary>
+		private class ScrollPanel : Panel
+		{
+			public ScrollPanel()
+			{
+				SetStyle(ControlStyles.Selectable, true);
+			}
+		}
+
+		private void ScrollPreviewBy(int dx)
+		{
+			var x = -_previewPanel.AutoScrollPosition.X + dx;
+			_previewPanel.AutoScrollPosition = new Point(Math.Max(0, x), 0);
+		}
+
 		private static Button MakeButton(string text, EventHandler click)
 		{
 			var b = new Button { Text = text, Width = 122, Height = 26, Margin = new Padding(0, 0, 0, 4) };
@@ -260,6 +286,7 @@ namespace Sledge.Shell.Settings.Editors
 				_updating = false;
 			}
 			UpdateButtons();
+			SyncPreviewSelection();
 		}
 
 		private void BuildImages()
@@ -371,7 +398,10 @@ namespace Sledge.Shell.Settings.Editors
 		private void FillPreview()
 		{
 			var size = PreviewIconSize();
-			_root.RowStyles[2].Height = size + 22;
+			// room for the buttons and for the scroll bar under them
+			_root.RowStyles[2].Height = size + 48;
+
+			var scrolledTo = -_previewPanel.AutoScrollPosition.X;
 
 			_preview.SuspendLayout();
 			try
@@ -406,7 +436,8 @@ namespace Sledge.Shell.Settings.Editors
 						Image = IconFor(entry, info, size),
 						ToolTipText = info.Name,
 						AutoSize = false,
-						Size = new Size(size + 4, size + 4)
+						Size = new Size(size + 4, size + 4),
+						Tag = entry
 					};
 					// clicking a button in the preview selects its row
 					button.Click += (s, e) => SelectEntry(captured);
@@ -415,7 +446,33 @@ namespace Sledge.Shell.Settings.Editors
 			}
 			finally
 			{
-				_preview.ResumeLayout();
+				_preview.ResumeLayout(true);
+			}
+
+			// the scrollable width is the full width of the strip
+			_previewPanel.AutoScrollMinSize = new Size(_preview.GetPreferredSize(Size.Empty).Width + 4, 0);
+			_previewPanel.AutoScrollPosition = new Point(Math.Max(0, scrolledTo), 0);
+		}
+
+		/// <summary>Marks the selected row's button in the preview and scrolls the preview to show it.</summary>
+		private void SyncPreviewSelection()
+		{
+			var selected = SelectedEntry();
+			ToolStripButton shown = null;
+			foreach (ToolStripItem item in _preview.Items)
+			{
+				var button = item as ToolStripButton;
+				if (button == null) continue;
+				var isSelected = selected != null && ReferenceEquals(button.Tag, selected);
+				button.Checked = isSelected;
+				if (isSelected) shown = button;
+			}
+			if (shown == null) return;
+
+			var left = -_previewPanel.AutoScrollPosition.X;
+			if (shown.Bounds.Left < left || shown.Bounds.Right > left + _previewPanel.ClientSize.Width)
+			{
+				_previewPanel.AutoScrollPosition = new Point(Math.Max(0, shown.Bounds.Left - 24), 0);
 			}
 		}
 
