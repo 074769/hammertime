@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
@@ -9,8 +10,9 @@ using Sledge.Shell.Registers;
 namespace Sledge.Shell.Settings.Editors
 {
 	/// <summary>
-	/// Settings editor for the top toolbar buttons: tick buttons to show them, reorder them, and pick an icon for each.
-	/// Built in code (no designer file).
+	/// Settings editor for the top toolbar. The buttons that can be added are listed on the left, grouped by
+	/// menu, with a search box. The toolbar itself is the list on the right, in the order it is shown, and it can
+	/// hold divider lines. A preview strip at the top shows the result. Built in code (no designer file).
 	/// </summary>
 	public class TopToolbarEditor : UserControl, ISettingEditor
 	{
@@ -20,16 +22,26 @@ namespace Sledge.Shell.Settings.Editors
 		public object Control => this;
 		public SettingKey Key { get; set; }
 
-		private const int IconSize = 16;
+		private const int ListIconSize = 16;
 
+		private readonly TextBox _search;
+		private readonly TreeView _available;
 		private readonly ListView _list;
 		private readonly ImageList _images;
+		private readonly ToolStrip _preview;
+		private readonly Panel _previewPanel;
+		private readonly TableLayoutPanel _root;
+
+		private readonly Button _add;
+		private readonly Button _remove;
 		private readonly Button _up;
 		private readonly Button _down;
+		private readonly Button _divider;
 		private readonly Button _chooseIcon;
 		private readonly Button _resetIcon;
 		private readonly Button _resetAll;
-		private readonly Label _hint;
+
+		private readonly Dictionary<string, int> _imageIndex = new Dictionary<string, int>();
 
 		private TopToolbarLayout _layout = new TopToolbarLayout();
 		private bool _updating;
@@ -41,78 +53,164 @@ namespace Sledge.Shell.Settings.Editors
 			{
 				var saved = (value as TopToolbarLayout) ?? new TopToolbarLayout();
 				_layout = saved.Resolve(Items().Select(x => x.Id));
-				Rebuild(0);
+				Rebuild(null);
 			}
 		}
 
 		public TopToolbarEditor()
 		{
 			Anchor = AnchorStyles.Top | AnchorStyles.Bottom;
-			Size = new Size(560, 400);
-			MinimumSize = new Size(420, 260);
+			Size = new Size(640, 520);
+			MinimumSize = new Size(520, 380);
 
-			_hint = new Label
+			_images = new ImageList { ColorDepth = ColorDepth.Depth32Bit, ImageSize = new Size(ListIconSize, ListIconSize) };
+
+			var hint = new Label
 			{
-				Dock = DockStyle.Top,
-				Height = 48,
-				Text = "Tick a button to show it. Drag rows to reorder them (you can also drag buttons on the toolbar itself, or drop an image file on one to set its icon). Press OK to apply."
+				Dock = DockStyle.Fill,
+				Text = "Pick buttons on the left and add them to the toolbar. Drag rows to reorder them, and add dividers to group them. " +
+				       "Double-click a row to add or remove it. Press OK to apply."
 			};
 
-			_images = new ImageList { ColorDepth = ColorDepth.Depth32Bit, ImageSize = new Size(IconSize, IconSize) };
+			var previewLabel = new Label { Dock = DockStyle.Fill, Text = "Toolbar preview", TextAlign = ContentAlignment.BottomLeft };
 
+			_preview = new ToolStrip
+			{
+				Dock = DockStyle.Fill,
+				GripStyle = ToolStripGripStyle.Hidden,
+				CanOverflow = true,
+				ShowItemToolTips = true,
+				LayoutStyle = ToolStripLayoutStyle.HorizontalStackWithOverflow
+			};
+			_previewPanel = new Panel { Dock = DockStyle.Fill, BorderStyle = BorderStyle.FixedSingle };
+			_previewPanel.Controls.Add(_preview);
+
+			// available buttons (left)
+			_search = new TextBox { Dock = DockStyle.Top };
+			_search.TextChanged += (s, e) => FillAvailable();
+			_available = new TreeView
+			{
+				Dock = DockStyle.Fill,
+				HideSelection = false,
+				ShowLines = false,
+				ShowRootLines = true,
+				ImageList = _images,
+				BorderStyle = BorderStyle.FixedSingle,
+				AllowDrop = true
+			};
+			_available.AfterSelect += (s, e) => UpdateButtons();
+			_available.NodeMouseDoubleClick += (s, e) => AddSelected();
+			_available.ItemDrag += (s, e) => _available.DoDragDrop(e.Item, DragDropEffects.Move);
+			_available.DragEnter += (s, e) => e.Effect = e.Data.GetDataPresent(typeof(ListViewItem)) ? DragDropEffects.Move : DragDropEffects.None;
+			_available.DragOver += (s, e) => e.Effect = e.Data.GetDataPresent(typeof(ListViewItem)) ? DragDropEffects.Move : DragDropEffects.None;
+			_available.DragDrop += (s, e) =>
+			{
+				// dragging a row from the toolbar back onto the available list removes it
+				if (e.Data.GetData(typeof(ListViewItem)) is ListViewItem dragged && dragged.Tag is TopToolbarEntry entry) Remove(entry);
+			};
+
+			var leftLabel = new Label { Dock = DockStyle.Top, Height = 20, Text = "Available buttons", TextAlign = ContentAlignment.BottomLeft };
+			var left = new Panel { Dock = DockStyle.Fill };
+			left.Controls.Add(_available);
+			left.Controls.Add(_search);
+			left.Controls.Add(leftLabel);
+
+			// the toolbar (right)
 			_list = new ListView
 			{
 				Dock = DockStyle.Fill,
 				View = View.Details,
 				FullRowSelect = true,
-				CheckBoxes = true,
 				HideSelection = false,
 				MultiSelect = false,
+				HeaderStyle = ColumnHeaderStyle.Nonclickable,
 				SmallImageList = _images,
-				BorderStyle = BorderStyle.FixedSingle
+				BorderStyle = BorderStyle.FixedSingle,
+				AllowDrop = true
 			};
-			_list.Columns.Add("Button", 170);
+			_list.Columns.Add("Button", 210);
 			_list.Columns.Add("Menu", 90);
-			_list.Columns.Add("Custom icon", 260);
-			_list.ItemChecked += ItemChecked;
+			_list.Columns.Add("Icon", 70);
 			_list.SelectedIndexChanged += (s, e) => UpdateButtons();
-			_list.DoubleClick += (s, e) => ChooseIcon();
-			_list.AllowDrop = true;
+			_list.DoubleClick += (s, e) => RemoveSelected();
 			_list.ItemDrag += (s, e) => _list.DoDragDrop(e.Item, DragDropEffects.Move);
-			_list.DragEnter += (s, e) => e.Effect = e.Data.GetDataPresent(typeof(ListViewItem)) ? DragDropEffects.Move : DragDropEffects.None;
-			_list.DragOver += (s, e) => e.Effect = e.Data.GetDataPresent(typeof(ListViewItem)) ? DragDropEffects.Move : DragDropEffects.None;
-			_list.DragDrop += (s, e) => DropItem(e);
+			_list.DragEnter += (s, e) => e.Effect = CanDrop(e) ? DragDropEffects.Move : DragDropEffects.None;
+			_list.DragOver += (s, e) => e.Effect = CanDrop(e) ? DragDropEffects.Move : DragDropEffects.None;
+			_list.DragDrop += (s, e) => DropOnList(e);
 
-			var buttons = new FlowLayoutPanel
-			{
-				Dock = DockStyle.Bottom,
-				Height = 38,
-				FlowDirection = FlowDirection.LeftToRight,
-				WrapContents = false,
-				Padding = new Padding(0, 6, 0, 0)
-			};
-			_up = MakeButton("Move up", (s, e) => Move(-1));
-			_down = MakeButton("Move down", (s, e) => Move(1));
+			var rightLabel = new Label { Dock = DockStyle.Top, Height = 20, Text = "On the toolbar", TextAlign = ContentAlignment.BottomLeft };
+			var right = new Panel { Dock = DockStyle.Fill };
+			right.Controls.Add(_list);
+			right.Controls.Add(rightLabel);
+
+			// buttons (middle)
+			_add = MakeButton("Add  >", (s, e) => AddSelected());
+			_remove = MakeButton("<  Remove", (s, e) => RemoveSelected());
+			_up = MakeButton("Move up", (s, e) => MoveSelected(-1));
+			_down = MakeButton("Move down", (s, e) => MoveSelected(1));
+			_divider = MakeButton("Add divider", (s, e) => AddDivider());
 			_chooseIcon = MakeButton("Choose icon...", (s, e) => ChooseIcon());
 			_resetIcon = MakeButton("Default icon", (s, e) => ResetIcon());
-			_resetAll = MakeButton("Reset all", (s, e) => ResetAll());
-			buttons.Controls.AddRange(new Control[] { _up, _down, _chooseIcon, _resetIcon, _resetAll });
+			_resetAll = MakeButton("Reset to defaults", (s, e) => ResetAll());
 
-			Controls.Add(_list);
-			Controls.Add(buttons);
-			Controls.Add(_hint);
+			var middle = new FlowLayoutPanel
+			{
+				Dock = DockStyle.Fill,
+				FlowDirection = FlowDirection.TopDown,
+				WrapContents = false,
+				Padding = new Padding(4, 24, 4, 0)
+			};
+			middle.Controls.AddRange(new Control[] { _add, _remove, Spacer(), _up, _down, Spacer(), _divider, _chooseIcon, _resetIcon });
+
+			var main = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
+			main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
+			main.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 136));
+			main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58));
+			main.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+			main.Controls.Add(left, 0, 0);
+			main.Controls.Add(middle, 1, 0);
+			main.Controls.Add(right, 2, 0);
+
+			var bottom = new FlowLayoutPanel
+			{
+				Dock = DockStyle.Fill,
+				FlowDirection = FlowDirection.LeftToRight,
+				WrapContents = false,
+				Padding = new Padding(0, 4, 0, 0)
+			};
+			bottom.Controls.Add(_resetAll);
+
+			var root = _root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5 };
+			root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+			root.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+			root.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
+			root.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
+			root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+			root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+			root.Controls.Add(hint, 0, 0);
+			root.Controls.Add(previewLabel, 0, 1);
+			root.Controls.Add(_previewPanel, 0, 2);
+			root.Controls.Add(main, 0, 3);
+			root.Controls.Add(bottom, 0, 4);
+
+			Controls.Add(root);
 
 			UpdateButtons();
 		}
 
 		private static Button MakeButton(string text, EventHandler click)
 		{
-			var b = new Button { Text = text, AutoSize = true, MinimumSize = new Size(90, 26) };
+			var b = new Button { Text = text, Width = 122, Height = 26, Margin = new Padding(0, 0, 0, 4) };
 			b.Click += click;
 			return b;
 		}
 
-		private static System.Collections.Generic.IReadOnlyList<TopToolbarItemInfo> Items()
+		private static Control Spacer()
+		{
+			return new Panel { Width = 122, Height = 10, Margin = new Padding(0) };
+		}
+
+		private static IReadOnlyList<TopToolbarItemInfo> Items()
 		{
 			return MenuRegister.AllToolbarItems;
 		}
@@ -122,53 +220,232 @@ namespace Sledge.Shell.Settings.Editors
 			return Items().FirstOrDefault(x => x.Id == id);
 		}
 
-		private void Rebuild(int select)
+		/// <summary>Buttons on the toolbar and dividers; hidden buttons are the ones that can still be added.</summary>
+		private static bool IsShown(TopToolbarEntry entry)
+		{
+			return entry.IsSeparator() || entry.Visible;
+		}
+
+		private TopToolbarEntry SelectedEntry()
+		{
+			return _list.SelectedItems.Count == 1 ? _list.SelectedItems[0].Tag as TopToolbarEntry : null;
+		}
+
+		private static int PreviewIconSize()
+		{
+			return Math.Max(16, Math.Min(64, TopToolbarSettings.IconSize));
+		}
+
+		private Image IconFor(TopToolbarEntry entry, TopToolbarItemInfo info, int size)
+		{
+			Image icon = null;
+			if (!string.IsNullOrWhiteSpace(entry.IconPath)) icon = IconLoader.LoadFromFile(entry.IconPath, size);
+			return icon ?? info?.IconAtSize?.Invoke(size) ?? info?.DefaultIcon;
+		}
+
+		// ---- building the three views ----
+
+		private void Rebuild(TopToolbarEntry select)
 		{
 			_updating = true;
-			_list.BeginUpdate();
 			try
 			{
-				_list.Items.Clear();
-				_images.Images.Clear();
-				foreach (var entry in _layout)
-				{
-					var info = Find(entry.Id);
-					Image icon = null;
-					if (!string.IsNullOrWhiteSpace(entry.IconPath)) icon = IconLoader.LoadFromFile(entry.IconPath, IconSize);
-					icon = icon ?? info?.DefaultIcon;
-					var imageIndex = -1;
-					if (icon != null)
-					{
-						_images.Images.Add(icon);
-						imageIndex = _images.Images.Count - 1;
-					}
-					var item = new ListViewItem(info?.Name ?? entry.Id, imageIndex) { Checked = entry.Visible, Tag = entry };
-					item.SubItems.Add(info?.Section ?? "");
-					item.SubItems.Add(string.IsNullOrWhiteSpace(entry.IconPath) ? "(default)" : entry.IconPath);
-					_list.Items.Add(item);
-				}
-				if (_list.Items.Count > 0)
-				{
-					var idx = Math.Max(0, Math.Min(select, _list.Items.Count - 1));
-					_list.Items[idx].Selected = true;
-					_list.Items[idx].Focused = true;
-				}
+				BuildImages();
+				FillToolbarList(select);
+				FillAvailable();
+				FillPreview();
 			}
 			finally
 			{
-				_list.EndUpdate();
 				_updating = false;
 			}
 			UpdateButtons();
 		}
 
+		private void BuildImages()
+		{
+			_images.Images.Clear();
+			_imageIndex.Clear();
+			foreach (var entry in _layout)
+			{
+				if (entry.IsSeparator() || _imageIndex.ContainsKey(entry.Id)) continue;
+				var icon = IconFor(entry, Find(entry.Id), ListIconSize);
+				if (icon == null) continue;
+				_images.Images.Add(icon);
+				_imageIndex[entry.Id] = _images.Images.Count - 1;
+			}
+		}
+
+		private int ImageIndexOf(TopToolbarEntry entry)
+		{
+			return _imageIndex.TryGetValue(entry.Id, out var index) ? index : -1;
+		}
+
+		private void FillToolbarList(TopToolbarEntry select)
+		{
+			_list.BeginUpdate();
+			try
+			{
+				_list.Items.Clear();
+				foreach (var entry in _layout)
+				{
+					if (!IsShown(entry)) continue;
+
+					ListViewItem item;
+					if (entry.IsSeparator())
+					{
+						item = new ListViewItem("------------  divider  ------------", -1) { Tag = entry, ForeColor = SystemColors.GrayText };
+					}
+					else
+					{
+						var info = Find(entry.Id);
+						if (info == null) continue;
+						item = new ListViewItem(info.Name, ImageIndexOf(entry)) { Tag = entry };
+						item.SubItems.Add(info.Section ?? "");
+						item.SubItems.Add(string.IsNullOrWhiteSpace(entry.IconPath) ? "" : "custom");
+					}
+					_list.Items.Add(item);
+					if (ReferenceEquals(entry, select))
+					{
+						item.Selected = true;
+						item.Focused = true;
+						item.EnsureVisible();
+					}
+				}
+			}
+			finally
+			{
+				_list.EndUpdate();
+			}
+		}
+
+		private bool Matches(TopToolbarItemInfo info, string text)
+		{
+			if (string.IsNullOrWhiteSpace(text)) return true;
+			text = text.Trim();
+			return (info.Name ?? "").IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0
+			       || (info.Section ?? "").IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0;
+		}
+
+		private void FillAvailable()
+		{
+			var text = _search.Text;
+			_available.BeginUpdate();
+			try
+			{
+				_available.Nodes.Clear();
+
+				var hidden = _layout.Where(e => !e.IsSeparator() && !e.Visible).ToList();
+				var any = false;
+				foreach (var section in Items().Select(x => x.Section ?? "").Distinct())
+				{
+					var children = new List<TreeNode>();
+					foreach (var info in Items().Where(x => (x.Section ?? "") == section))
+					{
+						var entry = hidden.FirstOrDefault(e => e.Id == info.Id);
+						if (entry == null || !Matches(info, text)) continue;
+						var index = ImageIndexOf(entry);
+						children.Add(new TreeNode(info.Name) { Tag = entry, ImageIndex = index, SelectedImageIndex = index });
+					}
+					if (children.Count == 0) continue;
+
+					any = true;
+					var node = new TreeNode(section + "  (" + children.Count + ")", children.ToArray()) { ImageIndex = -1, SelectedImageIndex = -1 };
+					_available.Nodes.Add(node);
+					node.Expand();
+				}
+
+				if (!any)
+				{
+					var message = string.IsNullOrWhiteSpace(text) ? "(every button is already on the toolbar)" : "(no button matches)";
+					_available.Nodes.Add(new TreeNode(message) { ForeColor = SystemColors.GrayText });
+				}
+			}
+			finally
+			{
+				_available.EndUpdate();
+			}
+			UpdateButtons();
+		}
+
+		private void FillPreview()
+		{
+			var size = PreviewIconSize();
+			_root.RowStyles[2].Height = size + 22;
+
+			_preview.SuspendLayout();
+			try
+			{
+				_preview.Items.Clear();
+				_preview.ImageScalingSize = new Size(size, size);
+
+				var dividerWaiting = false;
+				foreach (var entry in _layout)
+				{
+					if (entry.IsSeparator())
+					{
+						dividerWaiting = _preview.Items.Count > 0;
+						continue;
+					}
+					if (!entry.Visible) continue;
+					var info = Find(entry.Id);
+					if (info == null) continue;
+
+					if (dividerWaiting)
+					{
+						_preview.Items.Add(new ToolStripSeparator());
+						dividerWaiting = false;
+					}
+
+					var captured = entry;
+					var button = new ToolStripButton
+					{
+						DisplayStyle = ToolStripItemDisplayStyle.Image,
+						ImageScaling = ToolStripItemImageScaling.None,
+						ImageAlign = ContentAlignment.MiddleCenter,
+						Image = IconFor(entry, info, size),
+						ToolTipText = info.Name,
+						AutoSize = false,
+						Size = new Size(size + 4, size + 4)
+					};
+					// clicking a button in the preview selects its row
+					button.Click += (s, e) => SelectEntry(captured);
+					_preview.Items.Add(button);
+				}
+			}
+			finally
+			{
+				_preview.ResumeLayout();
+			}
+		}
+
+		private void SelectEntry(TopToolbarEntry entry)
+		{
+			foreach (ListViewItem item in _list.Items)
+			{
+				if (!ReferenceEquals(item.Tag, entry)) continue;
+				item.Selected = true;
+				item.Focused = true;
+				item.EnsureVisible();
+				return;
+			}
+		}
+
 		private void UpdateButtons()
 		{
-			var idx = _list.SelectedIndices.Count == 1 ? _list.SelectedIndices[0] : -1;
-			_up.Enabled = idx > 0;
-			_down.Enabled = idx >= 0 && idx < _list.Items.Count - 1;
-			_chooseIcon.Enabled = idx >= 0;
-			_resetIcon.Enabled = idx >= 0 && !string.IsNullOrWhiteSpace(_layout[idx].IconPath);
+			if (_updating) return;
+
+			var node = _available.SelectedNode;
+			_add.Enabled = node != null && (node.Tag is TopToolbarEntry || node.Nodes.Count > 0);
+
+			var entry = SelectedEntry();
+			var shown = _layout.Where(IsShown).ToList();
+			var index = entry == null ? -1 : shown.IndexOf(entry);
+			_remove.Enabled = entry != null;
+			_up.Enabled = index > 0;
+			_down.Enabled = index >= 0 && index < shown.Count - 1;
+			_chooseIcon.Enabled = entry != null && !entry.IsSeparator();
+			_resetIcon.Enabled = entry != null && !entry.IsSeparator() && !string.IsNullOrWhiteSpace(entry.IconPath);
 		}
 
 		private void Changed()
@@ -176,53 +453,107 @@ namespace Sledge.Shell.Settings.Editors
 			OnValueChanged?.Invoke(this, Key);
 		}
 
-		private void ItemChecked(object sender, ItemCheckedEventArgs e)
+		// ---- changing the layout ----
+
+		/// <summary>Moves an entry next to another one (or to the end when there is no target).</summary>
+		private void Place(TopToolbarEntry entry, TopToolbarEntry target, bool after)
 		{
-			if (_updating) return;
-			if (e.Item.Tag is TopToolbarEntry entry)
+			_layout.Remove(entry);
+			var index = _layout.Count;
+			if (target != null)
 			{
-				entry.Visible = e.Item.Checked;
-				Changed();
+				var at = _layout.IndexOf(target);
+				if (at >= 0) index = at + (after ? 1 : 0);
 			}
+			_layout.Insert(index, entry);
 		}
 
-		/// <summary>Drag a row to a new position in the list.</summary>
-		private void DropItem(DragEventArgs e)
+		private void AddEntries(IEnumerable<TopToolbarEntry> entries, TopToolbarEntry target, bool after)
 		{
-			var dragged = e.Data.GetData(typeof(ListViewItem)) as ListViewItem;
-			if (dragged == null) return;
-			var from = dragged.Index;
-			var over = _list.GetItemAt(_list.PointToClient(new Point(e.X, e.Y)).X, _list.PointToClient(new Point(e.X, e.Y)).Y);
-			var to = over == null ? _layout.Count - 1 : over.Index;
-			if (from < 0 || to < 0 || from == to) return;
-
-			var moving = _layout[from];
-			_layout.RemoveAt(from);
-			_layout.Insert(to, moving);
-			Rebuild(to);
+			TopToolbarEntry last = null;
+			foreach (var entry in entries.ToList())
+			{
+				entry.Visible = true;
+				if (last != null) Place(entry, last, true);
+				else Place(entry, target, after);
+				last = entry;
+			}
+			if (last == null) return;
+			Rebuild(last);
 			Changed();
 		}
 
-		private void Move(int delta)
+		private IEnumerable<TopToolbarEntry> EntriesOf(TreeNode node)
 		{
-			if (_list.SelectedIndices.Count != 1) return;
-			var idx = _list.SelectedIndices[0];
-			var other = idx + delta;
-			if (other < 0 || other >= _layout.Count) return;
+			if (node == null) yield break;
+			if (node.Tag is TopToolbarEntry entry) yield return entry;
+			foreach (TreeNode child in node.Nodes)
+			{
+				if (child.Tag is TopToolbarEntry e) yield return e;
+			}
+		}
 
-			var tmp = _layout[idx];
-			_layout[idx] = _layout[other];
-			_layout[other] = tmp;
+		private void AddSelected()
+		{
+			var entries = EntriesOf(_available.SelectedNode).ToList();
+			if (entries.Count == 0) return;
+			// goes right after the selected row, or at the end
+			AddEntries(entries, SelectedEntry(), true);
+		}
 
-			Rebuild(other);
+		private void Remove(TopToolbarEntry entry)
+		{
+			var shown = _layout.Where(IsShown).ToList();
+			var at = shown.IndexOf(entry);
+			TopToolbarEntry neighbour = null;
+			if (at >= 0) neighbour = at + 1 < shown.Count ? shown[at + 1] : (at > 0 ? shown[at - 1] : null);
+
+			if (entry.IsSeparator()) _layout.Remove(entry);
+			else entry.Visible = false;
+
+			Rebuild(neighbour);
+			Changed();
+		}
+
+		private void RemoveSelected()
+		{
+			var entry = SelectedEntry();
+			if (entry != null) Remove(entry);
+		}
+
+		private void MoveSelected(int delta)
+		{
+			var entry = SelectedEntry();
+			if (entry == null) return;
+
+			var from = _layout.IndexOf(entry);
+			var to = from + delta;
+			while (to >= 0 && to < _layout.Count && !IsShown(_layout[to])) to += delta;
+			if (from < 0 || to < 0 || to >= _layout.Count) return;
+
+			var other = _layout[to];
+			_layout[to] = entry;
+			_layout[from] = other;
+
+			Rebuild(entry);
+			Changed();
+		}
+
+		private void AddDivider()
+		{
+			var divider = TopToolbarEntry.NewSeparator();
+			var target = SelectedEntry();
+			if (target == null) _layout.Add(divider);
+			else _layout.Insert(_layout.IndexOf(target) + 1, divider);
+
+			Rebuild(divider);
 			Changed();
 		}
 
 		private void ChooseIcon()
 		{
-			if (_list.SelectedIndices.Count != 1) return;
-			var idx = _list.SelectedIndices[0];
-			var entry = _layout[idx];
+			var entry = SelectedEntry();
+			if (entry == null || entry.IsSeparator()) return;
 
 			using (var ofd = new OpenFileDialog())
 			{
@@ -231,7 +562,7 @@ namespace Sledge.Shell.Settings.Editors
 				if (!string.IsNullOrWhiteSpace(entry.IconPath)) ofd.FileName = entry.IconPath;
 				if (ofd.ShowDialog(FindForm()) != DialogResult.OK) return;
 
-				if (IconLoader.LoadFromFile(ofd.FileName, IconSize) == null)
+				if (IconLoader.LoadFromFile(ofd.FileName, ListIconSize) == null)
 				{
 					MessageBox.Show(FindForm(), "That file couldn't be loaded as an icon.", "Choose icon", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 					return;
@@ -239,24 +570,70 @@ namespace Sledge.Shell.Settings.Editors
 				entry.IconPath = ofd.FileName;
 			}
 
-			Rebuild(idx);
+			Rebuild(entry);
 			Changed();
 		}
 
 		private void ResetIcon()
 		{
-			if (_list.SelectedIndices.Count != 1) return;
-			var idx = _list.SelectedIndices[0];
-			_layout[idx].IconPath = null;
-			Rebuild(idx);
+			var entry = SelectedEntry();
+			if (entry == null) return;
+			entry.IconPath = null;
+			Rebuild(entry);
 			Changed();
 		}
 
 		private void ResetAll()
 		{
-			_layout = new TopToolbarLayout().Resolve(Items().Select(x => x.Id));
-			Rebuild(0);
+			var answer = MessageBox.Show(FindForm(), "Put the toolbar back to its default buttons, order and icons?", "Reset toolbar",
+				MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
+			if (answer != DialogResult.OK) return;
+
+			_layout = new TopToolbarLayout().Resolve(Items().Select(x => x.Id)).WithDefaultSeparators(Items());
+			Rebuild(null);
 			Changed();
+		}
+
+		// ---- drag and drop on the toolbar list ----
+
+		private static bool CanDrop(DragEventArgs e)
+		{
+			return e.Data.GetDataPresent(typeof(ListViewItem)) || e.Data.GetDataPresent(typeof(TreeNode));
+		}
+
+		private void DropOnList(DragEventArgs e)
+		{
+			var pt = _list.PointToClient(new Point(e.X, e.Y));
+			var over = _list.GetItemAt(pt.X, pt.Y);
+
+			TopToolbarEntry target;
+			bool after;
+			if (over != null)
+			{
+				target = over.Tag as TopToolbarEntry;
+				after = pt.Y > over.Bounds.Top + over.Bounds.Height / 2;
+			}
+			else
+			{
+				// below the last row: to the end
+				target = _list.Items.Count > 0 ? _list.Items[_list.Items.Count - 1].Tag as TopToolbarEntry : null;
+				after = true;
+			}
+
+			if (e.Data.GetData(typeof(ListViewItem)) is ListViewItem dragged)
+			{
+				var moving = dragged.Tag as TopToolbarEntry;
+				if (moving == null || ReferenceEquals(moving, target)) return;
+				Place(moving, target, after);
+				Rebuild(moving);
+				Changed();
+				return;
+			}
+
+			if (e.Data.GetData(typeof(TreeNode)) is TreeNode node)
+			{
+				AddEntries(EntriesOf(node), target, after);
+			}
 		}
 
 		public void UseDarkTheme(bool dark)

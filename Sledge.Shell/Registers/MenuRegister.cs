@@ -442,29 +442,45 @@ namespace Sledge.Shell.Registers
 			}
 
 			/// <summary>
-			/// Gets the first saved position of a toolbar section.
-			///
-			/// This makes the saved TopToolbarLayout determine the order
-			/// of the individual toolbar strips as well as the buttons
-			/// inside them.
+			/// Gives a toolbar button the user's icon (or the built-in one)
+			/// at the toolbar's icon size.
 			/// </summary>
-			private static int GetSectionLayoutPosition(
-				MenuTreeRoot root,
-				TopToolbarLayout layout)
+			private static void ConfigureButton(
+				BaseMenuTreeNode node,
+				TopToolbarEntry entry,
+				int iconSize)
 			{
-				var positions =
-					root.ToolbarNodes
-						.Select(x => layout.FindIndex(
-							e => e.Id == x.Id))
-						.Where(x => x >= 0)
-						.ToList();
+				Image icon = null;
 
-				if (positions.Count == 0)
+				if (!string.IsNullOrWhiteSpace(
+					entry.IconPath))
 				{
-					return int.MaxValue;
+					icon =
+						IconLoader.LoadFromFile(
+							entry.IconPath,
+							iconSize);
 				}
 
-				return positions.Min();
+				var button = node.ToolbarButton;
+
+				button.DisplayStyle =
+					ToolStripItemDisplayStyle.Image;
+
+				button.ImageScaling =
+					ToolStripItemImageScaling.None;
+
+				button.ImageAlign =
+					ContentAlignment.MiddleCenter;
+
+				button.Image =
+					icon ??
+					node.ScaledIcon(iconSize);
+
+				button.AutoSize = false;
+
+				button.Width = iconSize + 4;
+
+				button.Height = iconSize + 4;
 			}
 
 			/// <summary>
@@ -521,7 +537,9 @@ namespace Sledge.Shell.Registers
 									Id = n.Id,
 									Name = n.DisplayName,
 									Section = r.SectionName,
-									DefaultIcon = n.DefaultIcon
+									Group = n.Group?.Name ?? "",
+									DefaultIcon = n.DefaultIcon,
+									IconAtSize = n.ScaledIcon
 								}))
 						.ToList();
 
@@ -557,6 +575,8 @@ namespace Sledge.Shell.Registers
 
 					TopToolbarSettings.ResetOrder = false;
 
+					TopToolbarSettings.SeparatorsMigrated = false;
+
 					Oy.Publish("Settings:Save");
 				}
 
@@ -570,6 +590,23 @@ namespace Sledge.Shell.Registers
 				var layout =
 					TopToolbarSettings.Layout.Resolve(
 						AllToolbarItems.Select(x => x.Id));
+
+				// the toolbar used to put a divider between menu groups by itself;
+				// now the dividers are entries of the layout. Once, put them where
+				// those automatic ones used to be.
+				if (!TopToolbarSettings.SeparatorsMigrated &&
+					AllToolbarItems.Count > 0)
+				{
+					layout =
+						layout.WithDefaultSeparators(
+							AllToolbarItems);
+
+					TopToolbarSettings.Layout = layout;
+
+					TopToolbarSettings.SeparatorsMigrated = true;
+
+					Oy.Publish("Settings:Save");
+				}
 
 				if (_toolbarMenu == null)
 				{
@@ -598,41 +635,6 @@ namespace Sledge.Shell.Registers
 				panel.BeginInit();
 
 				/*
-				 * IMPORTANT:
-				 *
-				 * The old code sorted the strips by OrderHint.
-				 * That meant the saved global toolbar order could
-				 * never completely control the visual order.
-				 *
-				 * We now sort sections by the position of their first
-				 * saved toolbar item.
-				 *
-				 * If a section has no saved entries yet, its normal
-				 * OrderHint is used as the fallback.
-				 */
-				var orderedRoots =
-					RootNodes.Values
-						.Select(
-							(root, index) => new
-							{
-								Root = root,
-								Index = index,
-								LayoutPosition =
-									GetSectionLayoutPosition(
-										root,
-										layout)
-							})
-						.OrderBy(x =>
-							x.LayoutPosition == int.MaxValue
-								? int.MaxValue
-								: x.LayoutPosition)
-						.ThenBy(x => SectionRank(x.Root))
-						.ThenBy(x => x.Root.OrderHint)
-						.ThenBy(x => x.Index)
-						.Select(x => x.Root)
-						.ToList();
-
-				/*
 				 * Every button lives on one strip. The strip always fills its
 				 * row (Stretch), stays on one line, and puts the buttons that do
 				 * not fit behind its overflow arrow. There are no rows and no
@@ -650,31 +652,49 @@ namespace Sledge.Shell.Registers
 					bar.Items.RemoveAt(0);
 				}
 
-				foreach (var ts in orderedRoots)
-				{
-					ts.ApplyLayout(
-						layout,
-						iconSize);
+				// the saved layout is the toolbar, in order: buttons and dividers
+				var nodes =
+					RootNodes.Values
+						.SelectMany(r => r.ToolbarNodes)
+						.GroupBy(n => n.Id)
+						.ToDictionary(
+							g => g.Key,
+							g => g.First());
 
-					if (ts.ToolStrip.Items.Count == 0)
+				var dividerWaiting = false;
+
+				foreach (var entry in layout)
+				{
+					if (entry.IsSeparator())
+					{
+						// only between two buttons: never first, last or doubled
+						dividerWaiting = bar.Items.Count > 0;
+
+						continue;
+					}
+
+					if (!entry.Visible ||
+						!nodes.TryGetValue(
+							entry.Id,
+							out var node))
 					{
 						continue;
 					}
 
-					if (bar.Items.Count > 0)
+					ConfigureButton(
+						node,
+						entry,
+						iconSize);
+
+					if (dividerWaiting)
 					{
 						bar.Items.Add(
 							new ToolStripSeparator());
+
+						dividerWaiting = false;
 					}
 
-					// adding an item to the bar takes it off the section's strip
-					foreach (var item in
-						ts.ToolStrip.Items
-							.Cast<ToolStripItem>()
-							.ToList())
-					{
-						bar.Items.Add(item);
-					}
+					bar.Items.Add(node.ToolbarButton);
 				}
 
 				if (bar.Items.Count > 0)
@@ -1864,109 +1884,6 @@ namespace Sledge.Shell.Registers
 					.SelectMany(g => g.Nodes)
 					.Where(
 						n => n.ToolbarButton != null);
-
-			/// <summary>
-			/// Applies the user's saved order, visibility and icons
-			/// to this section.
-			/// </summary>
-			public void ApplyLayout(
-				TopToolbarLayout layout,
-				int iconSize)
-			{
-				var nodes =
-					ToolbarNodes
-						.Select(
-							(n, i) => new
-							{
-								Node = n,
-								Index = i,
-								Pos =
-									layout.FindIndex(
-										e => e.Id == n.Id)
-							})
-						.OrderBy(
-							x =>
-								x.Pos < 0
-									? int.MaxValue
-									: x.Pos)
-						.ThenBy(
-							x => x.Index)
-						.Select(
-							x => x.Node)
-						.ToList();
-
-				while (ToolStrip.Items.Count > 0)
-				{
-					ToolStrip.Items.RemoveAt(0);
-				}
-
-				string lastGroup = null;
-				var any = false;
-
-				foreach (var node in nodes)
-				{
-					var entry =
-						layout.Find(node.Id);
-
-					if (entry != null &&
-						!entry.Visible)
-					{
-						continue;
-					}
-
-					Image icon = null;
-
-					if (entry != null &&
-						!string.IsNullOrWhiteSpace(
-							entry.IconPath))
-					{
-						icon =
-							IconLoader.LoadFromFile(
-								entry.IconPath,
-								iconSize);
-					}
-
-					var button =
-						node.ToolbarButton;
-
-					button.DisplayStyle =
-						ToolStripItemDisplayStyle.Image;
-
-					button.ImageScaling =
-						ToolStripItemImageScaling.None;
-
-					button.ImageAlign =
-						ContentAlignment.MiddleCenter;
-
-					button.Image =
-						icon ??
-						node.ScaledIcon(iconSize);
-
-					button.AutoSize = false;
-
-					button.Width =
-						iconSize + 4;
-
-					button.Height =
-						iconSize + 4;
-
-					var group =
-						node.Group?.Name ?? "";
-
-					if (any &&
-						group != lastGroup)
-					{
-						ToolStrip.Items.Add(
-							new ToolStripSeparator());
-					}
-
-					ToolStrip.Items.Add(
-						node.ToolbarButton);
-
-					lastGroup = group;
-					any = true;
-				}
-			}
 
 			public MenuTreeRoot(
 				IContext context,

@@ -36,6 +36,19 @@ namespace Sledge.Shell.Settings
 		{
 			return new TopToolbarEntry { Id = Id, Visible = Visible, IconPath = IconPath };
 		}
+
+		/// <summary>The ID of an entry that is a divider line between buttons instead of a button</summary>
+		public const string SeparatorId = "-";
+
+		public bool IsSeparator()
+		{
+			return Id == SeparatorId;
+		}
+
+		public static TopToolbarEntry NewSeparator()
+		{
+			return new TopToolbarEntry { Id = SeparatorId };
+		}
 	}
 
 	/// <summary>
@@ -56,6 +69,28 @@ namespace Sledge.Shell.Settings
 		}
 
 		/// <summary>
+		/// A copy with a divider between neighbouring buttons that belong to different
+		/// menu groups (hidden buttons are not counted). Existing dividers are kept.
+		/// </summary>
+		internal TopToolbarLayout WithDefaultSeparators(IEnumerable<TopToolbarItemInfo> items)
+		{
+			var infos = items.GroupBy(x => x.Id).ToDictionary(g => g.Key, g => g.First());
+			var result = new TopToolbarLayout();
+			string previous = null;
+			foreach (var entry in this)
+			{
+				if (!entry.IsSeparator() && entry.Visible && infos.TryGetValue(entry.Id, out var info))
+				{
+					var key = info.Section + "/" + info.Group;
+					if (previous != null && previous != key) result.Add(TopToolbarEntry.NewSeparator());
+					previous = key;
+				}
+				result.Add(entry.Clone());
+			}
+			return result;
+		}
+
+		/// <summary>
 		/// Saved entries first (in saved order, dropping ones that no longer exist).
 		/// Buttons without a saved entry are visible and are placed right after
 		/// the button that precedes them in the default order, so they stay next
@@ -68,7 +103,14 @@ namespace Sledge.Shell.Settings
 			var result = new TopToolbarLayout();
 			foreach (var e in this)
 			{
-				if (e?.Id == null || !all.Contains(e.Id) || result.Find(e.Id) != null) continue;
+				if (e?.Id == null) continue;
+				// dividers are not buttons: any number of them, wherever the user put them
+				if (e.IsSeparator())
+				{
+					result.Add(e.Clone());
+					continue;
+				}
+				if (!all.Contains(e.Id) || result.Find(e.Id) != null) continue;
 				result.Add(e.Clone());
 			}
 			for (var i = 0; i < all.Count; i++)
@@ -101,7 +143,11 @@ namespace Sledge.Shell.Settings
 		public string Id { get; set; }
 		public string Name { get; set; }
 		public string Section { get; set; }
+		/// <summary>The group inside the menu this button belongs to (buttons of one group sit together by default)</summary>
+		public string Group { get; set; }
 		public Image DefaultIcon { get; set; }
+		/// <summary>Renders the built-in icon at a given pixel size, or null when the icon cannot do that</summary>
+		public Func<int, Image> IconAtSize { get; set; }
 	}
 
 	/// <summary>
@@ -114,6 +160,9 @@ namespace Sledge.Shell.Settings
 		public static TopToolbarLayout Layout { get; set; } = new TopToolbarLayout();
 		public static ToolbarDock Dock { get; set; } = ToolbarDock.Top;
 		public static bool Locked { get; set; } = DefaultLocked;
+
+		/// <summary>False until divider lines have been put into the saved layout (once, at the default places)</summary>
+		public static bool SeparatorsMigrated { get; set; }
 		public static int IconSize { get; set; } = 24;
 
 		/// <summary>Where each toolbar strip (keyed by its menu section) was left by the user: x, y inside the toolbar panel</summary>
@@ -169,6 +218,7 @@ namespace Sledge.Shell.Settings
 			Locked = store.Get("TopToolbarLocked", DefaultLocked);
 			IconSize = Math.Max(16, Math.Min(64, store.Get("TopToolbarIconSize24", 24)));
 			Layout = store.Get("TopToolbarButtons", new TopToolbarLayout()) ?? new TopToolbarLayout();
+			SeparatorsMigrated = store.Get("TopToolbarSeparators", false);
 
 			if (firstRun)
 			{
@@ -191,6 +241,7 @@ namespace Sledge.Shell.Settings
 			store.Set("TopToolbarLocked", Locked);
 			store.Set("TopToolbarIconSize24", IconSize);
 			store.Set("TopToolbarButtons", Layout);
+			store.Set("TopToolbarSeparators", SeparatorsMigrated);
 			store.Set("TopToolbarStripPositions", StripPositions);
 			store.Set("TopToolbarLayoutVersion", ResetOrder ? 0 : LayoutVersion);
 		}
