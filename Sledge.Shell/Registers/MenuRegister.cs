@@ -64,6 +64,17 @@ namespace Sledge.Shell.Registers
 
 				_toolbarSettingsApplied =
 					TopToolbarSettings.Loaded;
+
+				// minimizing squashes the window: keep the toolbar rows as they
+				// are, and put things right as soon as the window is back
+				_shell.MinimizeRequested +=
+					(s, e) => _tree?.HoldLayout();
+
+				_shell.SizeChanged +=
+					(s, e) => _tree?.ReleaseLayout();
+
+				_shell.Activated +=
+					(s, e) => _tree?.ReleaseLayout();
 			});
 
 			Oy.Subscribe<IContext>("Context:Changed", ContextChanged);
@@ -390,6 +401,83 @@ namespace Sledge.Shell.Registers
 				return sb.ToString();
 			}
 
+			private bool _layoutHeld;
+
+			private bool _replaceAfterRestore;
+
+			private bool IsHostMinimized()
+			{
+				var form = ToolbarContainer.FindForm();
+
+				return form != null &&
+					form.WindowState == FormWindowState.Minimized;
+			}
+
+			private IEnumerable<ToolStripPanel> AllPanels()
+			{
+				yield return ToolbarContainer.TopToolStripPanel;
+				yield return ToolbarContainer.BottomToolStripPanel;
+				yield return ToolbarContainer.LeftToolStripPanel;
+				yield return ToolbarContainer.RightToolStripPanel;
+			}
+
+			/// <summary>
+			/// The window is about to be minimized. Windows gives the panels a
+			/// squashed size, and the panels answer by wrapping the strips into
+			/// new rows. Holding the panels' layout keeps the rows as they are.
+			/// </summary>
+			public void HoldLayout()
+			{
+				if (_layoutHeld)
+				{
+					return;
+				}
+
+				_layoutHeld = true;
+
+				foreach (var panel in AllPanels())
+				{
+					panel.SuspendLayout();
+				}
+			}
+
+			/// <summary>
+			/// The window is back (not minimized): let the panels lay out again,
+			/// and re-place the strips right away if they were squashed anyway
+			/// (a minimize that did not go through the title bar or taskbar).
+			/// </summary>
+			public void ReleaseLayout()
+			{
+				if (IsHostMinimized())
+				{
+					return;
+				}
+
+				if (_layoutHeld)
+				{
+					_layoutHeld = false;
+
+					foreach (var panel in AllPanels())
+					{
+						panel.ResumeLayout(false);
+						panel.PerformLayout();
+					}
+
+					ToolbarContainer.PerformLayout();
+				}
+
+				if (_replaceAfterRestore)
+				{
+					_replaceAfterRestore = false;
+
+					if (ToolbarContainer.IsHandleCreated)
+					{
+						ToolbarContainer.BeginInvoke(
+							new Action(() => ReplaceStrips(true)));
+					}
+				}
+			}
+
 			private bool IsVerticalDock(ToolbarDock dock)
 			{
 				return dock == ToolbarDock.Left ||
@@ -406,6 +494,14 @@ namespace Sledge.Shell.Registers
 					_joinedStrips.Count == 0 ||
 					IsVerticalDock(_renderedDock))
 				{
+					return;
+				}
+
+				// minimizing squashes the panel, it is not a real resize: the
+				// strips are put back when the window is restored
+				if (_layoutHeld || IsHostMinimized())
+				{
+					_replaceAfterRestore = true;
 					return;
 				}
 
@@ -435,7 +531,7 @@ namespace Sledge.Shell.Registers
 				_replaceTimer.Start();
 			}
 
-			private void ReplaceStrips()
+			private void ReplaceStrips(bool force = false)
 			{
 				if (_rendering ||
 					_joinedStrips.Count == 0 ||
@@ -444,8 +540,15 @@ namespace Sledge.Shell.Registers
 					return;
 				}
 
+				if (_layoutHeld || IsHostMinimized())
+				{
+					_replaceAfterRestore = true;
+					return;
+				}
+
 				// never move strips under the user's mouse
-				if ((Control.MouseButtons & MouseButtons.Left) != 0)
+				if (!force &&
+					(Control.MouseButtons & MouseButtons.Left) != 0)
 				{
 					ScheduleReplace();
 					return;
@@ -453,7 +556,8 @@ namespace Sledge.Shell.Registers
 
 				var panel = PanelFor(_renderedDock);
 
-				if (panel.Width == _renderedPanelWidth)
+				if (!force &&
+					panel.Width == _renderedPanelWidth)
 				{
 					return;
 				}
