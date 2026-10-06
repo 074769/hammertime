@@ -64,6 +64,23 @@ namespace Sledge.Shell.Forms
 			base.WndProc(ref m);
 		}
 
+		/// <summary>
+		/// Raised when the window has its new size but before the controls
+		/// inside it are laid out for it. The toolbar uses this to fit its
+		/// strips into the new width so that the panel never has to wrap them.
+		/// </summary>
+		internal event EventHandler BeforeResizeLayout;
+
+		protected override void OnResize(EventArgs e)
+		{
+			if (WindowState != FormWindowState.Minimized)
+			{
+				BeforeResizeLayout?.Invoke(this, e);
+			}
+
+			base.OnResize(e);
+		}
+
 		[ImportingConstructor]
 		public Shell(
 			[Import] Lazy<Bootstrapper> bootstrapper,

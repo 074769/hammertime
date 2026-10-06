@@ -75,6 +75,10 @@ namespace Sledge.Shell.Registers
 
 				_shell.Activated +=
 					(s, e) => _tree?.ReleaseLayout();
+
+				// keep the strips in one row while the window changes size
+				_shell.BeforeResizeLayout +=
+					(s, e) => _tree?.FitToWidth(_shell.ClientSize.Width);
 			});
 
 			Oy.Subscribe<IContext>("Context:Changed", ContextChanged);
@@ -627,6 +631,8 @@ namespace Sledge.Shell.Registers
 
 			private void DetachToolbars()
 			{
+				_naturalSizes.Clear();
+
 				foreach (var strip in _joinedStrips)
 				{
 					strip.Parent?.Controls.Remove(strip);
@@ -863,9 +869,14 @@ namespace Sledge.Shell.Registers
 
 					strip.PerformLayout();
 
+					strip.CanOverflow = true;
+
+					// the size the strip wants with every button visible
+					_naturalSizes[strip] =
+						MeasureNatural(strip);
+
 					strip.Size =
-						strip.GetPreferredSize(
-							Size.Empty);
+						_naturalSizes[strip];
 
 					strip.Location =
 						Point.Empty;
@@ -912,90 +923,162 @@ namespace Sledge.Shell.Registers
 				EndRendering(renderToken);
 			}
 
+			private readonly Dictionary<ToolStrip, Size> _naturalSizes =
+				new Dictionary<ToolStrip, Size>();
+
+			/// <summary>
+			/// The size a strip wants when every button is visible.
+			/// </summary>
+			private static Size MeasureNatural(ToolStrip strip)
+			{
+				var canOverflow = strip.CanOverflow;
+
+				strip.CanOverflow = false;
+
+				var size =
+					strip.GetPreferredSize(Size.Empty);
+
+				strip.CanOverflow = canOverflow;
+
+				return size;
+			}
+
 			/// <summary>
 			/// Places horizontal strips in a single row.
-			///
-			/// There is intentionally no width calculation and no
-			/// wrapping here. The individual ToolStrips use overflow
-			/// instead.
 			/// </summary>
 			private void PlaceStrips(
 				ToolStripPanel panel)
 			{
-				var saved =
-					TopToolbarSettings.StripPositions;
+				FitRow(
+					panel,
+					panel.Width - panel.Padding.Horizontal);
+			}
 
-				// Saved positions are only used while they agree with the
-				// layout order; if the order was changed in the settings
-				// dialog the layout wins and the strips line up in one row.
-				var useSaved =
-					saved != null &&
-					_joinedStrips.All(
-						s =>
-							s.Tag is MenuTreeRoot r &&
-							saved.TryGetValue(
-								r.SectionName,
-								out var p) &&
-							p != null &&
-							p.Length == 2);
+			/// <summary>
+			/// Lines the strips up in one row that is never wider than the
+			/// space there is. A strip that does not fit is made narrower and
+			/// its buttons that no longer fit go behind its overflow arrow,
+			/// last strips first. Every strip keeps at least a small slice of
+			/// the row, so it can always be reached.
+			/// </summary>
+			private void FitRow(
+				ToolStripPanel panel,
+				int available)
+			{
+				// keep the order the strips are in on screen
+				var strips =
+					_joinedStrips
+						.OrderBy(s => s.Location.Y)
+						.ThenBy(s => s.Location.X)
+						.ToList();
 
-				if (useSaved)
+				if (strips.Count == 0)
 				{
-					var bySaved =
-						_joinedStrips
-							.OrderBy(
-								s => saved[
-									((MenuTreeRoot)s.Tag)
-										.SectionName][1])
-							.ThenBy(
-								s => saved[
-									((MenuTreeRoot)s.Tag)
-										.SectionName][0])
-							.ToList();
-
-					useSaved =
-						bySaved.SequenceEqual(_joinedStrips);
+					return;
 				}
 
-				// positions are pixels: ignore them (without deleting them)
-				// while the strips would overlap or run off the panel, e.g.
-				// after an icon size change or in a narrower window
-				if (useSaved &&
-					!SavedPositionsFit(panel, saved))
+				// no width known yet (window still starting up): no limit
+				if (available <= 0)
 				{
-					useSaved = false;
+					available = int.MaxValue / 4;
 				}
 
-				int x = 0;
+				var minWidth =
+					Math.Max(
+						32,
+						TopToolbarSettings.IconSize + 12);
 
-				foreach (var strip in _joinedStrips)
+				var remaining = available;
+
+				var x = 0;
+
+				for (var i = 0; i < strips.Count; i++)
 				{
-					var size =
-						strip.GetPreferredSize(
-							Size.Empty);
+					var strip = strips[i];
 
-					if (useSaved)
+					if (!_naturalSizes.TryGetValue(
+						strip,
+						out var natural))
 					{
-						var p =
-							saved[
-								((MenuTreeRoot)strip.Tag)
-									.SectionName];
+						natural =
+							MeasureNatural(strip);
 
-						panel.Join(
-							strip,
-							p[0],
-							p[1]);
-					}
-					else
-					{
-						panel.Join(
-							strip,
-							x,
-							0);
+						_naturalSizes[strip] = natural;
 					}
 
-					x += size.Width;
+					var margin = strip.Margin.Horizontal;
+
+					// the strips after this one need their slice too
+					var reserve =
+						(strips.Count - i - 1) *
+						(minWidth + margin);
+
+					var width =
+						Math.Min(
+							natural.Width,
+							remaining - reserve - margin);
+
+					if (width < minWidth)
+					{
+						width =
+							Math.Min(
+								minWidth,
+								natural.Width);
+					}
+
+					strip.AutoSize = false;
+
+					strip.CanOverflow = true;
+
+					strip.Size =
+						new Size(width, natural.Height);
+
+					panel.Join(strip, x, 0);
+
+					remaining -= width + margin;
+
+					x += width + margin;
 				}
+			}
+
+			/// <summary>
+			/// The window is getting a new size: fit the strips to it before
+			/// the panel lays out, so the panel finds nothing to wrap.
+			/// </summary>
+			public void FitToWidth(int clientWidth)
+			{
+				if (_rendering ||
+					_layoutHeld ||
+					_joinedStrips.Count == 0 ||
+					IsVerticalDock(_renderedDock) ||
+					IsHostMinimized())
+				{
+					return;
+				}
+
+				var panel = PanelFor(_renderedDock);
+
+				// the panel gets the client width minus whatever is around it
+				var panelWidth =
+					clientWidth -
+					(ToolbarContainer.Width - panel.Width);
+
+				if (panelWidth <= 0)
+				{
+					return;
+				}
+
+				_rendering = true;
+
+				var token = ++_renderToken;
+
+				FitRow(
+					panel,
+					panelWidth - panel.Padding.Horizontal);
+
+				_renderedPanelWidth = panelWidth;
+
+				EndRendering(token);
 			}
 
 			private bool SavedPositionsFit(
