@@ -77,7 +77,7 @@ namespace Sledge.Shell.Registers
 
 			Oy.Subscribe<object>(
 				"TopToolbar:Changed",
-				ToolbarSettingsChanged);
+				ToolbarChanged);
 
 			Oy.Subscribe<object>(
 				"Settings:Loaded",
@@ -99,19 +99,36 @@ namespace Sledge.Shell.Registers
 			_toolbarSettingsApplied = true;
 
 			_shell.InvokeLater(
-				() => _tree?.ApplyToolbarSettings());
+				() => _tree?.ApplyToolbarSettings(true));
 
 			return Task.CompletedTask;
 		}
 
 		private bool _toolbarSettingsApplied;
 
+		/// <summary>
+		/// Any setting in the editor raises SettingsChanged. Only rebuild the
+		/// toolbar when one of the toolbar's own settings is different.
+		/// </summary>
 		private Task ToolbarSettingsChanged(object obj)
 		{
 			_toolbarSettingsApplied = true;
 
 			_shell.InvokeLater(
-				() => _tree?.ApplyToolbarSettings());
+				() => _tree?.ApplyToolbarSettings(false));
+
+			return Task.CompletedTask;
+		}
+
+		/// <summary>
+		/// Raised by the toolbar's own actions (lock, dock, hide button...).
+		/// </summary>
+		private Task ToolbarChanged(object obj)
+		{
+			_toolbarSettingsApplied = true;
+
+			_shell.InvokeLater(
+				() => _tree?.ApplyToolbarSettings(true));
 
 			return Task.CompletedTask;
 		}
@@ -251,6 +268,14 @@ namespace Sledge.Shell.Registers
 				MenuStrip = menuStrip;
 				ToolbarContainer = toolbarContainer;
 
+				// the window is not at its final size while it starts up
+				// (and the user can resize it later): re-place the strips then
+				ToolbarContainer.TopToolStripPanel.SizeChanged +=
+					(s, e) => ScheduleReplace();
+
+				ToolbarContainer.BottomToolStripPanel.SizeChanged +=
+					(s, e) => ScheduleReplace();
+
 				RootNodes =
 					new Dictionary<string, MenuTreeRoot>();
 
@@ -291,9 +316,190 @@ namespace Sledge.Shell.Registers
 				}
 			}
 
-			public void ApplyToolbarSettings()
+			/// <summary>
+			/// Rebuilds the toolbar. Unless forced, nothing happens when the
+			/// toolbar settings are the same as the ones already applied.
+			/// </summary>
+			public void ApplyToolbarSettings(bool force)
 			{
+				if (!force &&
+					_appliedSignature != null &&
+					_appliedSignature == ComputeSignature())
+				{
+					return;
+				}
+
 				RenderToolbars();
+			}
+
+			private string _appliedSignature;
+
+			private int _renderToken;
+
+			private int _renderedIconSize;
+
+			private int _renderedPanelWidth;
+
+			private System.Windows.Forms.Timer _replaceTimer;
+
+			/// <summary>
+			/// Everything the toolbar is built from, as one string.
+			/// </summary>
+			private static string ComputeSignature()
+			{
+				var sb = new System.Text.StringBuilder();
+
+				sb.Append(TopToolbarSettings.Dock).Append('|');
+				sb.Append(TopToolbarSettings.Locked).Append('|');
+				sb.Append(TopToolbarSettings.IconSize).Append('|');
+
+				if (TopToolbarSettings.Layout != null)
+				{
+					foreach (var e in TopToolbarSettings.Layout)
+					{
+						if (e == null)
+						{
+							continue;
+						}
+
+						sb.Append(e.Id).Append(',')
+							.Append(e.Visible).Append(',')
+							.Append(e.IconPath).Append(';');
+					}
+				}
+
+				sb.Append('|');
+
+				if (TopToolbarSettings.StripPositions != null)
+				{
+					foreach (var kv in
+						TopToolbarSettings.StripPositions
+							.OrderBy(
+								k => k.Key,
+								StringComparer.Ordinal))
+					{
+						sb.Append(kv.Key).Append('=')
+							.Append(
+								kv.Value == null
+									? ""
+									: string.Join(",", kv.Value))
+							.Append(';');
+					}
+				}
+
+				return sb.ToString();
+			}
+
+			private bool IsVerticalDock(ToolbarDock dock)
+			{
+				return dock == ToolbarDock.Left ||
+					dock == ToolbarDock.Right;
+			}
+
+			/// <summary>
+			/// The panel was resized: put the strips back where they belong
+			/// once the size has settled.
+			/// </summary>
+			private void ScheduleReplace()
+			{
+				if (_rendering ||
+					_joinedStrips.Count == 0 ||
+					IsVerticalDock(_renderedDock))
+				{
+					return;
+				}
+
+				if (PanelFor(_renderedDock).Width ==
+					_renderedPanelWidth)
+				{
+					return;
+				}
+
+				if (_replaceTimer == null)
+				{
+					_replaceTimer =
+						new System.Windows.Forms.Timer
+						{
+							Interval = 250
+						};
+
+					_replaceTimer.Tick +=
+						(s, e) =>
+						{
+							_replaceTimer.Stop();
+							ReplaceStrips();
+						};
+				}
+
+				_replaceTimer.Stop();
+				_replaceTimer.Start();
+			}
+
+			private void ReplaceStrips()
+			{
+				if (_rendering ||
+					_joinedStrips.Count == 0 ||
+					IsVerticalDock(_renderedDock))
+				{
+					return;
+				}
+
+				// never move strips under the user's mouse
+				if ((Control.MouseButtons & MouseButtons.Left) != 0)
+				{
+					ScheduleReplace();
+					return;
+				}
+
+				var panel = PanelFor(_renderedDock);
+
+				if (panel.Width == _renderedPanelWidth)
+				{
+					return;
+				}
+
+				_rendering = true;
+
+				var token = ++_renderToken;
+
+				panel.BeginInit();
+
+				PlaceStrips(panel);
+
+				panel.EndInit();
+
+				panel.PerformLayout();
+
+				ToolbarContainer.PerformLayout();
+
+				_renderedPanelWidth = panel.Width;
+
+				EndRendering(token);
+			}
+
+			/// <summary>
+			/// Strip moves caused by a rebuild arrive as queued layout
+			/// messages, so only start listening again after they ran.
+			/// A newer rebuild cancels the pending release of an older one.
+			/// </summary>
+			private void EndRendering(int token)
+			{
+				if (ToolbarContainer.IsHandleCreated)
+				{
+					ToolbarContainer.BeginInvoke(
+						new Action(
+							() =>
+							{
+								if (token == _renderToken)
+								{
+									_rendering = false;
+								}
+							}));
+				}
+				else
+				{
+					_rendering = false;
+				}
 			}
 
 			private ToolStripPanel PanelFor(
@@ -380,6 +586,8 @@ namespace Sledge.Shell.Registers
 			{
 				_rendering = true;
 
+				var renderToken = ++_renderToken;
+
 				_captureTimer?.Stop();
 
 				DetachToolbars();
@@ -461,6 +669,21 @@ namespace Sledge.Shell.Registers
 
 				var iconSize =
 					TopToolbarSettings.IconSize;
+
+				// the saved strip positions are pixels; they only fit the icon
+				// size they were saved with, so a new size starts from a fresh row
+				if (_renderedIconSize != 0 &&
+					_renderedIconSize != iconSize &&
+					TopToolbarSettings.StripPositions != null &&
+					TopToolbarSettings.StripPositions.Count > 0)
+				{
+					TopToolbarSettings.StripPositions =
+						new Dictionary<string, int[]>();
+
+					Oy.Publish("Settings:Save");
+				}
+
+				_renderedIconSize = iconSize;
 
 				panel.BeginInit();
 
@@ -574,17 +797,15 @@ namespace Sledge.Shell.Registers
 
 				_renderedDock = dock;
 
-				// strip moves caused by this rebuild arrive as queued layout
-				// messages, so only start listening again after they ran
-				if (ToolbarContainer.IsHandleCreated)
-				{
-					ToolbarContainer.BeginInvoke(
-						new Action(() => _rendering = false));
-				}
-				else
-				{
-					_rendering = false;
-				}
+				_renderedPanelWidth = panel.Width;
+
+				// the rows may have changed height, the rest of the window
+				// (dock panels, viewports) has to follow
+				ToolbarContainer.PerformLayout();
+
+				_appliedSignature = ComputeSignature();
+
+				EndRendering(renderToken);
 			}
 
 			/// <summary>
@@ -632,6 +853,15 @@ namespace Sledge.Shell.Registers
 						bySaved.SequenceEqual(_joinedStrips);
 				}
 
+				// positions are pixels: ignore them (without deleting them)
+				// while the strips would overlap or run off the panel, e.g.
+				// after an icon size change or in a narrower window
+				if (useSaved &&
+					!SavedPositionsFit(panel, saved))
+				{
+					useSaved = false;
+				}
+
 				int x = 0;
 
 				foreach (var strip in _joinedStrips)
@@ -662,6 +892,57 @@ namespace Sledge.Shell.Registers
 
 					x += size.Width;
 				}
+			}
+
+			private bool SavedPositionsFit(
+				ToolStripPanel panel,
+				Dictionary<string, int[]> saved)
+			{
+				var items =
+					_joinedStrips
+						.Select(
+							s => new
+							{
+								Pos = saved[
+									((MenuTreeRoot)s.Tag)
+										.SectionName],
+								Width =
+									s.GetPreferredSize(
+										Size.Empty).Width
+							})
+						.ToList();
+
+				foreach (var row in items.GroupBy(i => i.Pos[1]))
+				{
+					var ordered =
+						row.OrderBy(i => i.Pos[0]).ToList();
+
+					for (var i = 0; i < ordered.Count; i++)
+					{
+						if (ordered[i].Pos[0] < 0)
+						{
+							return false;
+						}
+
+						if (i > 0 &&
+							ordered[i - 1].Pos[0] +
+								ordered[i - 1].Width >
+							ordered[i].Pos[0])
+						{
+							return false;
+						}
+					}
+
+					var last = ordered[ordered.Count - 1];
+
+					if (panel.Width > 0 &&
+						last.Pos[0] + last.Width > panel.Width)
+					{
+						return false;
+					}
+				}
+
+				return true;
 			}
 
 			private void ApplyToolbarTheme()
@@ -904,6 +1185,8 @@ namespace Sledge.Shell.Registers
 					TopToolbarSettings.StripPositions =
 						positions;
 				}
+
+				_appliedSignature = ComputeSignature();
 
 				Oy.Publish("Settings:Save");
 			}
