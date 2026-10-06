@@ -64,21 +64,6 @@ namespace Sledge.Shell.Registers
 
 				_toolbarSettingsApplied =
 					TopToolbarSettings.Loaded;
-
-				// minimizing squashes the window: keep the toolbar rows as they
-				// are, and put things right as soon as the window is back
-				_shell.MinimizeRequested +=
-					(s, e) => _tree?.HoldLayout();
-
-				_shell.SizeChanged +=
-					(s, e) => _tree?.ReleaseLayout();
-
-				_shell.Activated +=
-					(s, e) => _tree?.ReleaseLayout();
-
-				// keep the strips in one row while the window changes size
-				_shell.BeforeResizeLayout +=
-					(s, e) => _tree?.FitToWidth(_shell.ClientSize.Width);
 			});
 
 			Oy.Subscribe<IContext>("Context:Changed", ContextChanged);
@@ -254,6 +239,9 @@ namespace Sledge.Shell.Registers
 				get;
 			}
 
+			// the one strip that holds every button
+			private ToolStrip _bar;
+
 			private readonly List<ToolStrip> _joinedStrips =
 				new List<ToolStrip>();
 
@@ -282,14 +270,6 @@ namespace Sledge.Shell.Registers
 
 				MenuStrip = menuStrip;
 				ToolbarContainer = toolbarContainer;
-
-				// the window is not at its final size while it starts up
-				// (and the user can resize it later): re-place the strips then
-				ToolbarContainer.TopToolStripPanel.SizeChanged +=
-					(s, e) => ScheduleReplace();
-
-				ToolbarContainer.BottomToolStripPanel.SizeChanged +=
-					(s, e) => ScheduleReplace();
 
 				RootNodes =
 					new Dictionary<string, MenuTreeRoot>();
@@ -353,10 +333,6 @@ namespace Sledge.Shell.Registers
 
 			private int _renderedIconSize;
 
-			private int _renderedPanelWidth;
-
-			private System.Windows.Forms.Timer _replaceTimer;
-
 			/// <summary>
 			/// Everything the toolbar is built from, as one string.
 			/// </summary>
@@ -405,184 +381,10 @@ namespace Sledge.Shell.Registers
 				return sb.ToString();
 			}
 
-			private bool _layoutHeld;
-
-			private bool _replaceAfterRestore;
-
-			private bool IsHostMinimized()
-			{
-				var form = ToolbarContainer.FindForm();
-
-				return form != null &&
-					form.WindowState == FormWindowState.Minimized;
-			}
-
-			private IEnumerable<ToolStripPanel> AllPanels()
-			{
-				yield return ToolbarContainer.TopToolStripPanel;
-				yield return ToolbarContainer.BottomToolStripPanel;
-				yield return ToolbarContainer.LeftToolStripPanel;
-				yield return ToolbarContainer.RightToolStripPanel;
-			}
-
-			/// <summary>
-			/// The window is about to be minimized. Windows gives the panels a
-			/// squashed size, and the panels answer by wrapping the strips into
-			/// new rows. Holding the panels' layout keeps the rows as they are.
-			/// </summary>
-			public void HoldLayout()
-			{
-				if (_layoutHeld)
-				{
-					return;
-				}
-
-				_layoutHeld = true;
-
-				foreach (var panel in AllPanels())
-				{
-					panel.SuspendLayout();
-				}
-			}
-
-			/// <summary>
-			/// The window is back (not minimized): let the panels lay out again,
-			/// and re-place the strips right away if they were squashed anyway
-			/// (a minimize that did not go through the title bar or taskbar).
-			/// </summary>
-			public void ReleaseLayout()
-			{
-				if (IsHostMinimized())
-				{
-					return;
-				}
-
-				if (_layoutHeld)
-				{
-					_layoutHeld = false;
-
-					foreach (var panel in AllPanels())
-					{
-						panel.ResumeLayout(false);
-						panel.PerformLayout();
-					}
-
-					ToolbarContainer.PerformLayout();
-				}
-
-				if (_replaceAfterRestore)
-				{
-					_replaceAfterRestore = false;
-
-					if (ToolbarContainer.IsHandleCreated)
-					{
-						ToolbarContainer.BeginInvoke(
-							new Action(() => ReplaceStrips(true)));
-					}
-				}
-			}
-
 			private bool IsVerticalDock(ToolbarDock dock)
 			{
 				return dock == ToolbarDock.Left ||
 					dock == ToolbarDock.Right;
-			}
-
-			/// <summary>
-			/// The panel was resized: put the strips back where they belong
-			/// once the size has settled.
-			/// </summary>
-			private void ScheduleReplace()
-			{
-				if (_rendering ||
-					_joinedStrips.Count == 0 ||
-					IsVerticalDock(_renderedDock))
-				{
-					return;
-				}
-
-				// minimizing squashes the panel, it is not a real resize: the
-				// strips are put back when the window is restored
-				if (_layoutHeld || IsHostMinimized())
-				{
-					_replaceAfterRestore = true;
-					return;
-				}
-
-				if (PanelFor(_renderedDock).Width ==
-					_renderedPanelWidth)
-				{
-					return;
-				}
-
-				if (_replaceTimer == null)
-				{
-					_replaceTimer =
-						new System.Windows.Forms.Timer
-						{
-							Interval = 250
-						};
-
-					_replaceTimer.Tick +=
-						(s, e) =>
-						{
-							_replaceTimer.Stop();
-							ReplaceStrips();
-						};
-				}
-
-				_replaceTimer.Stop();
-				_replaceTimer.Start();
-			}
-
-			private void ReplaceStrips(bool force = false)
-			{
-				if (_rendering ||
-					_joinedStrips.Count == 0 ||
-					IsVerticalDock(_renderedDock))
-				{
-					return;
-				}
-
-				if (_layoutHeld || IsHostMinimized())
-				{
-					_replaceAfterRestore = true;
-					return;
-				}
-
-				// never move strips under the user's mouse
-				if (!force &&
-					(Control.MouseButtons & MouseButtons.Left) != 0)
-				{
-					ScheduleReplace();
-					return;
-				}
-
-				var panel = PanelFor(_renderedDock);
-
-				if (!force &&
-					panel.Width == _renderedPanelWidth)
-				{
-					return;
-				}
-
-				_rendering = true;
-
-				var token = ++_renderToken;
-
-				panel.BeginInit();
-
-				PlaceStrips(panel);
-
-				panel.EndInit();
-
-				panel.PerformLayout();
-
-				ToolbarContainer.PerformLayout();
-
-				_renderedPanelWidth = panel.Width;
-
-				EndRendering(token);
 			}
 
 			/// <summary>
@@ -631,8 +433,6 @@ namespace Sledge.Shell.Registers
 
 			private void DetachToolbars()
 			{
-				_naturalSizes.Clear();
-
 				foreach (var strip in _joinedStrips)
 				{
 					strip.Parent?.Controls.Remove(strip);
@@ -832,6 +632,24 @@ namespace Sledge.Shell.Registers
 						.Select(x => x.Root)
 						.ToList();
 
+				/*
+				 * Every button lives on one strip. The strip always fills its
+				 * row (Stretch), stays on one line, and puts the buttons that do
+				 * not fit behind its overflow arrow. There are no rows and no
+				 * saved positions for a window resize to break.
+				 */
+				if (_bar == null)
+				{
+					_bar = new BufferedToolStrip();
+				}
+
+				var bar = _bar;
+
+				while (bar.Items.Count > 0)
+				{
+					bar.Items.RemoveAt(0);
+				}
+
 				foreach (var ts in orderedRoots)
 				{
 					ts.ApplyLayout(
@@ -843,55 +661,54 @@ namespace Sledge.Shell.Registers
 						continue;
 					}
 
-					var strip = ts.ToolStrip;
+					if (bar.Items.Count > 0)
+					{
+						bar.Items.Add(
+							new ToolStripSeparator());
+					}
 
-					strip.ImageScalingSize =
+					// adding an item to the bar takes it off the section's strip
+					foreach (var item in
+						ts.ToolStrip.Items
+							.Cast<ToolStripItem>()
+							.ToList())
+					{
+						bar.Items.Add(item);
+					}
+				}
+
+				if (bar.Items.Count > 0)
+				{
+					bar.ImageScalingSize =
 						new Size(iconSize, iconSize);
 
-					WireDragDrop(strip);
+					WireDragDrop(bar);
 
-					strip.LayoutStyle =
+					bar.LayoutStyle =
 						vertical
 							? ToolStripLayoutStyle
 								.VerticalStackWithOverflow
 							: ToolStripLayoutStyle
 								.HorizontalStackWithOverflow;
 
-					strip.GripStyle =
-						TopToolbarSettings.Locked
-							? ToolStripGripStyle.Hidden
-							: ToolStripGripStyle.Visible;
+					// the bar is not moved around; the buttons are (drag and drop)
+					bar.GripStyle =
+						ToolStripGripStyle.Hidden;
 
-					strip.ContextMenuStrip =
+					bar.ContextMenuStrip =
 						_toolbarMenu;
 
-					strip.AutoSize = true;
+					bar.CanOverflow = true;
 
-					strip.PerformLayout();
+					bar.Stretch = true;
 
-					strip.CanOverflow = true;
+					bar.AutoSize = true;
 
-					// the size the strip wants with every button visible
-					_naturalSizes[strip] =
-						MeasureNatural(strip);
+					bar.PerformLayout();
 
-					strip.Size =
-						_naturalSizes[strip];
+					panel.Join(bar);
 
-					strip.Location =
-						Point.Empty;
-
-					if (vertical)
-					{
-						panel.Join(strip);
-					}
-
-					_joinedStrips.Add(strip);
-				}
-
-				if (!vertical)
-				{
-					PlaceStrips(panel);
+					_joinedStrips.Add(bar);
 				}
 
 				panel.EndInit();
@@ -912,8 +729,6 @@ namespace Sledge.Shell.Registers
 
 				_renderedDock = dock;
 
-				_renderedPanelWidth = panel.Width;
-
 				// the rows may have changed height, the rest of the window
 				// (dock panels, viewports) has to follow
 				ToolbarContainer.PerformLayout();
@@ -921,215 +736,6 @@ namespace Sledge.Shell.Registers
 				_appliedSignature = ComputeSignature();
 
 				EndRendering(renderToken);
-			}
-
-			private readonly Dictionary<ToolStrip, Size> _naturalSizes =
-				new Dictionary<ToolStrip, Size>();
-
-			/// <summary>
-			/// The size a strip wants when every button is visible.
-			/// </summary>
-			private static Size MeasureNatural(ToolStrip strip)
-			{
-				var canOverflow = strip.CanOverflow;
-
-				strip.CanOverflow = false;
-
-				var size =
-					strip.GetPreferredSize(Size.Empty);
-
-				strip.CanOverflow = canOverflow;
-
-				return size;
-			}
-
-			/// <summary>
-			/// Places horizontal strips in a single row.
-			/// </summary>
-			private void PlaceStrips(
-				ToolStripPanel panel)
-			{
-				FitRow(
-					panel,
-					panel.Width - panel.Padding.Horizontal);
-			}
-
-			/// <summary>
-			/// Lines the strips up in one row that is never wider than the
-			/// space there is. A strip that does not fit is made narrower and
-			/// its buttons that no longer fit go behind its overflow arrow,
-			/// last strips first. Every strip keeps at least a small slice of
-			/// the row, so it can always be reached.
-			/// </summary>
-			private void FitRow(
-				ToolStripPanel panel,
-				int available)
-			{
-				// keep the order the strips are in on screen
-				var strips =
-					_joinedStrips
-						.OrderBy(s => s.Location.Y)
-						.ThenBy(s => s.Location.X)
-						.ToList();
-
-				if (strips.Count == 0)
-				{
-					return;
-				}
-
-				// no width known yet (window still starting up): no limit
-				if (available <= 0)
-				{
-					available = int.MaxValue / 4;
-				}
-
-				var minWidth =
-					Math.Max(
-						32,
-						TopToolbarSettings.IconSize + 12);
-
-				var remaining = available;
-
-				var x = 0;
-
-				for (var i = 0; i < strips.Count; i++)
-				{
-					var strip = strips[i];
-
-					if (!_naturalSizes.TryGetValue(
-						strip,
-						out var natural))
-					{
-						natural =
-							MeasureNatural(strip);
-
-						_naturalSizes[strip] = natural;
-					}
-
-					var margin = strip.Margin.Horizontal;
-
-					// the strips after this one need their slice too
-					var reserve =
-						(strips.Count - i - 1) *
-						(minWidth + margin);
-
-					var width =
-						Math.Min(
-							natural.Width,
-							remaining - reserve - margin);
-
-					if (width < minWidth)
-					{
-						width =
-							Math.Min(
-								minWidth,
-								natural.Width);
-					}
-
-					strip.AutoSize = false;
-
-					strip.CanOverflow = true;
-
-					strip.Size =
-						new Size(width, natural.Height);
-
-					panel.Join(strip, x, 0);
-
-					remaining -= width + margin;
-
-					x += width + margin;
-				}
-			}
-
-			/// <summary>
-			/// The window is getting a new size: fit the strips to it before
-			/// the panel lays out, so the panel finds nothing to wrap.
-			/// </summary>
-			public void FitToWidth(int clientWidth)
-			{
-				if (_rendering ||
-					_layoutHeld ||
-					_joinedStrips.Count == 0 ||
-					IsVerticalDock(_renderedDock) ||
-					IsHostMinimized())
-				{
-					return;
-				}
-
-				var panel = PanelFor(_renderedDock);
-
-				// the panel gets the client width minus whatever is around it
-				var panelWidth =
-					clientWidth -
-					(ToolbarContainer.Width - panel.Width);
-
-				if (panelWidth <= 0)
-				{
-					return;
-				}
-
-				_rendering = true;
-
-				var token = ++_renderToken;
-
-				FitRow(
-					panel,
-					panelWidth - panel.Padding.Horizontal);
-
-				_renderedPanelWidth = panelWidth;
-
-				EndRendering(token);
-			}
-
-			private bool SavedPositionsFit(
-				ToolStripPanel panel,
-				Dictionary<string, int[]> saved)
-			{
-				var items =
-					_joinedStrips
-						.Select(
-							s => new
-							{
-								Pos = saved[
-									((MenuTreeRoot)s.Tag)
-										.SectionName],
-								Width =
-									s.GetPreferredSize(
-										Size.Empty).Width
-							})
-						.ToList();
-
-				foreach (var row in items.GroupBy(i => i.Pos[1]))
-				{
-					var ordered =
-						row.OrderBy(i => i.Pos[0]).ToList();
-
-					for (var i = 0; i < ordered.Count; i++)
-					{
-						if (ordered[i].Pos[0] < 0)
-						{
-							return false;
-						}
-
-						if (i > 0 &&
-							ordered[i - 1].Pos[0] +
-								ordered[i - 1].Width >
-							ordered[i].Pos[0])
-						{
-							return false;
-						}
-					}
-
-					var last = ordered[ordered.Count - 1];
-
-					if (panel.Width > 0 &&
-						last.Pos[0] + last.Width > panel.Width)
-					{
-						return false;
-					}
-				}
-
-				return true;
 			}
 
 			private void ApplyToolbarTheme()
@@ -1391,17 +997,6 @@ namespace Sledge.Shell.Registers
 
 				strip.AllowDrop = true;
 
-				strip.EndDrag += (s, e) => ScheduleCapture();
-				strip.LocationChanged +=
-					(s, e) =>
-					{
-						// only react to the user dragging, not to layout
-						// changes (window resize, startup)
-						if ((Control.MouseButtons & MouseButtons.Left) != 0)
-						{
-							ScheduleCapture();
-						}
-					};
 
 				strip.MouseDown += (s, e) =>
 				{

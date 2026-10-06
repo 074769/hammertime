@@ -43,44 +43,6 @@ namespace Sledge.Shell.Forms
 		internal ToolStripPanel ToolStrip => ToolStripContainer.TopToolStripPanel;
 		internal ToolStripContainer ToolbarContainer => ToolStripContainer;
 
-		/// <summary>
-		/// Raised just before the window is minimized, so the toolbar can keep
-		/// its rows from being reflowed into the squashed minimized size.
-		/// </summary>
-		internal event EventHandler MinimizeRequested;
-
-		private const int WM_SYSCOMMAND = 0x0112;
-
-		private const int SC_MINIMIZE = 0xF020;
-
-		protected override void WndProc(ref System.Windows.Forms.Message m)
-		{
-			if (m.Msg == WM_SYSCOMMAND &&
-				(m.WParam.ToInt64() & 0xFFF0) == SC_MINIMIZE)
-			{
-				MinimizeRequested?.Invoke(this, EventArgs.Empty);
-			}
-
-			base.WndProc(ref m);
-		}
-
-		/// <summary>
-		/// Raised when the window has its new size but before the controls
-		/// inside it are laid out for it. The toolbar uses this to fit its
-		/// strips into the new width so that the panel never has to wrap them.
-		/// </summary>
-		internal event EventHandler BeforeResizeLayout;
-
-		protected override void OnResize(EventArgs e)
-		{
-			if (WindowState != FormWindowState.Minimized)
-			{
-				BeforeResizeLayout?.Invoke(this, e);
-			}
-
-			base.OnResize(e);
-		}
-
 		[ImportingConstructor]
 		public Shell(
 			[Import] Lazy<Bootstrapper> bootstrapper,
