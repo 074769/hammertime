@@ -53,7 +53,7 @@ namespace Sledge.Shell.Forms
 
 		private const int SC_MINIMIZE = 0xF020;
 
-		protected override void WndProc(ref Message m)
+		protected override void WndProc(ref System.Windows.Forms.Message m)
 		{
 			if (m.Msg == WM_SYSCOMMAND &&
 				(m.WParam.ToInt64() & 0xFFF0) == SC_MINIMIZE)
