@@ -50,6 +50,7 @@ namespace Sledge.BspEditor.Tools.Texture
 			SortOrderCombo.SelectedIndex = so;
 			SortDescendingCheckbox.Checked = GetMemory("SortDescending", false);
 
+			PackageTree.NodeMouseClick += PackageTreeNodeMouseClick;
 			_textureList.TextureSelected += TextureSelected;
 			_textureList.HighlightedTexturesChanged += HighlightedTexturesChanged;
 			SizeCombo.SelectedIndex = 1;
@@ -110,6 +111,10 @@ namespace Sledge.BspEditor.Tools.Texture
 
 		public async Task Initialise(ITranslationStringProvider translation)
 		{
+			// Always open on "All Packages" (don't restore the WAD or favourites folder selected last time)
+			SetMemory("SelectedPackage", (string) null);
+			SetMemory("SelectedFavourite", (string) null);
+
 			_textureList.Collection = await _document.Environment.GetTextureCollection();
 
 			_textures.Clear();
@@ -242,8 +247,26 @@ namespace Sledge.BspEditor.Tools.Texture
 			UpdateTextureList();
 		}
 
+		private long _packageSelectionChangedAt;
+
+		// Ctrl+click on the package that is already selected = deselect it and go back to "All Packages"
+		private void PackageTreeNodeMouseClick(object sender, TreeNodeMouseClickEventArgs e)
+		{
+			if (e.Button != MouseButtons.Left || (ModifierKeys & Keys.Control) == 0) return;
+			if (e.Node == null || e.Node.Parent == null || e.Node != PackageTree.SelectedNode) return;
+			if (PackageTree.HitTest(e.Location).Location != TreeViewHitTestLocations.Label) return;
+
+			// This same click just selected the node: nothing to undo
+			var sinceChangeMs = (System.Diagnostics.Stopwatch.GetTimestamp() - _packageSelectionChangedAt) * 1000 / System.Diagnostics.Stopwatch.Frequency;
+			if (sinceChangeMs < 700) return;
+
+			var root = PackageTree.Nodes.Cast<TreeNode>().FirstOrDefault();
+			if (root != null) PackageTree.SelectedNode = root;
+		}
+
 		private void SelectedPackageChanged(object sender, TreeViewEventArgs e)
 		{
+			_packageSelectionChangedAt = System.Diagnostics.Stopwatch.GetTimestamp();
 			FavouritesTree.SelectedNode = null;
 			var package = PackageTree.SelectedNode;
 			var key = package?.Name;
@@ -312,7 +335,9 @@ namespace Sledge.BspEditor.Tools.Texture
 					if (selectedKey == node.Name) reselect = node;
 				}
 				parent.Checked = parent.Nodes.Count > 0 && parent.Nodes.Cast<TreeNode>().All(n => n.Checked);
-				PackageTree.SelectedNode = reselect;
+				// No remembered package: show everything ("All Packages"), unless a favourites folder is being viewed
+				var viewingFavourite = FavouritesTree.SelectedNode != null || GetMemory<string>("SelectedFavourite") != null;
+				PackageTree.SelectedNode = reselect ?? (viewingFavourite ? null : parent);
 				PackageTree.ExpandAll();
 			}
 			finally
