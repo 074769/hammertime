@@ -210,7 +210,8 @@ namespace Sledge.BspEditor.Environment.Goldsource
 		{
 			var wadRefs = _wadProvider.GetPackagesInFile(Root).Where(x => !ExcludedWads.Contains(x.Name, StringComparer.InvariantCultureIgnoreCase)
 			                                                              && !_manuallyDisabledWads.Contains(x.Name, StringComparer.InvariantCultureIgnoreCase));
-			var extraWads = AdditionalTextureFiles.SelectMany(x => _wadProvider.GetPackagesInFile(new NativeFile(x)));
+			var extraWads = AdditionalTextureFiles.SelectMany(x => _wadProvider.GetPackagesInFile(new NativeFile(x)))
+			                                      .Where(x => !_manuallyDisabledWads.Contains(x.Name, StringComparer.InvariantCultureIgnoreCase));
 			var wads = await _wadProvider.GetTexturePackages(wadRefs.Union(extraWads));
 
 			var spriteRefs = _spriteProvider.GetPackagesInFile(Root);
@@ -223,12 +224,21 @@ namespace Sledge.BspEditor.Environment.Goldsource
 		// ITexturePackageManager
 
 		/// <summary>
-		/// All WAD package names found on disk for this environment, regardless of whether
-		/// they are currently loaded, globally excluded, or manually disabled for this map.
+		/// The texture package names selected in the environment settings: the WADs that are ticked
+		/// (not excluded) plus the additional texture packages. WADs the environment excludes are not listed.
 		/// </summary>
 		public IEnumerable<string> GetAllTexturePackageNames()
 		{
-			return _wadProvider.GetPackagesInFile(Root).Select(x => x.Name).Distinct(StringComparer.InvariantCultureIgnoreCase);
+			var excluded = ExcludedWads ?? new List<string>();
+			var environmentWads = _wadProvider.GetPackagesInFile(Root)
+				.Where(x => !excluded.Contains(x.Name, StringComparer.InvariantCultureIgnoreCase))
+				.Select(x => x.Name);
+			var extraWads = (AdditionalTextureFiles ?? new List<string>())
+				.Where(System.IO.File.Exists)
+				.SelectMany(x => _wadProvider.GetPackagesInFile(new NativeFile(x)))
+				.Select(x => x.Name);
+
+			return environmentWads.Concat(extraWads).Distinct(StringComparer.InvariantCultureIgnoreCase);
 		}
 
 		public IEnumerable<string> EnvironmentDisabledTexturePackages => (ExcludedWads ?? new List<string>()).ToList();
