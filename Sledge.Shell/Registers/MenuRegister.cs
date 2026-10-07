@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Drawing;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using LogicAndTrick.Oy;
@@ -242,6 +243,21 @@ namespace Sledge.Shell.Registers
 			// the one strip that holds every button
 			private ToolStrip _bar;
 
+			// every button and divider, in order. The strip only gets the ones that fit,
+			// starting at _barOffset: the wheel scrolls the toolbar by moving that start.
+			private readonly List<ToolStripItem> _barItems =
+				new List<ToolStripItem>();
+
+			private int _barOffset;
+
+			private int _appliedOffset = -1;
+
+			private int _appliedCount = -1;
+
+			private int _wheelRemainder;
+
+			private bool _applyingScroll;
+
 			private readonly List<ToolStrip> _joinedStrips =
 				new List<ToolStrip>();
 
@@ -270,6 +286,11 @@ namespace Sledge.Shell.Registers
 
 				MenuStrip = menuStrip;
 				ToolbarContainer = toolbarContainer;
+
+				// the wheel is sent to the control that has the focus, and a
+				// toolbar never has it: watch the wheel for the toolbar
+				System.Windows.Forms.Application.AddMessageFilter(
+					new ToolbarWheelFilter(this));
 
 				RootNodes =
 					new Dictionary<string, MenuTreeRoot>();
@@ -379,6 +400,295 @@ namespace Sledge.Shell.Registers
 				}
 
 				return sb.ToString();
+			}
+
+			[DllImport("user32.dll")]
+			private static extern IntPtr WindowFromPoint(Point point);
+
+			/// <summary>
+			/// Passes the mouse wheel (and a touchpad's sideways scroll) over the
+			/// toolbar on to the toolbar.
+			/// </summary>
+			private class ToolbarWheelFilter : IMessageFilter
+			{
+				private const int WM_MOUSEWHEEL = 0x020A;
+
+				private const int WM_MOUSEHWHEEL = 0x020E;
+
+				private readonly VirtualMenuTree _tree;
+
+				public ToolbarWheelFilter(VirtualMenuTree tree)
+				{
+					_tree = tree;
+				}
+
+				public bool PreFilterMessage(
+					ref System.Windows.Forms.Message m)
+				{
+					if (m.Msg != WM_MOUSEWHEEL &&
+						m.Msg != WM_MOUSEHWHEEL)
+					{
+						return false;
+					}
+
+					var l = m.LParam.ToInt64();
+
+					var w = m.WParam.ToInt64();
+
+					// the position is on the screen, the amount is in the high word
+					var point =
+						new Point(
+							(short)(l & 0xFFFF),
+							(short)((l >> 16) & 0xFFFF));
+
+					var delta =
+						(short)((w >> 16) & 0xFFFF);
+
+					return _tree.ScrollByWheel(
+						point,
+						delta,
+						m.Msg == WM_MOUSEHWHEEL);
+				}
+			}
+
+			private static int BarExtent(
+				ToolStripItem item,
+				bool vertical)
+			{
+				return vertical
+					? item.Height + item.Margin.Vertical
+					: item.Width + item.Margin.Horizontal;
+			}
+
+			/// <summary>
+			/// The room there is for buttons along the strip.
+			/// </summary>
+			private int BarSpace(bool vertical)
+			{
+				var size =
+					vertical
+						? _bar.Height - _bar.Padding.Vertical
+						: _bar.Width - _bar.Padding.Horizontal;
+
+				return size - 2;
+			}
+
+			/// <summary>
+			/// The furthest the toolbar can be scrolled: the last button is at
+			/// the end of the strip. 0 when every button fits.
+			/// </summary>
+			private int MaxBarOffset(
+				bool vertical,
+				int space)
+			{
+				var first = _barItems.Count;
+
+				var used = 0;
+
+				while (first > 0)
+				{
+					var extent =
+						BarExtent(
+							_barItems[first - 1],
+							vertical);
+
+					if (used + extent > space)
+					{
+						break;
+					}
+
+					used += extent;
+
+					first--;
+				}
+
+				return Math.Max(
+					0,
+					Math.Min(
+						first,
+						_barItems.Count - 1));
+			}
+
+			/// <summary>
+			/// Puts the buttons that fit, from the scroll position on, on the
+			/// strip. Nothing is hidden behind an overflow arrow.
+			/// </summary>
+			private void ApplyBarScroll(bool force)
+			{
+				var bar = _bar;
+
+				if (bar == null || _applyingScroll)
+				{
+					return;
+				}
+
+				_applyingScroll = true;
+
+				try
+				{
+					var vertical =
+						IsVerticalDock(_renderedDock);
+
+					var space = BarSpace(vertical);
+
+					// no size yet (the window is starting up): show them all
+					if (space <= 0)
+					{
+						space = int.MaxValue / 2;
+					}
+
+					_barOffset =
+						Math.Max(
+							0,
+							Math.Min(
+								_barOffset,
+								MaxBarOffset(vertical, space)));
+
+					// a divider is never the first or the last thing shown
+					var first = _barOffset;
+
+					while (first < _barItems.Count - 1 &&
+						_barItems[first] is ToolStripSeparator)
+					{
+						first++;
+					}
+
+					var count = 0;
+
+					var used = 0;
+
+					for (var i = first; i < _barItems.Count; i++)
+					{
+						var extent =
+							BarExtent(_barItems[i], vertical);
+
+						if (used + extent > space)
+						{
+							break;
+						}
+
+						used += extent;
+
+						count++;
+					}
+
+					while (count > 1 &&
+						_barItems[first + count - 1]
+							is ToolStripSeparator)
+					{
+						count--;
+					}
+
+					if (count == 0 &&
+						first < _barItems.Count)
+					{
+						count = 1;
+					}
+
+					if (!force &&
+						first == _appliedOffset &&
+						count == _appliedCount)
+					{
+						return;
+					}
+
+					_appliedOffset = first;
+
+					_appliedCount = count;
+
+					bar.SuspendLayout();
+
+					while (bar.Items.Count > 0)
+					{
+						bar.Items.RemoveAt(0);
+					}
+
+					for (var i = 0; i < count; i++)
+					{
+						bar.Items.Add(_barItems[first + i]);
+					}
+
+					bar.ResumeLayout(true);
+				}
+				finally
+				{
+					_applyingScroll = false;
+				}
+			}
+
+			/// <summary>
+			/// Scrolls the toolbar with the wheel when the mouse is over it and
+			/// some buttons are not shown. Returns true when it used the wheel.
+			/// </summary>
+			public bool ScrollByWheel(
+				Point screen,
+				int delta,
+				bool horizontal)
+			{
+				var bar = _bar;
+
+				if (bar == null ||
+					!bar.IsHandleCreated ||
+					!bar.Visible ||
+					delta == 0)
+				{
+					return false;
+				}
+
+				// only when the pointer is really over the toolbar (and not
+				// over a dialog that is on top of it)
+				if (WindowFromPoint(screen) != bar.Handle)
+				{
+					return false;
+				}
+
+				var vertical =
+					IsVerticalDock(_renderedDock);
+
+				var space = BarSpace(vertical);
+
+				// everything is shown: leave the wheel alone
+				if (space <= 0 ||
+					MaxBarOffset(vertical, space) == 0)
+				{
+					return false;
+				}
+
+				// a touchpad sends many small amounts: collect them until
+				// they add up to one notch of a wheel (120)
+				if (_wheelRemainder != 0 &&
+					Math.Sign(_wheelRemainder) != Math.Sign(delta))
+				{
+					_wheelRemainder = 0;
+				}
+
+				_wheelRemainder += delta;
+
+				var notches = _wheelRemainder / 120;
+
+				if (notches == 0)
+				{
+					return true;
+				}
+
+				_wheelRemainder -= notches * 120;
+
+				var lines =
+					SystemInformation.MouseWheelScrollLines;
+
+				if (lines <= 0 || lines > 3)
+				{
+					lines = 3;
+				}
+
+				var step = notches * lines;
+
+				// wheel up goes back to the start, sideways to the right goes on
+				_barOffset += horizontal ? step : -step;
+
+				ApplyBarScroll(false);
+
+				return true;
 			}
 
 			private bool IsVerticalDock(ToolbarDock dock)
@@ -643,6 +953,10 @@ namespace Sledge.Shell.Registers
 				if (_bar == null)
 				{
 					_bar = new BufferedToolStrip();
+
+					// the room for buttons changes with the window
+					_bar.SizeChanged +=
+						(s, e) => ApplyBarScroll(false);
 				}
 
 				var bar = _bar;
@@ -651,6 +965,12 @@ namespace Sledge.Shell.Registers
 				{
 					bar.Items.RemoveAt(0);
 				}
+
+				_barItems.Clear();
+
+				_appliedOffset = -1;
+
+				_appliedCount = -1;
 
 				// the saved layout is the toolbar, in order: buttons and dividers
 				var nodes =
@@ -668,7 +988,7 @@ namespace Sledge.Shell.Registers
 					if (entry.IsSeparator())
 					{
 						// only between two buttons: never first, last or doubled
-						dividerWaiting = bar.Items.Count > 0;
+						dividerWaiting = _barItems.Count > 0;
 
 						continue;
 					}
@@ -688,16 +1008,16 @@ namespace Sledge.Shell.Registers
 
 					if (dividerWaiting)
 					{
-						bar.Items.Add(
+						_barItems.Add(
 							new ToolStripSeparator());
 
 						dividerWaiting = false;
 					}
 
-					bar.Items.Add(node.ToolbarButton);
+					_barItems.Add(node.ToolbarButton);
 				}
 
-				if (bar.Items.Count > 0)
+				if (_barItems.Count > 0)
 				{
 					bar.ImageScalingSize =
 						new Size(iconSize, iconSize);
@@ -723,6 +1043,8 @@ namespace Sledge.Shell.Registers
 					bar.Stretch = true;
 
 					bar.AutoSize = true;
+
+					ApplyBarScroll(true);
 
 					bar.PerformLayout();
 
@@ -752,6 +1074,9 @@ namespace Sledge.Shell.Registers
 				// the rows may have changed height, the rest of the window
 				// (dock panels, viewports) has to follow
 				ToolbarContainer.PerformLayout();
+
+				// now that the strip has its real size
+				ApplyBarScroll(true);
 
 				_appliedSignature = ComputeSignature();
 
