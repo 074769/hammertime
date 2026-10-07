@@ -30,6 +30,8 @@ namespace Sledge.Shell.Settings.Editors
 		private readonly ImageList _images;
 		private readonly ToolStrip _preview;
 		private readonly Panel _previewPanel;
+		private readonly Panel _previewHost;
+		private readonly HScrollBar _previewScroll;
 		private readonly TableLayoutPanel _root;
 
 		private readonly Button _add;
@@ -86,9 +88,17 @@ namespace Sledge.Shell.Settings.Editors
 				ShowItemToolTips = true,
 				LayoutStyle = ToolStripLayoutStyle.HorizontalStackWithOverflow
 			};
-			_previewPanel = new ScrollPanel { Dock = DockStyle.Fill, BorderStyle = BorderStyle.FixedSingle, AutoScroll = true };
-			_previewPanel.Controls.Add(_preview);
+			// (the panel's own AutoScroll only moved its contents once the scroll bar thumb was released)
+			_previewHost = new Panel { Dock = DockStyle.Fill };
+			_previewHost.Controls.Add(_preview);
+			_previewScroll = new HScrollBar { Dock = DockStyle.Bottom, SmallChange = 24 };
+			_previewScroll.ValueChanged += (s, e) => _preview.Left = -_previewScroll.Value;
+			_previewHost.Resize += (s, e) => UpdatePreviewScroll();
+			_previewPanel = new ScrollPanel { Dock = DockStyle.Fill, BorderStyle = BorderStyle.FixedSingle };
+			_previewPanel.Controls.Add(_previewHost);
+			_previewPanel.Controls.Add(_previewScroll);
 			_previewPanel.MouseDown += (s, e) => _previewPanel.Focus();
+			_previewHost.MouseDown += (s, e) => _previewPanel.Focus();
 			_preview.MouseDown += (s, e) => _previewPanel.Focus();
 			_previewPanel.MouseWheel += (s, e) => ScrollPreviewBy(-e.Delta / 3);
 
@@ -263,8 +273,29 @@ namespace Sledge.Shell.Settings.Editors
 
 		private void ScrollPreviewBy(int dx)
 		{
-			var x = -_previewPanel.AutoScrollPosition.X + dx;
-			_previewPanel.AutoScrollPosition = new Point(Math.Max(0, x), 0);
+			SetPreviewScroll(_previewScroll.Value + dx);
+		}
+
+		private void SetPreviewScroll(int x)
+		{
+			var max = Math.Max(0, _previewScroll.Maximum - _previewScroll.LargeChange + 1);
+			_previewScroll.Value = Math.Max(0, Math.Min(max, x));
+		}
+
+		/// <summary>Sets the scroll bar to the width of the strip and the width of the room there is for it.</summary>
+		private void UpdatePreviewScroll()
+		{
+			var content = _preview.GetPreferredSize(Size.Empty).Width + 4;
+			var view = Math.Max(1, _previewHost.ClientSize.Width);
+
+			_previewScroll.Minimum = 0;
+			_previewScroll.LargeChange = view;
+			_previewScroll.Maximum = Math.Max(content, view) - 1;
+			_previewScroll.Enabled = content > view;
+
+			// keeps the position inside the new range and moves the strip to it
+			SetPreviewScroll(_previewScroll.Value);
+			_preview.Left = -_previewScroll.Value;
 		}
 
 		private static Button MakeButton(string text, EventHandler click)
@@ -444,7 +475,7 @@ namespace Sledge.Shell.Settings.Editors
 			// room for the buttons and for the scroll bar under them
 			_root.RowStyles[2].Height = size + 48;
 
-			var scrolledTo = -_previewPanel.AutoScrollPosition.X;
+			var scrolledTo = _previewScroll.Value;
 
 			_preview.SuspendLayout();
 			try
@@ -493,8 +524,8 @@ namespace Sledge.Shell.Settings.Editors
 			}
 
 			// the scrollable width is the full width of the strip
-			_previewPanel.AutoScrollMinSize = new Size(_preview.GetPreferredSize(Size.Empty).Width + 4, 0);
-			_previewPanel.AutoScrollPosition = new Point(Math.Max(0, scrolledTo), 0);
+			UpdatePreviewScroll();
+			SetPreviewScroll(scrolledTo);
 		}
 
 		/// <summary>Marks the selected row's button in the preview and scrolls the preview to show it.</summary>
@@ -512,10 +543,10 @@ namespace Sledge.Shell.Settings.Editors
 			}
 			if (shown == null) return;
 
-			var left = -_previewPanel.AutoScrollPosition.X;
-			if (shown.Bounds.Left < left || shown.Bounds.Right > left + _previewPanel.ClientSize.Width)
+			var left = _previewScroll.Value;
+			if (shown.Bounds.Left < left || shown.Bounds.Right > left + _previewHost.ClientSize.Width)
 			{
-				_previewPanel.AutoScrollPosition = new Point(Math.Max(0, shown.Bounds.Left - 24), 0);
+				SetPreviewScroll(shown.Bounds.Left - 24);
 			}
 		}
 
