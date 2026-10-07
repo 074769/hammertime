@@ -528,25 +528,15 @@ namespace Sledge.Shell.Settings.Editors
 			SetPreviewScroll(scrolledTo);
 		}
 
-		/// <summary>Marks the selected row's button in the preview and scrolls the preview to show it.</summary>
+		/// <summary>Marks the button of the selected row in the preview. The preview is never scrolled by this.</summary>
 		private void SyncPreviewSelection()
 		{
 			var selected = SelectedEntry();
-			ToolStripButton shown = null;
 			foreach (ToolStripItem item in _preview.Items)
 			{
 				var button = item as ToolStripButton;
 				if (button == null) continue;
-				var isSelected = selected != null && ReferenceEquals(button.Tag, selected);
-				button.Checked = isSelected;
-				if (isSelected) shown = button;
-			}
-			if (shown == null) return;
-
-			var left = _previewScroll.Value;
-			if (shown.Bounds.Left < left || shown.Bounds.Right > left + _previewHost.ClientSize.Width)
-			{
-				SetPreviewScroll(shown.Bounds.Left - 24);
+				button.Checked = selected != null && ReferenceEquals(button.Tag, selected);
 			}
 		}
 
