@@ -50,9 +50,10 @@ namespace Sledge.BspEditor.Tools.Texture
         private readonly HashSet<string> _thumbnailRequested = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase);
         private bool _layouting;
 
+        // The Apply button is gone (Shift+T still applies); kept so existing translation files still bind
         public string Apply
         {
-            set => this.InvokeLater(() => ApplyButton.Text = value);
+            set { }
         }
 
         public string Browse
@@ -83,6 +84,12 @@ namespace Sledge.BspEditor.Tools.Texture
             LayoutControls();
         }
 
+        protected override void OnLayout(LayoutEventArgs e)
+        {
+            base.OnLayout(e);
+            LayoutControls();
+        }
+
         /// <summary>
         /// Lay everything out proportionally: the two history cells and both button columns always
         /// split the available width in half, and the panel's height follows the cell size.
@@ -94,8 +101,8 @@ namespace Sledge.BspEditor.Tools.Texture
             try
             {
                 var m = LogicalToDeviceUnits(3);
-                var buttonH = LogicalToDeviceUnits(22);
-                var labelH = LogicalToDeviceUnits(16);
+                var buttonH = Math.Max(LogicalToDeviceUnits(22), Font.Height + LogicalToDeviceUnits(8));
+                var labelH = Math.Max(LogicalToDeviceUnits(16), Font.Height + 2);
                 var maxCellH = LogicalToDeviceUnits(128);
 
                 var inner = Math.Max(1, ClientSize.Width - 2 * m);
@@ -111,16 +118,14 @@ namespace Sledge.BspEditor.Tools.Texture
 
                 NameLabel.SetBounds(m, y, inner, labelH);
                 y += labelH;
+                SizeLabel.SetBounds(m, y, inner, labelH);
+                y += labelH + m;
 
                 var colW = (inner - m) / 2;
                 var rightX = m + colW + m;
                 var rightW = inner - colW - m;
 
-                SizeLabel.SetBounds(m, y + (buttonH - labelH) / 2, colW, labelH);
-                BrowseButton.SetBounds(rightX, y, rightW, buttonH);
-                y += buttonH + 2;
-
-                ApplyButton.SetBounds(m, y, colW, buttonH);
+                BrowseButton.SetBounds(m, y, colW, buttonH);
                 ReplaceButton.SetBounds(rightX, y, rightW, buttonH);
                 y += buttonH + m;
 
@@ -169,11 +174,6 @@ namespace Sledge.BspEditor.Tools.Texture
             string[] snapshot;
             lock (_historyLock) snapshot = _history.ToArray();
             store.Set("History", String.Join("|", snapshot));
-        }
-
-        private void ApplyButtonClicked(object sender, EventArgs e)
-        {
-            Oy.Publish("Command:Run", new CommandMessage("BspEditor:ApplyActiveTexture"));
         }
 
         private void BrowseButtonClicked(object sender, EventArgs e)

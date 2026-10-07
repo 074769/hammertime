@@ -30,7 +30,6 @@
         {
             this.BrowseButton = new System.Windows.Forms.Button();
             this.ReplaceButton = new System.Windows.Forms.Button();
-            this.ApplyButton = new System.Windows.Forms.Button();
             this.HistoryStrip = new Sledge.BspEditor.Tools.Texture.TextureHistoryStrip();
             this.SizeLabel = new System.Windows.Forms.Label();
             this.NameLabel = new System.Windows.Forms.Label();
@@ -55,16 +54,6 @@
             this.ReplaceButton.Text = "Replace...";
             this.ReplaceButton.UseVisualStyleBackColor = true;
             this.ReplaceButton.Click += new System.EventHandler(this.ReplaceButtonClicked);
-            // 
-            // ApplyButton
-            // 
-            this.ApplyButton.Location = new System.Drawing.Point(3, 161);
-            this.ApplyButton.Name = "ApplyButton";
-            this.ApplyButton.Size = new System.Drawing.Size(95, 22);
-            this.ApplyButton.TabIndex = 11;
-            this.ApplyButton.Text = "Apply";
-            this.ApplyButton.UseVisualStyleBackColor = true;
-            this.ApplyButton.Click += new System.EventHandler(this.ApplyButtonClicked);
             // 
             // HistoryStrip
             // 
@@ -95,11 +84,9 @@
             // 
             // TextureSidebarPanel
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
             this.Controls.Add(this.NameLabel);
             this.Controls.Add(this.SizeLabel);
-            this.Controls.Add(this.ApplyButton);
             this.Controls.Add(this.BrowseButton);
             this.Controls.Add(this.ReplaceButton);
             this.Controls.Add(this.HistoryStrip);
@@ -117,7 +104,6 @@
         private System.Windows.Forms.Button BrowseButton;
         private System.Windows.Forms.Button ReplaceButton;
         private Sledge.BspEditor.Tools.Texture.TextureHistoryStrip HistoryStrip;
-        private System.Windows.Forms.Button ApplyButton;
         private System.Windows.Forms.Label SizeLabel;
         private System.Windows.Forms.Label NameLabel;
     }

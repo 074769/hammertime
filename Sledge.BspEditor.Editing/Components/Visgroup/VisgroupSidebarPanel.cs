@@ -52,6 +52,62 @@ namespace Sledge.BspEditor.Editing.Components.Visgroup
         {
             InitializeComponent();
             CreateHandle();
+            LayoutControls();
+        }
+
+        private bool _layouting;
+
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            LayoutControls();
+        }
+
+        protected override void OnLayout(LayoutEventArgs e)
+        {
+            base.OnLayout(e);
+            LayoutControls();
+        }
+
+        /// <summary>
+        /// The visgroup list fills the width, and the two button columns split it in half,
+        /// so nothing is clipped or left stranded when the sidebar is resized.
+        /// </summary>
+        private void LayoutControls()
+        {
+            if (_layouting || VisgroupPanel == null) return;
+            _layouting = true;
+            try
+            {
+                var m = LogicalToDeviceUnits(3);
+                var buttonH = Math.Max(LogicalToDeviceUnits(22), Font.Height + LogicalToDeviceUnits(8));
+                var height = LogicalToDeviceUnits(212);
+
+                var inner = Math.Max(1, ClientSize.Width - 2 * m);
+                var colW = (inner - m) / 2;
+                var rightX = m + colW + m;
+                var rightW = inner - colW - m;
+
+                var row2 = height - m - buttonH;
+                var row1 = row2 - 2 - buttonH;
+                var treeH = Math.Max(LogicalToDeviceUnits(40), row1 - m - m);
+
+                SuspendLayout();
+
+                VisgroupPanel.SetBounds(m, m, inner, treeH);
+                btnEdit.SetBounds(m, row1, colW, buttonH);
+                btnNew.SetBounds(rightX, row1, rightW, buttonH);
+                btnSelect.SetBounds(m, row2, colW, buttonH);
+                btnShowAll.SetBounds(rightX, row2, rightW, buttonH);
+
+                if (Height != height) Height = height;
+
+                ResumeLayout(false);
+            }
+            finally
+            {
+                _layouting = false;
+            }
         }
 
         public bool IsInContext(IContext context)

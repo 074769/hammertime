@@ -37,7 +37,6 @@
             // 
             // btnShowAll
             // 
-            this.btnShowAll.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.btnShowAll.Location = new System.Drawing.Point(104, 188);
             this.btnShowAll.Name = "btnShowAll";
             this.btnShowAll.Size = new System.Drawing.Size(95, 22);
@@ -49,7 +48,6 @@
             // 
             // btnSelect
             // 
-            this.btnSelect.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.btnSelect.Location = new System.Drawing.Point(3, 188);
             this.btnSelect.Name = "btnSelect";
             this.btnSelect.Size = new System.Drawing.Size(95, 22);
@@ -61,7 +59,6 @@
             // 
             // btnEdit
             // 
-            this.btnEdit.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.btnEdit.Location = new System.Drawing.Point(3, 165);
             this.btnEdit.Name = "btnEdit";
             this.btnEdit.Size = new System.Drawing.Size(95, 22);
@@ -73,9 +70,6 @@
             // 
             // VisgroupPanel
             // 
-            this.VisgroupPanel.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
             this.VisgroupPanel.Location = new System.Drawing.Point(3, 3);
             this.VisgroupPanel.Name = "VisgroupPanel";
             this.VisgroupPanel.SelectedVisgroup = null;
@@ -87,7 +81,6 @@
             // 
             // btnNew
             // 
-            this.btnNew.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.btnNew.Location = new System.Drawing.Point(104, 165);
             this.btnNew.Name = "btnNew";
             this.btnNew.Size = new System.Drawing.Size(95, 22);
@@ -99,15 +92,13 @@
             // 
             // VisgroupSidebarPanel
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
             this.Controls.Add(this.btnNew);
             this.Controls.Add(this.VisgroupPanel);
             this.Controls.Add(this.btnShowAll);
             this.Controls.Add(this.btnSelect);
             this.Controls.Add(this.btnEdit);
-            this.MaximumSize = new System.Drawing.Size(0, 250);
-            this.MinimumSize = new System.Drawing.Size(200, 165);
+            this.MinimumSize = new System.Drawing.Size(120, 0);
             this.Name = "VisgroupSidebarPanel";
             this.Size = new System.Drawing.Size(200, 212);
             this.ResumeLayout(false);
