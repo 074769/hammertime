@@ -81,7 +81,7 @@ namespace Sledge.BspEditor.Editing.Components.Visgroup
             {
                 var m = LogicalToDeviceUnits(3);
                 var buttonH = Math.Max(LogicalToDeviceUnits(22), Font.Height + LogicalToDeviceUnits(8));
-                var height = LogicalToDeviceUnits(212);
+                var height = LogicalToDeviceUnits(212 + 64); // 64 extra px so the visgroup tree has room
 
                 var inner = Math.Max(1, ClientSize.Width - 2 * m);
                 var colW = (inner - m) / 2;
