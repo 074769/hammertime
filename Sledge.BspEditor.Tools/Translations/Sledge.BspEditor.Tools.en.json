@@ -268,8 +268,8 @@
             "RandomiseShiftValues": "Randomise shift values",
             "Min": "Min",
             "Max": "Max",
-            "RandomiseX": "Randomise X",
-            "RandomiseY": "Randomise Y",
+            "RandomiseX": "RNG X",
+            "RandomiseY": "RNG Y",
             "FitToMultipleTiles": "Fit to multiple tiles",
             "TimesToTile": "Times to tile on face:",
             "Fit": "Fit"

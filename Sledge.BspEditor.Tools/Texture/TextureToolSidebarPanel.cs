@@ -97,6 +97,13 @@ namespace Sledge.BspEditor.Tools.Texture
             LayoutControls();
         }
 
+        private int CaptionInset(GroupBox g)
+        {
+            var captionW = Math.Max(1, g.Width - 2 * LogicalToDeviceUnits(8));
+            var captionH = TextRenderer.MeasureText(g.Text ?? "", g.Font, new Size(captionW, int.MaxValue), TextFormatFlags.WordBreak | TextFormatFlags.NoPadding).Height;
+            return Math.Max(g.DisplayRectangle.Top, captionH + LogicalToDeviceUnits(4));
+        }
+
         private static int TextWidth(Control c)
         {
             return TextRenderer.MeasureText(c.Text ?? "", c.Font, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding).Width;
@@ -126,11 +133,14 @@ namespace Sledge.BspEditor.Tools.Texture
                 var g1 = RandomiseShiftValuesGroup;
                 var d1 = g1.DisplayRectangle;
                 var w1 = Math.Max(1, groupW - (g1.Width - d1.Width));
-                var labelW = Math.Max(TextWidth(MinLabel), TextWidth(MaxLabel)) + m;
-                var buttonW = Math.Max(Math.Max(TextWidth(RandomShiftXButton), TextWidth(RandomShiftYButton)) + LogicalToDeviceUnits(24), (w1 - labelW) / 2);
-                var numberW = Math.Min(maxNumber, Math.Max(minNumber, w1 - labelW - buttonW - m));
+                var labelW = Math.Max(TextWidth(MinLabel), TextWidth(MaxLabel)) + LogicalToDeviceUnits(8);
                 var innerX = d1.Left + m;
-                var rowTop = d1.Top;
+
+                // The number box keeps its minimum width and the button takes whatever is left, so they can't overlap
+                var buttonWanted = Math.Max(TextWidth(RandomShiftXButton), TextWidth(RandomShiftYButton)) + LogicalToDeviceUnits(16);
+                var buttonW = Math.Max(LogicalToDeviceUnits(30), Math.Min(buttonWanted, w1 - 2 * m - labelW - minNumber - m));
+                var numberW = Math.Min(maxNumber, Math.Max(minNumber, w1 - 2 * m - labelW - buttonW - m));
+                var rowTop = CaptionInset(g1);
 
                 MinLabel.Location = new Point(innerX, rowTop + (rowH - MinLabel.Height) / 2);
                 RandomShiftMin.SetBounds(innerX + labelW, rowTop + (rowH - RandomShiftMin.Height) / 2, numberW, RandomShiftMin.Height);
@@ -153,10 +163,11 @@ namespace Sledge.BspEditor.Tools.Texture
                 var innerW2 = Math.Max(1, w2 - 2 * m);
                 var tileLabelH = TextRenderer.MeasureText(TimesToTileLabel.Text ?? "", TimesToTileLabel.Font, new Size(innerW2, int.MaxValue), TextFormatFlags.WordBreak | TextFormatFlags.NoPadding).Height + m;
 
-                var labelW2 = Math.Max(TextWidth(label1), TextWidth(label4)) + m;
-                var fitW = Math.Max(TextWidth(TileFitButton) + LogicalToDeviceUnits(24), (w2 - labelW2) / 2);
-                var numberW2 = Math.Min(maxNumber, Math.Max(minNumber, w2 - labelW2 - fitW - 3 * m));
-                var top2 = d2.Top;
+                var labelW2 = Math.Max(TextWidth(label1), TextWidth(label4)) + LogicalToDeviceUnits(8);
+                var fitWanted = TextWidth(TileFitButton) + LogicalToDeviceUnits(24);
+                var fitW = Math.Max(LogicalToDeviceUnits(30), Math.Min(Math.Max(fitWanted, (w2 - labelW2) / 2), w2 - 2 * m - labelW2 - minNumber - m));
+                var numberW2 = Math.Min(maxNumber, Math.Max(minNumber, w2 - 2 * m - labelW2 - fitW - m));
+                var top2 = CaptionInset(g2);
 
                 TimesToTileLabel.SetBounds(innerX, top2, innerW2, tileLabelH);
                 top2 += tileLabelH;
