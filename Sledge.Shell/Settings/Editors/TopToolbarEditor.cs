@@ -107,7 +107,16 @@ namespace Sledge.Shell.Settings.Editors
 			};
 			_available.AfterSelect += (s, e) => UpdateButtons();
 			_available.NodeMouseDoubleClick += (s, e) => AddSelected();
-			_available.ItemDrag += (s, e) => _available.DoDragDrop(e.Item, DragDropEffects.Move);
+			_available.MouseDown += (s, e) =>
+			{
+				_dragStart = e.Location;
+				_dragSource = e.Button == MouseButtons.Left ? _available.GetNodeAt(e.X, e.Y) : null;
+			};
+			_available.MouseMove += (s, e) =>
+			{
+				if (ShouldStartDrag(e)) StartDrag(_available);
+			};
+			_available.MouseUp += (s, e) => _dragSource = null;
 			_available.DragEnter += (s, e) => e.Effect = e.Data.GetDataPresent(typeof(ListViewItem)) ? DragDropEffects.Move : DragDropEffects.None;
 			_available.DragOver += (s, e) => e.Effect = e.Data.GetDataPresent(typeof(ListViewItem)) ? DragDropEffects.Move : DragDropEffects.None;
 			_available.DragDrop += (s, e) =>
@@ -144,7 +153,16 @@ namespace Sledge.Shell.Settings.Editors
 				if (!_updating) SyncPreviewSelection();
 			};
 			_list.DoubleClick += (s, e) => RemoveSelected();
-			_list.ItemDrag += (s, e) => _list.DoDragDrop(e.Item, DragDropEffects.Move);
+			_list.MouseDown += (s, e) =>
+			{
+				_dragStart = e.Location;
+				_dragSource = e.Button == MouseButtons.Left ? _list.GetItemAt(e.X, e.Y) : null;
+			};
+			_list.MouseMove += (s, e) =>
+			{
+				if (ShouldStartDrag(e)) StartDrag(_list);
+			};
+			_list.MouseUp += (s, e) => _dragSource = null;
 			_list.DragEnter += (s, e) => e.Effect = CanDrop(e) ? DragDropEffects.Move : DragDropEffects.None;
 			_list.DragOver += (s, e) => e.Effect = CanDrop(e) ? DragDropEffects.Move : DragDropEffects.None;
 			_list.DragDrop += (s, e) => DropOnList(e);
@@ -216,6 +234,31 @@ namespace Sledge.Shell.Settings.Editors
 			{
 				SetStyle(ControlStyles.Selectable, true);
 			}
+		}
+
+		// A drag only starts while the left button is really held down and the mouse has moved a good
+		// distance from where it was pressed, so a plain click can never leave a drag running (a drag makes
+		// the lists scroll by themselves when the mouse is near their edges).
+		private Point _dragStart;
+		private object _dragSource;
+
+		private bool ShouldStartDrag(MouseEventArgs e)
+		{
+			if (_dragSource == null) return false;
+			if (e.Button != MouseButtons.Left || (System.Windows.Forms.Control.MouseButtons & MouseButtons.Left) == 0)
+			{
+				_dragSource = null;
+				return false;
+			}
+			var threshold = Math.Max(SystemInformation.DragSize.Width, SystemInformation.DragSize.Height) * 3;
+			return Math.Abs(e.X - _dragStart.X) > threshold || Math.Abs(e.Y - _dragStart.Y) > threshold;
+		}
+
+		private void StartDrag(Control source)
+		{
+			var item = _dragSource;
+			_dragSource = null;
+			if (item != null) source.DoDragDrop(item, DragDropEffects.Move);
 		}
 
 		private void ScrollPreviewBy(int dx)
