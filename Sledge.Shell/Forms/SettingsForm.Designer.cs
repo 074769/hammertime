@@ -28,7 +28,7 @@
 		/// </summary>
 		private void InitializeComponent()
 		{
-			SettingsPanel = new System.Windows.Forms.TableLayoutPanel();
+			SettingsPanel = new Sledge.Shell.Controls.SettingsScrollPanel();
 			CancelButton = new System.Windows.Forms.Button();
 			OKButton = new System.Windows.Forms.Button();
 			GroupList = new System.Windows.Forms.TreeView();
@@ -100,7 +100,7 @@
 		}
 
 		#endregion
-		private System.Windows.Forms.TableLayoutPanel SettingsPanel;
+		private Sledge.Shell.Controls.SettingsScrollPanel SettingsPanel;
         private System.Windows.Forms.Button CancelButton;
         private System.Windows.Forms.Button OKButton;
         private System.Windows.Forms.TreeView GroupList;
