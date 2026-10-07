@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Drawing;
 using System.ComponentModel.Composition;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -73,6 +74,117 @@ namespace Sledge.BspEditor.Tools.Texture
         {
             InitializeComponent();
             CreateHandle();
+
+            foreach (var group in new[] { RandomiseShiftValuesGroup, FitGroup })
+            {
+                foreach (Control c in group.Controls) c.TextChanged += (s, e) => LayoutControls();
+            }
+
+            LayoutControls();
+        }
+
+        private bool _layouting;
+
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            LayoutControls();
+        }
+
+        protected override void OnLayout(LayoutEventArgs e)
+        {
+            base.OnLayout(e);
+            LayoutControls();
+        }
+
+        private static int TextWidth(Control c)
+        {
+            return TextRenderer.MeasureText(c.Text ?? "", c.Font, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding).Width;
+        }
+
+        /// <summary>
+        /// Both group boxes fill the panel width and their contents are laid out proportionally,
+        /// so nothing is clipped (or stuck to one side) when the sidebar is resized.
+        /// </summary>
+        private void LayoutControls()
+        {
+            if (_layouting || RandomiseShiftValuesGroup == null) return;
+            _layouting = true;
+            try
+            {
+                SuspendLayout();
+
+                var p = LogicalToDeviceUnits(5);
+                var m = LogicalToDeviceUnits(3);
+                var rowH = Math.Max(LogicalToDeviceUnits(23), Font.Height + LogicalToDeviceUnits(8));
+                var minNumber = LogicalToDeviceUnits(40);
+                var maxNumber = LogicalToDeviceUnits(120);
+                var groupW = Math.Max(1, ClientSize.Width - 2 * p);
+                var y = p;
+
+                // --- Randomise shift values
+                var g1 = RandomiseShiftValuesGroup;
+                var d1 = g1.DisplayRectangle;
+                var w1 = Math.Max(1, groupW - (g1.Width - d1.Width));
+                var labelW = Math.Max(TextWidth(MinLabel), TextWidth(MaxLabel)) + m;
+                var buttonW = Math.Max(Math.Max(TextWidth(RandomShiftXButton), TextWidth(RandomShiftYButton)) + LogicalToDeviceUnits(24), (w1 - labelW) / 2);
+                var numberW = Math.Min(maxNumber, Math.Max(minNumber, w1 - labelW - buttonW - m));
+                var innerX = d1.Left + m;
+                var rowTop = d1.Top;
+
+                MinLabel.Location = new Point(innerX, rowTop + (rowH - MinLabel.Height) / 2);
+                RandomShiftMin.SetBounds(innerX + labelW, rowTop + (rowH - RandomShiftMin.Height) / 2, numberW, RandomShiftMin.Height);
+                RandomShiftXButton.SetBounds(d1.Left + w1 - m - buttonW, rowTop, buttonW, rowH);
+                rowTop += rowH + m;
+
+                MaxLabel.Location = new Point(innerX, rowTop + (rowH - MaxLabel.Height) / 2);
+                RandomShiftMax.SetBounds(innerX + labelW, rowTop + (rowH - RandomShiftMax.Height) / 2, numberW, RandomShiftMax.Height);
+                RandomShiftYButton.SetBounds(d1.Left + w1 - m - buttonW, rowTop, buttonW, rowH);
+                rowTop += rowH + m;
+
+                var g1H = rowTop + (g1.Height - d1.Bottom);
+                g1.SetBounds(p, y, groupW, g1H);
+                y += g1H + m;
+
+                // --- Fit to multiple tiles
+                var g2 = FitGroup;
+                var d2 = g2.DisplayRectangle;
+                var w2 = Math.Max(1, groupW - (g2.Width - d2.Width));
+                var innerW2 = Math.Max(1, w2 - 2 * m);
+                var tileLabelH = TextRenderer.MeasureText(TimesToTileLabel.Text ?? "", TimesToTileLabel.Font, new Size(innerW2, int.MaxValue), TextFormatFlags.WordBreak | TextFormatFlags.NoPadding).Height + m;
+
+                var labelW2 = Math.Max(TextWidth(label1), TextWidth(label4)) + m;
+                var fitW = Math.Max(TextWidth(TileFitButton) + LogicalToDeviceUnits(24), (w2 - labelW2) / 2);
+                var numberW2 = Math.Min(maxNumber, Math.Max(minNumber, w2 - labelW2 - fitW - 3 * m));
+                var top2 = d2.Top;
+
+                TimesToTileLabel.SetBounds(innerX, top2, innerW2, tileLabelH);
+                top2 += tileLabelH;
+
+                label1.Location = new Point(innerX, top2 + (rowH - label1.Height) / 2);
+                TileFitX.SetBounds(innerX + labelW2, top2 + (rowH - TileFitX.Height) / 2, numberW2, TileFitX.Height);
+                var fitTop = top2;
+                top2 += rowH + m;
+
+                label4.Location = new Point(innerX, top2 + (rowH - label4.Height) / 2);
+                TileFitY.SetBounds(innerX + labelW2, top2 + (rowH - TileFitY.Height) / 2, numberW2, TileFitY.Height);
+                top2 += rowH + m;
+
+                // The Fit button spans both number rows
+                TileFitButton.SetBounds(d2.Left + w2 - m - fitW, fitTop, fitW, 2 * rowH + m);
+
+                var g2H = top2 + (g2.Height - d2.Bottom);
+                g2.SetBounds(p, y, groupW, g2H);
+                y += g2H + p;
+
+                if (Height != y) Height = y;
+
+                ResumeLayout(false);
+            }
+            finally
+            {
+                _layouting = false;
+            }
         }
 
         public bool IsInContext(IContext context)

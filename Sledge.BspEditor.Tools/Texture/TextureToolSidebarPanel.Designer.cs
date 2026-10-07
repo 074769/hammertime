@@ -129,8 +129,6 @@
             // 
             // RandomiseShiftValuesGroup
             // 
-            this.RandomiseShiftValuesGroup.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
             this.RandomiseShiftValuesGroup.Controls.Add(this.RandomShiftMin);
             this.RandomiseShiftValuesGroup.Controls.Add(this.RandomShiftYButton);
             this.RandomiseShiftValuesGroup.Controls.Add(this.RandomShiftMax);
@@ -146,8 +144,6 @@
             // 
             // FitGroup
             // 
-            this.FitGroup.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
             this.FitGroup.Controls.Add(this.TimesToTileLabel);
             this.FitGroup.Controls.Add(this.TileFitX);
             this.FitGroup.Controls.Add(this.TileFitButton);
@@ -163,8 +159,6 @@
             // 
             // TimesToTileLabel
             // 
-            this.TimesToTileLabel.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
             this.TimesToTileLabel.Location = new System.Drawing.Point(8, 21);
             this.TimesToTileLabel.Name = "TimesToTileLabel";
             this.TimesToTileLabel.Size = new System.Drawing.Size(191, 27);
@@ -235,9 +229,7 @@
             // 
             // TextureToolSidebarPanel
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.AutoSize = true;
+            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
             this.Controls.Add(this.FitGroup);
             this.Controls.Add(this.RandomiseShiftValuesGroup);
             this.Name = "TextureToolSidebarPanel";
