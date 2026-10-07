@@ -113,7 +113,7 @@
             this.RandomShiftXButton.Name = "RandomShiftXButton";
             this.RandomShiftXButton.Size = new System.Drawing.Size(86, 23);
             this.RandomShiftXButton.TabIndex = 3;
-            this.RandomShiftXButton.Text = "RNG X";
+            this.RandomShiftXButton.Text = "X";
             this.RandomShiftXButton.UseVisualStyleBackColor = true;
             this.RandomShiftXButton.Click += new System.EventHandler(this.RandomShiftXButtonClicked);
             // 
@@ -123,7 +123,7 @@
             this.RandomShiftYButton.Name = "RandomShiftYButton";
             this.RandomShiftYButton.Size = new System.Drawing.Size(86, 23);
             this.RandomShiftYButton.TabIndex = 3;
-            this.RandomShiftYButton.Text = "RNG Y";
+            this.RandomShiftYButton.Text = "Y";
             this.RandomShiftYButton.UseVisualStyleBackColor = true;
             this.RandomShiftYButton.Click += new System.EventHandler(this.RandomShiftYButtonClicked);
             // 
