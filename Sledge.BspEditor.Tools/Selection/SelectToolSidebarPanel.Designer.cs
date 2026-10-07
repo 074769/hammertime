@@ -166,6 +166,7 @@ namespace Sledge.BspEditor.Tools.Selection
             TranslateModeCheckbox.Name = "TranslateModeCheckbox";
             TranslateModeCheckbox.Size = new System.Drawing.Size(63, 25);
             TranslateModeCheckbox.TabIndex = 7;
+            TranslateModeCheckbox.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             TranslateModeCheckbox.Text = "Move";
             TranslateModeCheckbox.UseVisualStyleBackColor = true;
             TranslateModeCheckbox.CheckedChanged += TranslateModeChecked;
@@ -178,6 +179,7 @@ namespace Sledge.BspEditor.Tools.Selection
             RotateModeCheckbox.Name = "RotateModeCheckbox";
             RotateModeCheckbox.Size = new System.Drawing.Size(51, 25);
             RotateModeCheckbox.TabIndex = 7;
+            RotateModeCheckbox.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             RotateModeCheckbox.Text = "Rotate";
             RotateModeCheckbox.UseVisualStyleBackColor = true;
             RotateModeCheckbox.CheckedChanged += RotateModeChecked;
@@ -190,6 +192,7 @@ namespace Sledge.BspEditor.Tools.Selection
             SkewModeCheckbox.Name = "SkewModeCheckbox";
             SkewModeCheckbox.Size = new System.Drawing.Size(44, 25);
             SkewModeCheckbox.TabIndex = 7;
+            SkewModeCheckbox.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             SkewModeCheckbox.Text = "Skew";
             SkewModeCheckbox.UseVisualStyleBackColor = true;
             SkewModeCheckbox.CheckedChanged += SkewModeChecked;
