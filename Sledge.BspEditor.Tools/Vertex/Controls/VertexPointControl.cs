@@ -42,6 +42,80 @@ namespace Sledge.BspEditor.Tools.Vertex.Controls
         {
             InitializeComponent();
             CreateHandle();
+            HookTextChanges();
+            LayoutControls();
+        }
+
+        private bool _layouting;
+
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            LayoutControls();
+        }
+
+        protected override void OnLayout(LayoutEventArgs e)
+        {
+            base.OnLayout(e);
+            LayoutControls();
+        }
+
+        public override Size GetPreferredSize(Size proposedSize)
+        {
+            return new Size(Width, DoLayout(false));
+        }
+
+        private void LayoutControls()
+        {
+            if (_layouting) return;
+            _layouting = true;
+            try
+            {
+                SuspendLayout();
+                var h = DoLayout(true);
+                if (Height != h) Height = h;
+                ResumeLayout(false);
+            }
+            finally
+            {
+                _layouting = false;
+            }
+        }
+
+        private void HookTextChanges()
+        {
+            foreach (Control c in Controls) c.TextChanged += (s, e) => LayoutControls();
+        }
+
+        private int DoLayout(bool apply)
+        {
+            var m = LogicalToDeviceUnits(3);
+            var buttonH = Math.Max(LogicalToDeviceUnits(23), Font.Height + LogicalToDeviceUnits(8));
+            var inner = Math.Max(1, ClientSize.Width - 2 * m);
+            var indent = m + LogicalToDeviceUnits(4);
+            var y = m;
+
+            VertexControlLayout.Bounds(apply, MergeButton, m, y, inner, buttonH);
+            y += buttonH + m;
+
+            VertexControlLayout.Move(apply, AutoMerge, indent, y);
+            y += AutoMerge.Height + m;
+
+            VertexControlLayout.Move(apply, MergeResultsLabel, indent, y);
+            y += Math.Max(MergeResultsLabel.Height, Font.Height) + m;
+
+            var splitW = Math.Min(inner, Math.Max(inner / 2, VertexControlLayout.TextWidth(SplitButton) + LogicalToDeviceUnits(24)));
+            VertexControlLayout.Bounds(apply, SplitButton, m + (inner - splitW) / 2, y, splitW, buttonH);
+            y += buttonH + m;
+
+            // One checkbox per row, so neither can be pushed off the edge of a narrow panel
+            VertexControlLayout.Move(apply, ShowPointsCheckbox, indent, y);
+            y += ShowPointsCheckbox.Height + m;
+
+            VertexControlLayout.Move(apply, ShowMidpointsCheckbox, indent, y);
+            y += ShowMidpointsCheckbox.Height + m;
+
+            return y;
         }
 
         private void SplitButtonClicked(object sender, EventArgs e)

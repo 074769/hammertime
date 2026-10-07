@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Drawing;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Linq;
@@ -23,9 +24,14 @@ namespace Sledge.BspEditor.Tools.Vertex.Controls
         public string Title { get; set; } = "Vertex Tool";
         public object Control => this;
 
+        private bool _layouting;
+
         public VertexSidebarPanel()
         {
             InitializeComponent();
+
+            panel1.Resize += (s, e) => LayoutBottomButtons();
+            LayoutBottomButtons();
 
             Oy.Subscribe<VertexTool>("Tool:Activated", t =>
             {
@@ -35,6 +41,32 @@ namespace Sledge.BspEditor.Tools.Vertex.Controls
             {
                 SetSelectedTool(t);
             });
+        }
+
+        /// <summary>
+        /// Deselect all / Reset to original split the panel width in half instead of using fixed positions.
+        /// </summary>
+        private void LayoutBottomButtons()
+        {
+            if (_layouting) return;
+            _layouting = true;
+            try
+            {
+                var m = LogicalToDeviceUnits(3);
+                var buttonH = Math.Max(LogicalToDeviceUnits(23), Font.Height + LogicalToDeviceUnits(8));
+                var inner = Math.Max(1, panel1.ClientSize.Width - 2 * m);
+                var colW = (inner - m) / 2;
+
+                DeselectAllButton.SetBounds(m, m, colW, buttonH);
+                ResetButton.SetBounds(m + colW + m, m, inner - colW - m, buttonH);
+
+                var h = buttonH + 2 * m;
+                if (panel1.Height != h) panel1.Height = h;
+            }
+            finally
+            {
+                _layouting = false;
+            }
         }
 
         public void Translate(ITranslationStringProvider strings)
@@ -82,8 +114,8 @@ namespace Sledge.BspEditor.Tools.Vertex.Controls
             if (t.Control != null)
             {
                 ControlPanel.Controls.Add(t.Control);
-                ControlPanel.Height = t.Control.PreferredSize.Height;
                 t.Control.Dock = DockStyle.Top;
+                ControlPanel.Height = t.Control.GetPreferredSize(Size.Empty).Height;
             }
         }
         
