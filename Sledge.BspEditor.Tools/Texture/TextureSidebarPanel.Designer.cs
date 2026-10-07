@@ -31,15 +31,13 @@
             this.BrowseButton = new System.Windows.Forms.Button();
             this.ReplaceButton = new System.Windows.Forms.Button();
             this.ApplyButton = new System.Windows.Forms.Button();
-            this.SelectionPictureBox = new System.Windows.Forms.PictureBox();
+            this.HistoryStrip = new Sledge.BspEditor.Tools.Texture.TextureHistoryStrip();
             this.SizeLabel = new System.Windows.Forms.Label();
             this.NameLabel = new System.Windows.Forms.Label();
-            ((System.ComponentModel.ISupportInitialize)(this.SelectionPictureBox)).BeginInit();
             this.SuspendLayout();
             // 
             // BrowseButton
             // 
-            this.BrowseButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.BrowseButton.Location = new System.Drawing.Point(102, 137);
             this.BrowseButton.Name = "BrowseButton";
             this.BrowseButton.Size = new System.Drawing.Size(95, 22);
@@ -50,7 +48,6 @@
             // 
             // ReplaceButton
             // 
-            this.ReplaceButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.ReplaceButton.Location = new System.Drawing.Point(102, 161);
             this.ReplaceButton.Name = "ReplaceButton";
             this.ReplaceButton.Size = new System.Drawing.Size(95, 22);
@@ -61,7 +58,6 @@
             // 
             // ApplyButton
             // 
-            this.ApplyButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.ApplyButton.Location = new System.Drawing.Point(3, 161);
             this.ApplyButton.Name = "ApplyButton";
             this.ApplyButton.Size = new System.Drawing.Size(95, 22);
@@ -70,23 +66,18 @@
             this.ApplyButton.UseVisualStyleBackColor = true;
             this.ApplyButton.Click += new System.EventHandler(this.ApplyButtonClicked);
             // 
-            // SelectionPictureBox
+            // HistoryStrip
             // 
-            this.SelectionPictureBox.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.SelectionPictureBox.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.SelectionPictureBox.Location = new System.Drawing.Point(3, 3);
-            this.SelectionPictureBox.Name = "SelectionPictureBox";
-            this.SelectionPictureBox.Size = new System.Drawing.Size(194, 115);
-            this.SelectionPictureBox.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
-            this.SelectionPictureBox.TabIndex = 10;
-            this.SelectionPictureBox.TabStop = false;
+            this.HistoryStrip.Location = new System.Drawing.Point(3, 3);
+            this.HistoryStrip.Name = "HistoryStrip";
+            this.HistoryStrip.Size = new System.Drawing.Size(194, 94);
+            this.HistoryStrip.TabIndex = 10;
+            this.HistoryStrip.TabStop = false;
+            this.HistoryStrip.TextureClicked += new System.EventHandler<string>(this.HistoryTextureClicked);
             // 
             // SizeLabel
             // 
-            this.SizeLabel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.SizeLabel.AutoSize = true;
+            this.SizeLabel.AutoEllipsis = true;
             this.SizeLabel.Location = new System.Drawing.Point(3, 142);
             this.SizeLabel.Name = "SizeLabel";
             this.SizeLabel.Size = new System.Drawing.Size(27, 13);
@@ -95,8 +86,7 @@
             // 
             // NameLabel
             // 
-            this.NameLabel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.NameLabel.AutoSize = true;
+            this.NameLabel.AutoEllipsis = true;
             this.NameLabel.Location = new System.Drawing.Point(3, 122);
             this.NameLabel.Name = "NameLabel";
             this.NameLabel.Size = new System.Drawing.Size(35, 13);
@@ -112,13 +102,11 @@
             this.Controls.Add(this.ApplyButton);
             this.Controls.Add(this.BrowseButton);
             this.Controls.Add(this.ReplaceButton);
-            this.Controls.Add(this.SelectionPictureBox);
+            this.Controls.Add(this.HistoryStrip);
             this.DoubleBuffered = true;
-            this.MaximumSize = new System.Drawing.Size(0, 250);
-            this.MinimumSize = new System.Drawing.Size(200, 165);
+            this.MinimumSize = new System.Drawing.Size(120, 0);
             this.Name = "TextureSidebarPanel";
             this.Size = new System.Drawing.Size(200, 186);
-            ((System.ComponentModel.ISupportInitialize)(this.SelectionPictureBox)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -128,7 +116,7 @@
 
         private System.Windows.Forms.Button BrowseButton;
         private System.Windows.Forms.Button ReplaceButton;
-        private System.Windows.Forms.PictureBox SelectionPictureBox;
+        private Sledge.BspEditor.Tools.Texture.TextureHistoryStrip HistoryStrip;
         private System.Windows.Forms.Button ApplyButton;
         private System.Windows.Forms.Label SizeLabel;
         private System.Windows.Forms.Label NameLabel;
