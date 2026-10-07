@@ -40,8 +40,6 @@ namespace Sledge.BspEditor.Tools.Selection
             MoveToWorldButton = new System.Windows.Forms.Button();
             MoveToEntityButton = new System.Windows.Forms.Button();
             lblActions = new System.Windows.Forms.Label();
-            flowLayoutPanel1 = new System.Windows.Forms.FlowLayoutPanel();
-            flowLayoutPanel2 = new System.Windows.Forms.FlowLayoutPanel();
             keepEntityAngle = new System.Windows.Forms.CheckBox();
             MoveWidgetCheckbox = new System.Windows.Forms.CheckBox();
             RotateWidgetCheckbox = new System.Windows.Forms.CheckBox();
@@ -49,8 +47,6 @@ namespace Sledge.BspEditor.Tools.Selection
             RotationArcWidgetCheckbox = new System.Windows.Forms.CheckBox();
             CameraWidgetCheckbox = new System.Windows.Forms.CheckBox();
             AutoSelectBoxCheckbox = new System.Windows.Forms.CheckBox();
-            flowLayoutPanel1.SuspendLayout();
-            flowLayoutPanel2.SuspendLayout();
             SuspendLayout();
             // 
             // Show3DWidgetsCheckbox
@@ -165,20 +161,18 @@ namespace Sledge.BspEditor.Tools.Selection
             // TranslateModeCheckbox
             // 
             TranslateModeCheckbox.Appearance = System.Windows.Forms.Appearance.Button;
-            TranslateModeCheckbox.AutoSize = true;
             TranslateModeCheckbox.Location = new System.Drawing.Point(4, 3);
             TranslateModeCheckbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             TranslateModeCheckbox.Name = "TranslateModeCheckbox";
             TranslateModeCheckbox.Size = new System.Drawing.Size(63, 25);
             TranslateModeCheckbox.TabIndex = 7;
-            TranslateModeCheckbox.Text = "Translate";
+            TranslateModeCheckbox.Text = "Move";
             TranslateModeCheckbox.UseVisualStyleBackColor = true;
             TranslateModeCheckbox.CheckedChanged += TranslateModeChecked;
             // 
             // RotateModeCheckbox
             // 
             RotateModeCheckbox.Appearance = System.Windows.Forms.Appearance.Button;
-            RotateModeCheckbox.AutoSize = true;
             RotateModeCheckbox.Location = new System.Drawing.Point(75, 3);
             RotateModeCheckbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             RotateModeCheckbox.Name = "RotateModeCheckbox";
@@ -191,7 +185,6 @@ namespace Sledge.BspEditor.Tools.Selection
             // SkewModeCheckbox
             // 
             SkewModeCheckbox.Appearance = System.Windows.Forms.Appearance.Button;
-            SkewModeCheckbox.AutoSize = true;
             SkewModeCheckbox.Location = new System.Drawing.Point(134, 3);
             SkewModeCheckbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             SkewModeCheckbox.Name = "SkewModeCheckbox";
@@ -203,7 +196,6 @@ namespace Sledge.BspEditor.Tools.Selection
             // 
             // MoveToWorldButton
             // 
-            MoveToWorldButton.AutoSize = true;
             MoveToWorldButton.Location = new System.Drawing.Point(1, 1);
             MoveToWorldButton.Margin = new System.Windows.Forms.Padding(1);
             MoveToWorldButton.Name = "MoveToWorldButton";
@@ -215,7 +207,6 @@ namespace Sledge.BspEditor.Tools.Selection
             // 
             // MoveToEntityButton
             // 
-            MoveToEntityButton.AutoSize = true;
             MoveToEntityButton.Location = new System.Drawing.Point(1, 32);
             MoveToEntityButton.Margin = new System.Windows.Forms.Padding(1);
             MoveToEntityButton.Name = "MoveToEntityButton";
@@ -236,34 +227,9 @@ namespace Sledge.BspEditor.Tools.Selection
             lblActions.Text = "Actions:";
             lblActions.TextAlign = System.Drawing.ContentAlignment.TopCenter;
             // 
-            // flowLayoutPanel1
-            // 
-            flowLayoutPanel1.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) | System.Windows.Forms.AnchorStyles.Right));
-            flowLayoutPanel1.Controls.Add(TranslateModeCheckbox);
-            flowLayoutPanel1.Controls.Add(RotateModeCheckbox);
-            flowLayoutPanel1.Controls.Add(SkewModeCheckbox);
-            flowLayoutPanel1.Location = new System.Drawing.Point(4, 22);
-            flowLayoutPanel1.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
-            flowLayoutPanel1.Name = "flowLayoutPanel1";
-            flowLayoutPanel1.Size = new System.Drawing.Size(257, 35);
-            flowLayoutPanel1.TabIndex = 10;
-            flowLayoutPanel1.WrapContents = false;
-            // 
-            // flowLayoutPanel2
-            // 
-            flowLayoutPanel2.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) | System.Windows.Forms.AnchorStyles.Right));
-            flowLayoutPanel2.Controls.Add(MoveToWorldButton);
-            flowLayoutPanel2.Controls.Add(MoveToEntityButton);
-            flowLayoutPanel2.FlowDirection = System.Windows.Forms.FlowDirection.TopDown;
-            flowLayoutPanel2.Location = new System.Drawing.Point(4, 260);
-            flowLayoutPanel2.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
-            flowLayoutPanel2.Name = "flowLayoutPanel2";
-            flowLayoutPanel2.Size = new System.Drawing.Size(257, 61);
-            flowLayoutPanel2.TabIndex = 11;
-            flowLayoutPanel2.WrapContents = false;
-            // 
             // keepEntityAngle
             // 
+            keepEntityAngle.AutoSize = true;
             keepEntityAngle.Location = new System.Drawing.Point(8, 216);
             keepEntityAngle.Name = "keepEntityAngle";
             keepEntityAngle.Size = new System.Drawing.Size(122, 26);
@@ -275,12 +241,13 @@ namespace Sledge.BspEditor.Tools.Selection
 			// 
 			// SelectToolSidebarPanel
 			// 
-			AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
-            AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            AutoSize = true;
+            AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
             Controls.Add(keepEntityAngle);
-            Controls.Add(flowLayoutPanel2);
-            Controls.Add(flowLayoutPanel1);
+            Controls.Add(MoveToWorldButton);
+            Controls.Add(MoveToEntityButton);
+            Controls.Add(TranslateModeCheckbox);
+            Controls.Add(RotateModeCheckbox);
+            Controls.Add(SkewModeCheckbox);
             Controls.Add(lblActions);
             Controls.Add(lblMode);
             Controls.Add(Show3DWidgetsCheckbox);
@@ -293,10 +260,6 @@ namespace Sledge.BspEditor.Tools.Selection
             Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             Padding = new System.Windows.Forms.Padding(6, 6, 6, 6);
             Size = new System.Drawing.Size(271, 330);
-            flowLayoutPanel1.ResumeLayout(false);
-            flowLayoutPanel1.PerformLayout();
-            flowLayoutPanel2.ResumeLayout(false);
-            flowLayoutPanel2.PerformLayout();
             ResumeLayout(false);
             PerformLayout();
         }
@@ -319,7 +282,5 @@ namespace Sledge.BspEditor.Tools.Selection
         private System.Windows.Forms.Button MoveToWorldButton;
         private System.Windows.Forms.Button MoveToEntityButton;
         private System.Windows.Forms.Label lblActions;
-        private System.Windows.Forms.FlowLayoutPanel flowLayoutPanel1;
-        private System.Windows.Forms.FlowLayoutPanel flowLayoutPanel2;
     }
 }

@@ -43,8 +43,6 @@
             // 
             // EntityTypeList
             // 
-            this.EntityTypeList.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
             this.EntityTypeList.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.EntityTypeList.FormattingEnabled = true;
             this.EntityTypeList.Location = new System.Drawing.Point(3, 20);
@@ -55,11 +53,10 @@
             // 
             // EntitySidebarPanel
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
             this.Controls.Add(this.EntityTypeLabel);
             this.Controls.Add(this.EntityTypeList);
-            this.MinimumSize = new System.Drawing.Size(200, 50);
+            this.MinimumSize = new System.Drawing.Size(120, 0);
             this.Name = "EntitySidebarPanel";
             this.Size = new System.Drawing.Size(200, 50);
             this.ResumeLayout(false);

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Drawing;
 using System.ComponentModel.Composition;
 using System.Windows.Forms;
 using LogicAndTrick.Oy;
@@ -27,6 +28,7 @@ namespace Sledge.BspEditor.Tools.Selection
 		public SelectToolSidebarPanel()
 		{
 			InitializeComponent();
+			LayoutControls();
 
 			Oy.Subscribe<String>("SelectTool:TransformationModeChanged", x =>
 			{
@@ -64,6 +66,81 @@ namespace Sledge.BspEditor.Tools.Selection
 				}
 			});
 			Oy.Subscribe<IDocument>("Document:Activated", DocumentActivated);
+		}
+
+		private bool _layouting;
+
+		protected override void OnResize(EventArgs e)
+		{
+			base.OnResize(e);
+			LayoutControls();
+		}
+
+		protected override void OnLayout(LayoutEventArgs e)
+		{
+			base.OnLayout(e);
+			LayoutControls();
+		}
+
+		/// <summary>
+		/// The three mode buttons split the width into thirds and the action buttons fill it,
+		/// so nothing is cut off at the edge. The height follows the font/DPI.
+		/// </summary>
+		private void LayoutControls()
+		{
+			if (_layouting || lblMode == null) return;
+			_layouting = true;
+			try
+			{
+				SuspendLayout();
+
+				var p = LogicalToDeviceUnits(6);
+				var m = LogicalToDeviceUnits(3);
+				var indent = LogicalToDeviceUnits(18);
+				var buttonH = Math.Max(LogicalToDeviceUnits(25), Font.Height + LogicalToDeviceUnits(10));
+				var inner = Math.Max(1, ClientSize.Width - 2 * p);
+				var y = p;
+
+				void Row(Control c, int x)
+				{
+					c.Location = new Point(x, y);
+					y += c.Height + m;
+				}
+
+				Row(lblMode, p);
+
+				var w = Math.Max(1, (inner - 2 * m) / 3);
+				TranslateModeCheckbox.SetBounds(p, y, w, buttonH);
+				RotateModeCheckbox.SetBounds(p + w + m, y, w, buttonH);
+				SkewModeCheckbox.SetBounds(p + 2 * (w + m), y, Math.Max(1, inner - 2 * (w + m)), buttonH);
+				y += buttonH + 2 * m;
+
+				var x1 = p + LogicalToDeviceUnits(2);
+				var x2 = x1 + indent;
+				Row(AutoSelectBoxCheckbox, x1);
+				Row(Show3DWidgetsCheckbox, x1);
+				Row(MoveWidgetCheckbox, x2);
+				Row(RotateWidgetCheckbox, x2);
+				Row(MoveArrowWidgetCheckbox, x2);
+				Row(RotationArcWidgetCheckbox, x2);
+				Row(CameraWidgetCheckbox, x2);
+				Row(keepEntityAngle, x1);
+				y += m;
+
+				Row(lblActions, p);
+				MoveToWorldButton.SetBounds(p, y, inner, buttonH);
+				y += buttonH + m;
+				MoveToEntityButton.SetBounds(p, y, inner, buttonH);
+				y += buttonH + p;
+
+				if (Height != y) Height = y;
+
+				ResumeLayout(false);
+			}
+			finally
+			{
+				_layouting = false;
+			}
 		}
 
 		public void Translate(ITranslationStringProvider strings)

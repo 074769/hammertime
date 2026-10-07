@@ -31,9 +31,51 @@ namespace Sledge.BspEditor.Tools.Entity
         {
             InitializeComponent();
             CreateHandle();
+            LayoutControls();
 
             Oy.Subscribe<MapDocument>("Document:Activated", d => { this.InvokeLater(() => RefreshEntities(d)); });
             Oy.Subscribe<EntityTool>("EntityTool:ResetEntityType", t => { this.InvokeLater(() => ResetEntityType(t)); });
+        }
+
+        private bool _layouting;
+
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            LayoutControls();
+        }
+
+        protected override void OnLayout(LayoutEventArgs e)
+        {
+            base.OnLayout(e);
+            LayoutControls();
+        }
+
+        /// <summary>
+        /// The label and the entity list fill the panel width, and the height follows the font/DPI.
+        /// </summary>
+        private void LayoutControls()
+        {
+            if (_layouting || EntityTypeList == null) return;
+            _layouting = true;
+            try
+            {
+                var m = LogicalToDeviceUnits(3);
+                var inner = Math.Max(1, ClientSize.Width - 2 * m);
+                var labelH = Math.Max(LogicalToDeviceUnits(17), Font.Height + 2);
+
+                SuspendLayout();
+                EntityTypeLabel.SetBounds(m, m, inner, labelH);
+                EntityTypeList.SetBounds(m, m + labelH + m, inner, EntityTypeList.Height);
+
+                var h = m + labelH + m + EntityTypeList.Height + m;
+                if (Height != h) Height = h;
+                ResumeLayout(false);
+            }
+            finally
+            {
+                _layouting = false;
+            }
         }
 
         public bool IsInContext(IContext context)

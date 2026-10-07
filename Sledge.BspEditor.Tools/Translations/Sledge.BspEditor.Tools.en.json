@@ -168,7 +168,7 @@
         "SelectToolSidebarPanel": {
             "Title": "Selection Tool",
             "Mode": "Manipuation mode:",
-            "Translate": "Translate",
+            "Translate": "Move",
             "Rotate": "Rotate",
             "Skew": "Skew",
             "Show3DWidgets": "Show 3D widgets",
