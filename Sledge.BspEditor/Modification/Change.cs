@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Sledge.BspEditor.Documents;
@@ -17,6 +18,19 @@ namespace Sledge.BspEditor.Modification
         public MapDocument Document { get; }
 
         private readonly HashSet<IMapData> _affectedData;
+
+        /// <summary>
+        /// The runtime types of object data (<see cref="MapObjectData.IMapObjectData"/>)
+        /// that were added, removed, or replaced during the change.
+        /// </summary>
+        private readonly HashSet<Type> _affectedObjectDataTypes;
+
+        /// <summary>
+        /// True if any object in the change was reported without object-data type
+        /// information (e.g. a plain <see cref="Update(IMapObject)"/> call).
+        /// When true, per-data-type optimisations must not assume anything.
+        /// </summary>
+        private bool _hasUntrackedObjectUpdates;
 
         private readonly HashSet<IMapObject> _added;
         private readonly HashSet<IMapObject> _updated;
@@ -52,6 +66,18 @@ namespace Sledge.BspEditor.Modification
         /// </summary>
         public bool HasDataChanges => _affectedData.Count > 0;
 
+        /// <summary>
+        /// The runtime types of object data that were added, removed, or replaced
+        /// during the change.
+        /// </summary>
+        public IEnumerable<Type> AffectedObjectDataTypes => _affectedObjectDataTypes;
+
+        /// <summary>
+        /// True if every object update in the change carried object-data type
+        /// information (i.e. no plain <see cref="Update(IMapObject)"/> calls).
+        /// </summary>
+        public bool HasTrackedObjectUpdatesOnly => !_hasUntrackedObjectUpdates;
+
         public Change(MapDocument document)
         {
             Document = document;
@@ -61,6 +87,7 @@ namespace Sledge.BspEditor.Modification
             _removed = new HashSet<IMapObject>();
 
             _affectedData = new HashSet<IMapData>();
+            _affectedObjectDataTypes = new HashSet<Type>();
         }
 
         public Change Add(IMapObject o)
@@ -82,10 +109,44 @@ namespace Sledge.BspEditor.Modification
 
         public Change Update(IMapObject o)
         {
+            _hasUntrackedObjectUpdates = true;
             if (_added.Contains(o)) return this;
             if (_removed.Contains(o)) return this;
             _updated.Add(o);
             return this;
+        }
+
+        /// <summary>
+        /// Report an object update along with the object-data types that were
+        /// added, removed, or replaced on it. Unlike <see cref="Update(IMapObject)"/>,
+        /// this keeps per-data-type optimisation possible.
+        /// </summary>
+        public Change Update(IMapObject o, IEnumerable<Type> objectDataTypes)
+        {
+            if (_added.Contains(o)) { TrackObjectDataTypes(objectDataTypes); return this; }
+            if (_removed.Contains(o)) { TrackObjectDataTypes(objectDataTypes); return this; }
+            _updated.Add(o);
+            TrackObjectDataTypes(objectDataTypes);
+            return this;
+        }
+
+        /// <summary>
+        /// Report object-data types that were added, removed, or replaced during
+        /// the change, without adding any object updates.
+        /// </summary>
+        public Change UpdateObjectDataTypes(IEnumerable<Type> objectDataTypes)
+        {
+            TrackObjectDataTypes(objectDataTypes);
+            return this;
+        }
+
+        private void TrackObjectDataTypes(IEnumerable<Type> objectDataTypes)
+        {
+            if (objectDataTypes == null) return;
+            foreach (var t in objectDataTypes)
+            {
+                if (t != null) _affectedObjectDataTypes.Add(t);
+            }
         }
 
         public Change UpdateRange(IEnumerable<IMapObject> objects)
@@ -139,6 +200,8 @@ namespace Sledge.BspEditor.Modification
             _updated.UnionWith(change._updated.Except(_added).Except(_removed));
 
             _affectedData.UnionWith(change._affectedData);
+            _affectedObjectDataTypes.UnionWith(change._affectedObjectDataTypes);
+            _hasUntrackedObjectUpdates |= change._hasUntrackedObjectUpdates;
 
             return this;
         }

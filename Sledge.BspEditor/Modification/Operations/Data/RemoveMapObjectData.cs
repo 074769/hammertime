@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -37,7 +38,7 @@ namespace Sledge.BspEditor.Modification.Operations.Data
                     obj.Data.Remove(d);
                 }
                 obj.DescendantsChanged();
-                ch.Update(obj);
+                ch.Update(obj, _dataToRemove.Select(x => x.GetType()));
             }
 
             return ch;
@@ -55,7 +56,7 @@ namespace Sledge.BspEditor.Modification.Operations.Data
                     obj.Data.Add(d);
                 }
                 obj.DescendantsChanged();
-                ch.Update(obj);
+                ch.Update(obj, _dataToRemove.Select(x => x.GetType()));
             }
 
             return ch;

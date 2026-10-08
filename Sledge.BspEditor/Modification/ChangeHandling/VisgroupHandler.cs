@@ -19,6 +19,11 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
 
         public async Task Changed(Change change)
         {
+            // Visibility-only toggles (quick hide/reveal) can't change visgroup membership:
+            // no shipped predicate depends on visibility flags, and object moves/geometry
+            // edits always arrive with untracked updates that bypass this fast path.
+            if (VisibilityOnlyFastPath.IsActive(change)) return;
+
             var changed = false;
             var visgroups = change.Document.Map.Data.Get<Visgroup>().ToDictionary(x => x.ID, x => x);
             var autoVisgroups = change.Document.Map.Data.Get<AutomaticVisgroup>().ToList();

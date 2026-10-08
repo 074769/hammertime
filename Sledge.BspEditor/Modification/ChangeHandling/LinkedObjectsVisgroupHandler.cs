@@ -21,6 +21,10 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
 
         public async Task Changed(Change change)
         {
+            // Entries are keyed by link/slot IDs and filled by VisgroupHandler, which is
+            // skipped for visibility-only changes because membership can't change.
+            if (VisibilityOnlyFastPath.IsActive(change)) return;
+
             var doc = change.Document;
 
             var linkedChanges = change.Added.Union(change.Updated).Any(x => LinkedObjects.GetLinkId(x) != null)
@@ -119,6 +123,12 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
 
         public async Task Changed(Change change)
         {
+            // Pruner only removes empty entries; visibility-only changes already skip the
+            // fill step in VisgroupHandler/LinkedObjectsVisgroupHandler, and an empty
+            // "Linked Objects" entry can only appear when links change, never when only
+            // visibility flags change.
+            if (VisibilityOnlyFastPath.IsActive(change)) return;
+
             var empty = change.Document.Map.Data.Get<LinkedObjectsVisgroup>().Where(x => x.Objects.Count == 0).ToList();
             if (empty.Count == 0) return;
 
