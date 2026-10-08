@@ -6,6 +6,7 @@ using System.Linq;
 using System.Numerics;
 using System.Windows.Forms;
 using LogicAndTrick.Oy;
+using Sledge.BspEditor.Components;
 using Sledge.Common.Shell.Commands;
 using Sledge.Rendering.Cameras;
 using Sledge.Rendering.Engine;
@@ -195,12 +196,39 @@ namespace Sledge.BspEditor.Rendering.Viewport
 		private Point _lastMouseLocation = new Point(-1, -1);
 		private Point _mouseDownLocation = new Point(-1, -1);
 
+		/// <summary>
+		/// Track where the mouse cursor is pointing in the world, so commands
+		/// (e.g. paste) can place objects under the cursor. The ray runs through
+		/// the cursor: along the view's depth axis in 2D views, and towards the
+		/// far plane in the 3D view.
+		/// </summary>
+		private void UpdateCursorLocation(int x, int y)
+		{
+			ViewportCursorRay ray = null;
+
+			if (Viewport.Camera is OrthographicCamera ortho)
+			{
+				// The depth axis is the one the camera's Expand maps to zero
+				var expand = ortho.Expand(new Vector3(1, 2, 3));
+				var axis = expand.X == 0 ? Vector3.UnitX : (expand.Y == 0 ? -Vector3.UnitY : Vector3.UnitZ);
+				ray = new ViewportCursorRay(ortho.ScreenToWorld(x, y), axis);
+			}
+			else if (Viewport.Camera is PerspectiveCamera perspective)
+			{
+				var (near, far) = perspective.CastRayFromScreen(new Vector3(x, y, 0));
+				ray = new ViewportCursorRay(near, far - near);
+			}
+
+			if (ray != null) Oy.Publish("MapDocument:ViewportCursorRay:UpdateValue", ray);
+		}
+
 		private void OnMouseMove(object sender, MouseEventArgs e)
 		{
 			if (!_lastMouseLocationKnown)
 			{
 				_lastMouseLocation = new Point(e.X, e.Y);
 			}
+			UpdateCursorLocation(e.X, e.Y);
 			var ve = new ViewportEvent(this, e)
 			{
 				Dragging = _dragging,
@@ -274,6 +302,7 @@ namespace Sledge.BspEditor.Rendering.Viewport
 			{
 				_lastMouseLocation = new Point(e.X, e.Y);
 			}
+			UpdateCursorLocation(e.X, e.Y);
 			if (!_dragging)
 			{
 				_mouseDownLocation = new Point(e.X, e.Y);
