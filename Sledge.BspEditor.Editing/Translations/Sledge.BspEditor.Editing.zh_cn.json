@@ -86,6 +86,8 @@
   "Commands.Toggles.ToggleTextureScalingLock.Details": "启用或禁用纹理锁定，以便进行缩放操作。",
   "Commands.Toggles.ToggleHideNullTextures.Name": "隐藏 NULL 纹理",
   "Commands.Toggles.ToggleHideNullTextures.Details": "切换是否显示 NULL 纹理。",
+  "Commands.Toggles.ToggleSkybox.Name": "天空盒预览",
+  "Commands.Toggles.ToggleSkybox.Details": "切换天空盒预览。开启后 sky 纹理会隐藏，改为显示天空盒。",
   "Commands.Pointfile.LoadPointfile.Name": "加载点文件...",
   "Commands.Pointfile.LoadPointfile.Details": "选择一个由编译工具生成的点文件（.lin，.pts）。",
   "Commands.Pointfile.LoadPointfile.InvalidPointfile": "{0} 不是一个有效的点文件！",

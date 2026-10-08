@@ -155,6 +155,10 @@
       "ToggleHideNullTextures": {
         "Name": "Hide null textures",
         "Details": "Toggle null texture display."
+      },
+      "ToggleSkybox": {
+        "Name": "Skybox preview",
+        "Details": "Toggle the skybox preview. When it is on, sky textures are hidden and the skybox is drawn in their place."
       }
     },
     "Pointfile": {

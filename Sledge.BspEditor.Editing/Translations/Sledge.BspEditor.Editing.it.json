@@ -81,6 +81,8 @@
     "Commands.Toggles.ToggleTextureScalingLock.Details": "Abilita il blocco texture per le operazioni di scalo.",
     "Commands.Toggles.ToggleHideNullTextures.Name": "Nascondi texture null",
     "Commands.Toggles.ToggleHideNullTextures.Details": "Attiva/Disattiva visualizzazione texture null",
+    "Commands.Toggles.ToggleSkybox.Name": "Anteprima skybox",
+    "Commands.Toggles.ToggleSkybox.Details": "Attiva/Disattiva l'anteprima della skybox: le texture sky diventano invisibili e la skybox viene disegnata al loro posto.",
     "Commands.Pointfile.LoadPointfile.Name": "Carica pointfile...",
     "Commands.Pointfile.LoadPointfile.Details": "Seleziona un pointfile (.lin, .pts) generato dagli strumenti di compilazione.",
     "Commands.Pointfile.LoadPointfile.InvalidPointfile": "{0} non è un pointfile valido!",

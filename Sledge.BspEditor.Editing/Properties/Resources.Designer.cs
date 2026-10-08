@@ -353,6 +353,16 @@ namespace Sledge.BspEditor.Editing.Properties {
         /// <summary>
         ///   Looks up a localized resource of type System.Drawing.Bitmap.
         /// </summary>
+        internal static System.Drawing.Bitmap Menu_Skybox {
+            get {
+                object obj = ResourceManager.GetObject("Menu_Skybox", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
         internal static System.Drawing.Bitmap Menu_SnapSelection {
             get {
                 object obj = ResourceManager.GetObject("Menu_SnapSelection", resourceCulture);

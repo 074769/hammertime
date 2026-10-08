@@ -209,7 +209,10 @@ namespace Sledge.BspEditor.Rendering.Converters
 			{
 				var texInd  = (uint)(f.Vertices.Count - 2) * 3;
 
-				if ((hideNull && tc.IsNullTexture(f.Texture.Name)) || (hideClip && tc.IsClipTexture(f.Texture.Name) || (skybox && f.Texture.Name.ToLower() == "sky")))
+				// Skybox preview: sky faces are not drawn, so the skybox behind them shows instead.
+				var skyFace = skybox && String.Equals(f.Texture.Name, "sky", StringComparison.InvariantCultureIgnoreCase);
+
+				if ((hideNull && tc.IsNullTexture(f.Texture.Name)) || (hideClip && tc.IsClipTexture(f.Texture.Name)) || skyFace)
 				{
 					texOffset += texInd;
 					continue;
