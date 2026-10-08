@@ -47,7 +47,7 @@
         "BrushSidebarPanel": {
             "Title": "Brush Tool",
             "BrushType": "Brush type:",
-            "RoundVertices": "Round created vertices"
+            "RoundVertices": "Round Vertices"
         },
         "Brushes": {
             "ArchBrush": {

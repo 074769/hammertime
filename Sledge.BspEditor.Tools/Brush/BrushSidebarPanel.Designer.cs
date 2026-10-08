@@ -73,11 +73,11 @@
             this.RoundCreatedVerticesCheckbox.AutoSize = true;
             this.RoundCreatedVerticesCheckbox.Checked = true;
             this.RoundCreatedVerticesCheckbox.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.RoundCreatedVerticesCheckbox.Location = new System.Drawing.Point(73, 33);
+            this.RoundCreatedVerticesCheckbox.Location = new System.Drawing.Point(3, 33);
             this.RoundCreatedVerticesCheckbox.Name = "RoundCreatedVerticesCheckbox";
             this.RoundCreatedVerticesCheckbox.Size = new System.Drawing.Size(137, 17);
             this.RoundCreatedVerticesCheckbox.TabIndex = 6;
-            this.RoundCreatedVerticesCheckbox.Text = "Round created vertices";
+            this.RoundCreatedVerticesCheckbox.Text = "Round Vertices";
             this.RoundCreatedVerticesCheckbox.UseVisualStyleBackColor = true;
             this.RoundCreatedVerticesCheckbox.CheckedChanged += new System.EventHandler(this.RoundCreatedVerticesChanged);
             // 
