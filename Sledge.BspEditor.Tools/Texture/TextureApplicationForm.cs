@@ -631,14 +631,36 @@ namespace Sledge.BspEditor.Tools.Texture
             return new[] { UvUX, UvUY, UvUZ, UvVX, UvVY, UvVZ };
         }
 
+        // The vectors as last typed for the U (0) and V (1) rows. The texture stores unit vectors, so (-1, 0, -1) comes back
+        // as (-0.7071, 0, -0.7071); while the stored direction still matches, the row keeps showing what was typed.
+        private readonly System.Numerics.Vector3?[] _uvTyped = new System.Numerics.Vector3?[2];
+
         private void SetUvTexts(string[] texts)
         {
             var boxes = UvBoxes();
-            for (var i = 0; i < boxes.Length; i++)
+            for (var row = 0; row < 2; row++)
             {
-                boxes[i].Text = texts[i];
-                _uvShown[i] = texts[i];
+                var start = row * 3;
+                if (_uvTyped[row] != null && UvMatchesTyped(texts, start, _uvTyped[row].Value))
+                {
+                    for (var i = start; i < start + 3; i++) _uvShown[i] = boxes[i].Text;
+                    continue;
+                }
+
+                _uvTyped[row] = null;
+                for (var i = start; i < start + 3; i++)
+                {
+                    boxes[i].Text = texts[i];
+                    _uvShown[i] = texts[i];
+                }
             }
+        }
+
+        private static bool UvMatchesTyped(string[] texts, int start, System.Numerics.Vector3 typed)
+        {
+            if (!TryParseUv(texts[start], out var x) || !TryParseUv(texts[start + 1], out var y) || !TryParseUv(texts[start + 2], out var z)) return false;
+            var stored = new System.Numerics.Vector3(x, y, z);
+            return (stored - System.Numerics.Vector3.Normalize(typed)).LengthSquared() < 1e-5f;
         }
 
         private void RestoreUvRow(int start)
@@ -701,6 +723,8 @@ namespace Sledge.BspEditor.Tools.Texture
                 RestoreUvRow(start);
                 return;
             }
+
+            _uvTyped[isU ? 0 : 1] = vector;
 
             // Mark as shown straight away so Enter followed by Leave doesn't apply it twice
             for (var i = start; i < start + 3; i++) _uvShown[i] = boxes[i].Text;
