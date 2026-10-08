@@ -253,6 +253,7 @@ namespace Sledge.BspEditor.Tools.Texture
                 clone.Texture.YScale = 1;
                 clone.Texture.UAxis = uaxis;
                 clone.Texture.VAxis = vaxis;
+                clone.Texture.ULength = clone.Texture.VLength = 1;
                 clone.Texture.XShift = Vector3.Dot(uaxis, pos);
                 clone.Texture.YShift = Vector3.Dot(vaxis, pos);
                 changed = true;
@@ -268,6 +269,8 @@ namespace Sledge.BspEditor.Tools.Texture
                 // apply values
                 clone.Texture.SetRotation(sampleFace.Texture.Rotation);
                 clone.Texture.XScale = sampleFace.Texture.XScale;
+                clone.Texture.ULength = sampleFace.Texture.ULength;
+                clone.Texture.VLength = sampleFace.Texture.VLength;
                 clone.Texture.XShift = sampleFace.Texture.XShift;
                 clone.Texture.YScale = sampleFace.Texture.YScale;
                 clone.Texture.YShift = sampleFace.Texture.YShift;

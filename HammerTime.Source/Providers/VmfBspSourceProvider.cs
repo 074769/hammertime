@@ -1091,6 +1091,7 @@ namespace HammerTime.Source.Providers
                     var u = new Vector3(ua[0], ua[1], ua[2]);
                     var uLength = u.Length();
                     Texture.UAxis = u;
+                    Texture.ULength = uLength > 0.0001f ? uLength : 1f;
                     Texture.XShift = ua[3];
                     Texture.XScale = uLength > 0.0001f ? ua[4] / uLength : ua[4];
                 }
@@ -1099,6 +1100,7 @@ namespace HammerTime.Source.Providers
                     var v = new Vector3(va[0], va[1], va[2]);
                     var vLength = v.Length();
                     Texture.VAxis = v;
+                    Texture.VLength = vLength > 0.0001f ? vLength : 1f;
                     Texture.YShift = va[3];
                     Texture.YScale = vLength > 0.0001f ? va[4] / vLength : va[4];
                 }
@@ -1140,8 +1142,8 @@ namespace HammerTime.Source.Providers
                 so.Set("id", ID);
                 so.Set("plane", $"({FormatVector3(Vertices[0])}) ({FormatVector3(Vertices[1])}) ({FormatVector3(Vertices[2])})");
                 so.Set("material", Texture.Name);
-                so.Set("uaxis", $"[{FormatVector3(Texture.UAxis)} {FormatDecimal(Texture.XShift)}] {FormatDecimal(Texture.XScale)}");
-                so.Set("vaxis", $"[{FormatVector3(Texture.VAxis)} {FormatDecimal(Texture.YShift)}] {FormatDecimal(Texture.YScale)}");
+                so.Set("uaxis", $"[{FormatVector3(Texture.UAxis * Texture.ULength)} {FormatDecimal(Texture.XShift)}] {FormatDecimal(Texture.XScale * Texture.ULength)}");
+                so.Set("vaxis", $"[{FormatVector3(Texture.VAxis * Texture.VLength)} {FormatDecimal(Texture.YShift)}] {FormatDecimal(Texture.YScale * Texture.VLength)}");
                 so.Set("rotation", Texture.Rotation);
                 so.Set("lightmapscale", Texture.LightmapScale);
                 so.Set("smoothing_groups", SmoothingGroups);

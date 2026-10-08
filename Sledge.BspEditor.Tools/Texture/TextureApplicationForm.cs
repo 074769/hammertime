@@ -466,12 +466,17 @@ namespace Sledge.BspEditor.Tools.Texture
             return base.CheckIgnoreHotkey(source, keyData);
         }
 
+        private static float SafeLength(float length)
+        {
+            return length > 0.0001f ? length : 1f;
+        }
+
         private void ApplyFaceValues(Face target)
         {
             // apply values
-            if (!_currentTextureProperties.DifferentXScaleValues) target.Texture.XScale = _currentTextureProperties.XScale;
+            if (!_currentTextureProperties.DifferentXScaleValues) target.Texture.XScale = _currentTextureProperties.XScale / SafeLength(target.Texture.ULength);
             if (!_currentTextureProperties.DifferentXShiftValues) target.Texture.XShift = _currentTextureProperties.XShift;
-            if (!_currentTextureProperties.DifferentYScaleValues) target.Texture.YScale = _currentTextureProperties.YScale;
+            if (!_currentTextureProperties.DifferentYScaleValues) target.Texture.YScale = _currentTextureProperties.YScale / SafeLength(target.Texture.VLength);
             if (!_currentTextureProperties.DifferentYShiftValues) target.Texture.YShift = _currentTextureProperties.YShift;
             if (!_currentTextureProperties.DifferentRotationValues) target.Texture.SetRotation(_currentTextureProperties.Rotation);
             if (!_currentTextureProperties.DifferentLightmapValues) target.Texture.LightmapScale = _currentTextureProperties.LightmapScale;
@@ -638,36 +643,14 @@ namespace Sledge.BspEditor.Tools.Texture
             return new[] { UvUX, UvUY, UvUZ, UvVX, UvVY, UvVZ };
         }
 
-        // The vectors as last typed for the U (0) and V (1) rows. The texture stores unit vectors, so (-1, 0, -1) comes back
-        // as (-0.7071, 0, -0.7071); while the stored direction still matches, the row keeps showing what was typed.
-        private readonly System.Numerics.Vector3?[] _uvTyped = new System.Numerics.Vector3?[2];
-
         private void SetUvTexts(string[] texts)
         {
             var boxes = UvBoxes();
-            for (var row = 0; row < 2; row++)
+            for (var i = 0; i < boxes.Length; i++)
             {
-                var start = row * 3;
-                if (_uvTyped[row] != null && UvMatchesTyped(texts, start, _uvTyped[row].Value))
-                {
-                    for (var i = start; i < start + 3; i++) _uvShown[i] = boxes[i].Text;
-                    continue;
-                }
-
-                _uvTyped[row] = null;
-                for (var i = start; i < start + 3; i++)
-                {
-                    boxes[i].Text = texts[i];
-                    _uvShown[i] = texts[i];
-                }
+                boxes[i].Text = texts[i];
+                _uvShown[i] = texts[i];
             }
-        }
-
-        private static bool UvMatchesTyped(string[] texts, int start, System.Numerics.Vector3 typed)
-        {
-            if (!TryParseUv(texts[start], out var x) || !TryParseUv(texts[start + 1], out var y) || !TryParseUv(texts[start + 2], out var z)) return false;
-            var stored = new System.Numerics.Vector3(x, y, z);
-            return (stored - System.Numerics.Vector3.Normalize(typed)).LengthSquared() < 1e-5f;
         }
 
         private void RestoreUvRow(int start)
@@ -731,12 +714,9 @@ namespace Sledge.BspEditor.Tools.Texture
                 return;
             }
 
-            // The typed numbers are the raw vector, so (like Hammer) its length scales the texture. The texture stores unit axes,
-            // so that length goes into the scale: P . (k * axis) / scale == P . axis / (scale / k).
-            // If the row already showed a typed vector, its length is already part of the current scale.
+            // The typed numbers are the raw vector, exactly as in Hammer: its length stays with the axis and the scale box keeps
+            // meaning the raw scale. The texture draws with unit axes, so the effective scale is rawScale / length.
             var length = vector.Length();
-            var previousLength = _uvTyped[isU ? 0 : 1]?.Length() ?? 1f;
-            _uvTyped[isU ? 0 : 1] = vector;
 
             // Mark as shown straight away so Enter followed by Leave doesn't apply it twice
             for (var i = start; i < start + 3; i++) _uvShown[i] = boxes[i].Text;
@@ -745,14 +725,16 @@ namespace Sledge.BspEditor.Tools.Texture
             {
                 if (isU)
                 {
-                    var rawScale = f.Texture.XScale * previousLength;
+                    var rawScale = f.Texture.XScale * f.Texture.ULength;
                     f.Texture.UAxis = vector;
+                    f.Texture.ULength = length;
                     f.Texture.XScale = rawScale / length;
                 }
                 else
                 {
-                    var rawScale = f.Texture.YScale * previousLength;
+                    var rawScale = f.Texture.YScale * f.Texture.VLength;
                     f.Texture.VAxis = vector;
+                    f.Texture.VLength = length;
                     f.Texture.YScale = rawScale / length;
                 }
 
@@ -770,15 +752,17 @@ namespace Sledge.BspEditor.Tools.Texture
             foreach (var face in faces)
             {
                 var t = face.Texture;
+                var rawU = t.UAxis * t.ULength;
+                var rawV = t.VAxis * t.VLength;
                 if (u == null)
                 {
-                    u = t.UAxis;
-                    v = t.VAxis;
+                    u = rawU;
+                    v = rawV;
                     continue;
                 }
 
-                if ((u.Value - t.UAxis).LengthSquared() > 1e-6f) uDiffers = true;
-                if ((v.Value - t.VAxis).LengthSquared() > 1e-6f) vDiffers = true;
+                if ((u.Value - rawU).LengthSquared() > 1e-6f) uDiffers = true;
+                if ((v.Value - rawV).LengthSquared() > 1e-6f) vDiffers = true;
             }
 
             string Fmt(float f) => (Math.Abs(f) < 0.00005f ? 0f : f).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
@@ -1005,7 +989,8 @@ namespace Sledge.BspEditor.Tools.Texture
                 Reset();
                 foreach (var face in faces)
                 {
-                    face.Texture.XScale = face.Texture.YScale = 1;
+                    face.Texture.XScale = 1 / (face.Texture.ULength > 0.0001f ? face.Texture.ULength : 1f);
+                    face.Texture.YScale = 1 / (face.Texture.VLength > 0.0001f ? face.Texture.VLength : 1f);
                     face.Texture.XShift = face.Texture.YShift = 0;
                     face.Texture.SetRotation(0);
                 }
@@ -1032,10 +1017,14 @@ namespace Sledge.BspEditor.Tools.Texture
                     if (face.Texture.IsAlignedToNormal(face.Plane.GetClosestAxisToNormal())) NoneAlignedToWorld = false;
                     else AllAlignedToWorld = false;
 
+                    // The boxes show the scale as Hammer does: the stored scale times the length of the raw axis vector
+                    var rawXScale = face.Texture.XScale * face.Texture.ULength;
+                    var rawYScale = face.Texture.YScale * face.Texture.VLength;
+
                     if (num == 0)
                     {
-                        if (!float.IsNaN(face.Texture.XScale)) XScale = face.Texture.XScale;
-                        if (!float.IsNaN(face.Texture.YScale)) YScale = face.Texture.YScale;
+                        if (!float.IsNaN(rawXScale)) XScale = rawXScale;
+                        if (!float.IsNaN(rawYScale)) YScale = rawYScale;
                         if (!float.IsNaN(face.Texture.XShift)) XShift = face.Texture.XShift;
                         if (!float.IsNaN(face.Texture.YShift)) YShift = face.Texture.YShift;
                         if (!float.IsNaN(face.Texture.Rotation)) Rotation = face.Texture.Rotation;
@@ -1044,8 +1033,8 @@ namespace Sledge.BspEditor.Tools.Texture
                     }
                     else
                     {
-                        if (face.Texture.XScale != XScale) DifferentXScaleValues = true;
-                        if (face.Texture.YScale != YScale) DifferentYScaleValues = true;
+                        if (rawXScale != XScale) DifferentXScaleValues = true;
+                        if (rawYScale != YScale) DifferentYScaleValues = true;
                         if (face.Texture.XShift != XShift) DifferentXShiftValues = true;
                         if (face.Texture.YShift != YShift) DifferentYShiftValues = true;
                         if (face.Texture.Rotation != Rotation) DifferentRotationValues = true;
@@ -1082,8 +1071,6 @@ namespace Sledge.BspEditor.Tools.Texture
             _freeze = wasFrozen;
 
             // Reset only the clones inside ApplyChanges - the live faces are never edited outside an operation
-            _uvTyped[0] = _uvTyped[1] = null;
-
             await ApplyChanges((mo, f) =>
             {
                 _currentTextureProperties.Reset();

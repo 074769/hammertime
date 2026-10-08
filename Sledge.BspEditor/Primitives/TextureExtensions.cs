@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Numerics;
 using Sledge.BspEditor.Primitives.MapObjectData;
@@ -18,6 +18,7 @@ namespace Sledge.BspEditor.Primitives
 			var tempV = axis == Vector3.UnitZ ? -Vector3.UnitY : -Vector3.UnitZ;
 			tex.UAxis = normal.Cross(tempV).Normalise();
 			tex.VAxis = tex.UAxis.Cross(normal).Normalise();
+			tex.ULength = tex.VLength = 1;
 			tex.Rotation = 0;
 		}
 

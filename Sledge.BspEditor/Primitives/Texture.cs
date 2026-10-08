@@ -26,6 +26,14 @@ namespace Sledge.BspEditor.Primitives
             set => _vAxis = value.Normalise();
         }
 
+        /// <summary>
+        /// The axes above are always unit length. Hammer (and the VMF / MAP formats) use axis vectors as written, so a vector
+        /// that isn't unit length has its length kept here. Rendering only uses the unit axes and the scales below;
+        /// the raw vector is <c>UAxis * ULength</c> and the raw scale is <c>XScale * ULength</c> (same for V).
+        /// </summary>
+        public float ULength { get; set; } = 1;
+        public float VLength { get; set; } = 1;
+
         public float XShift { get; set; }
         public float XScale { get; set; }
 
@@ -55,13 +63,26 @@ namespace Sledge.BspEditor.Primitives
             XScale = info.GetSingle("XScale");
             YShift = info.GetSingle("YShift");
             YScale = info.GetSingle("YScale");
+            ULength = GetOrDefault(info, "ULength", 1f);
+            VLength = GetOrDefault(info, "VLength", 1f);
             var lightmap = info.GetValue("lightmapscale", typeof(float));
             if (lightmap != null)
                 LightmapScale = (float)lightmap;
         }
 
+        private static float GetOrDefault(SerializationInfo info, string name, float defaultValue)
+        {
+            foreach (SerializationEntry entry in info)
+            {
+                if (entry.Name == name) return Convert.ToSingle(entry.Value);
+            }
+            return defaultValue;
+        }
+
         public void GetObjectData(SerializationInfo info, StreamingContext context)
         {
+            info.AddValue("ULength", ULength);
+            info.AddValue("VLength", VLength);
             info.AddValue("Name", Name);
             info.AddValue("Rotation", Rotation);
             info.AddValue("UAxis", _uAxis);
@@ -85,6 +106,8 @@ namespace Sledge.BspEditor.Primitives
             Rotation = source.Rotation;
             UAxis = source.UAxis;
             VAxis = source.VAxis;
+            ULength = source.ULength;
+            VLength = source.VLength;
             XShift = source.XShift;
             XScale = source.XScale;
             YShift = source.YShift;
@@ -99,6 +122,8 @@ namespace Sledge.BspEditor.Primitives
                 Rotation = Rotation,
                 UAxis = UAxis,
                 VAxis = VAxis,
+                ULength = ULength,
+                VLength = VLength,
                 XShift = XShift,
                 XScale = XScale,
                 YShift = YShift,

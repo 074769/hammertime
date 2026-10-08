@@ -186,6 +186,8 @@ namespace Sledge.BspEditor.Providers
 				var vLength = vAxis.Length();
 
 				face.Texture.UAxis = uAxis;
+				face.Texture.ULength = uLength > 0.0001f ? uLength : 1f;
+				face.Texture.VLength = vLength > 0.0001f ? vLength : 1f;
 				face.Texture.XShift = float.Parse(parts[20], ns, CultureInfo.InvariantCulture);
 				face.Texture.VAxis = vAxis;
 				face.Texture.YShift = float.Parse(parts[26], ns, CultureInfo.InvariantCulture);
@@ -404,16 +406,16 @@ namespace Sledge.BspEditor.Providers
 			var strings = vertices.Select(x => "( " + FormatVector3(x) + " )").ToList();
 			strings.Add(String.IsNullOrWhiteSpace(face.Texture.Name) ? "AAATRIGGER" : face.Texture.Name);
 			strings.Add("[");
-			strings.Add(FormatVector3(face.Texture.UAxis));
+			strings.Add(FormatVector3(face.Texture.UAxis * face.Texture.ULength));
 			strings.Add(FormatFloat(face.Texture.XShift));
 			strings.Add("]");
 			strings.Add("[");
-			strings.Add(FormatVector3(face.Texture.VAxis));
+			strings.Add(FormatVector3(face.Texture.VAxis * face.Texture.VLength));
 			strings.Add(FormatFloat(face.Texture.YShift));
 			strings.Add("]");
 			strings.Add(FormatFloat(face.Texture.Rotation));
-			strings.Add(FormatFloat(face.Texture.XScale));
-			strings.Add(FormatFloat(face.Texture.YScale));
+			strings.Add(FormatFloat(face.Texture.XScale * face.Texture.ULength));
+			strings.Add(FormatFloat(face.Texture.YScale * face.Texture.VLength));
 			sw.WriteLine(String.Join(" ", strings));
 		}
 

@@ -55,6 +55,8 @@ namespace Sledge.BspEditor.Primitives.MapObjectData
                 Texture.Rotation = t.Get("Rotation", 0f);
                 Texture.UAxis = t.Get("UAxis", -Vector3.UnitZ);
                 Texture.VAxis = t.Get("VAxis", Vector3.UnitX);
+                Texture.ULength = t.Get("ULength", 1f);
+                Texture.VLength = t.Get("VLength", 1f);
                 Texture.XScale = t.Get("XScale", 1f);
                 Texture.XShift = t.Get("XShift", 0f);
                 Texture.YScale = t.Get("YScale", 1f);
@@ -116,6 +118,8 @@ namespace Sledge.BspEditor.Primitives.MapObjectData
                 t.Set("Rotation", Texture.Rotation);
                 t.Set("UAxis", Texture.UAxis);
                 t.Set("VAxis", Texture.VAxis);
+                t.Set("ULength", Texture.ULength);
+                t.Set("VLength", Texture.VLength);
                 t.Set("XScale", Texture.XScale);
                 t.Set("XShift", Texture.XShift);
                 t.Set("YScale", Texture.YScale);
