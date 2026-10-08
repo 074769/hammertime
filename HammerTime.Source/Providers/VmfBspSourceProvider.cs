@@ -1083,17 +1083,24 @@ namespace HammerTime.Source.Providers
                     Rotation = obj.Get("rotation", 0f),
                     LightmapScale = LightmapScale
                 };
+                // Source uses the axis vectors as written, and Hammer writes vectors that are not unit length on angled faces
+                // (e.g. [-0.5 0 1] for a 2:1 slope). The texture stores unit axes, so the length goes into the scale instead:
+                // P . (k * axis) / scale == P . axis / (scale / k). Shifts are in texels and stay as they are.
                 if (ParseFloatArray(obj.Get("uaxis", ""), new[] { ' ', '[', ']' }, 5, out float[] ua))
                 {
-                    Texture.UAxis = new Vector3(ua[0], ua[1], ua[2]);
+                    var u = new Vector3(ua[0], ua[1], ua[2]);
+                    var uLength = u.Length();
+                    Texture.UAxis = u;
                     Texture.XShift = ua[3];
-                    Texture.XScale = ua[4];
+                    Texture.XScale = uLength > 0.0001f ? ua[4] / uLength : ua[4];
                 }
                 if (ParseFloatArray(obj.Get("vaxis", ""), new[] { ' ', '[', ']' }, 5, out float[] va))
                 {
-                    Texture.VAxis = new Vector3(va[0], va[1], va[2]);
+                    var v = new Vector3(va[0], va[1], va[2]);
+                    var vLength = v.Length();
+                    Texture.VAxis = v;
                     Texture.YShift = va[3];
-                    Texture.YScale = va[4];
+                    Texture.YScale = vLength > 0.0001f ? va[4] / vLength : va[4];
                 }
                 if (obj.Children.Any(x => x.Name == "dispinfo"))
                 {
