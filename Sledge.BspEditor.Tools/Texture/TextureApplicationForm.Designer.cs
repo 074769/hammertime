@@ -655,10 +655,10 @@
             UvUX.BackColor = System.Drawing.SystemColors.Window;
             UvUX.Location = new System.Drawing.Point(299, 140);
             UvUX.Name = "UvUX";
-            UvUX.ReadOnly = true;
             UvUX.Size = new System.Drawing.Size(54, 23);
             UvUX.TabIndex = 51;
-            UvUX.TabStop = false;
+            UvUX.KeyDown += UvKeyDown;
+            UvUX.Leave += UvLeave;
             UvUX.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             HoverTip.SetToolTip(UvUX, "U axis, X");
             // 
@@ -667,10 +667,10 @@
             UvUY.BackColor = System.Drawing.SystemColors.Window;
             UvUY.Location = new System.Drawing.Point(358, 140);
             UvUY.Name = "UvUY";
-            UvUY.ReadOnly = true;
             UvUY.Size = new System.Drawing.Size(54, 23);
             UvUY.TabIndex = 52;
-            UvUY.TabStop = false;
+            UvUY.KeyDown += UvKeyDown;
+            UvUY.Leave += UvLeave;
             UvUY.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             HoverTip.SetToolTip(UvUY, "U axis, Y");
             // 
@@ -679,10 +679,10 @@
             UvUZ.BackColor = System.Drawing.SystemColors.Window;
             UvUZ.Location = new System.Drawing.Point(417, 140);
             UvUZ.Name = "UvUZ";
-            UvUZ.ReadOnly = true;
             UvUZ.Size = new System.Drawing.Size(54, 23);
             UvUZ.TabIndex = 53;
-            UvUZ.TabStop = false;
+            UvUZ.KeyDown += UvKeyDown;
+            UvUZ.Leave += UvLeave;
             UvUZ.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             HoverTip.SetToolTip(UvUZ, "U axis, Z");
             // 
@@ -691,10 +691,10 @@
             UvVX.BackColor = System.Drawing.SystemColors.Window;
             UvVX.Location = new System.Drawing.Point(299, 166);
             UvVX.Name = "UvVX";
-            UvVX.ReadOnly = true;
             UvVX.Size = new System.Drawing.Size(54, 23);
             UvVX.TabIndex = 54;
-            UvVX.TabStop = false;
+            UvVX.KeyDown += UvKeyDown;
+            UvVX.Leave += UvLeave;
             UvVX.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             HoverTip.SetToolTip(UvVX, "V axis, X");
             // 
@@ -703,10 +703,10 @@
             UvVY.BackColor = System.Drawing.SystemColors.Window;
             UvVY.Location = new System.Drawing.Point(358, 166);
             UvVY.Name = "UvVY";
-            UvVY.ReadOnly = true;
             UvVY.Size = new System.Drawing.Size(54, 23);
             UvVY.TabIndex = 55;
-            UvVY.TabStop = false;
+            UvVY.KeyDown += UvKeyDown;
+            UvVY.Leave += UvLeave;
             UvVY.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             HoverTip.SetToolTip(UvVY, "V axis, Y");
             // 
@@ -715,10 +715,10 @@
             UvVZ.BackColor = System.Drawing.SystemColors.Window;
             UvVZ.Location = new System.Drawing.Point(417, 166);
             UvVZ.Name = "UvVZ";
-            UvVZ.ReadOnly = true;
             UvVZ.Size = new System.Drawing.Size(54, 23);
             UvVZ.TabIndex = 56;
-            UvVZ.TabStop = false;
+            UvVZ.KeyDown += UvKeyDown;
+            UvVZ.Leave += UvLeave;
             UvVZ.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             HoverTip.SetToolTip(UvVZ, "V axis, Z");
             // 

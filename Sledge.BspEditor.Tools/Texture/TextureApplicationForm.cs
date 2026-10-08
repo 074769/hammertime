@@ -406,12 +406,7 @@ namespace Sledge.BspEditor.Tools.Texture
                 else if (_currentTextureProperties.NoneAlignedToWorld) AlignToWorldCheckbox.CheckState = CheckState.Unchecked;
                 else AlignToWorldCheckbox.CheckState = CheckState.Indeterminate;
 
-                UvUX.Text = uvTexts[0];
-                UvUY.Text = uvTexts[1];
-                UvUZ.Text = uvTexts[2];
-                UvVX.Text = uvTexts[3];
-                UvVY.Text = uvTexts[4];
-                UvVZ.Text = uvTexts[5];
+                SetUvTexts(uvTexts);
 
                 TextureDetailsLabel.Text = labelText;
                 _selectedTextures = textures;
@@ -627,6 +622,95 @@ namespace Sledge.BspEditor.Tools.Texture
         {
             if (differentValues || box.Value == 0) return;
             box.Value = -box.Value;
+        }
+
+        private readonly string[] _uvShown = new string[6];
+
+        private TextBox[] UvBoxes()
+        {
+            return new[] { UvUX, UvUY, UvUZ, UvVX, UvVY, UvVZ };
+        }
+
+        private void SetUvTexts(string[] texts)
+        {
+            var boxes = UvBoxes();
+            for (var i = 0; i < boxes.Length; i++)
+            {
+                boxes[i].Text = texts[i];
+                _uvShown[i] = texts[i];
+            }
+        }
+
+        private void RestoreUvRow(int start)
+        {
+            var boxes = UvBoxes();
+            for (var i = start; i < start + 3; i++) boxes[i].Text = _uvShown[i];
+        }
+
+        private void UvKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode != Keys.Enter) return;
+            e.SuppressKeyPress = true;
+            e.Handled = true;
+            CommitUvRow(sender as TextBox);
+        }
+
+        private void UvLeave(object sender, EventArgs e)
+        {
+            CommitUvRow(sender as TextBox);
+        }
+
+        private static bool TryParseUv(string text, out float value)
+        {
+            text = (text ?? "").Trim();
+            return (float.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out value)
+                    || float.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.CurrentCulture, out value))
+                   && float.IsFinite(value);
+        }
+
+        // Applies an edited U (top row) or V (bottom row) vector to every selected face. The vector is normalised by the texture.
+        private async void CommitUvRow(TextBox source)
+        {
+            var boxes = UvBoxes();
+            var index = Array.IndexOf(boxes, source);
+            if (index < 0) return;
+
+            var start = index < 3 ? 0 : 3;
+            var isU = start == 0;
+
+            var changed = false;
+            for (var i = start; i < start + 3; i++)
+            {
+                if (boxes[i].Text != _uvShown[i]) changed = true;
+            }
+            if (!changed) return;
+
+            var parts = new float[3];
+            for (var i = 0; i < 3; i++)
+            {
+                if (!TryParseUv(boxes[start + i].Text, out parts[i]))
+                {
+                    RestoreUvRow(start);
+                    return;
+                }
+            }
+
+            var vector = new System.Numerics.Vector3(parts[0], parts[1], parts[2]);
+            if (!(vector.LengthSquared() > 1e-8f))
+            {
+                RestoreUvRow(start);
+                return;
+            }
+
+            // Mark as shown straight away so Enter followed by Leave doesn't apply it twice
+            for (var i = start; i < start + 3; i++) _uvShown[i] = boxes[i].Text;
+
+            await ApplyChanges((mo, f) =>
+            {
+                if (isU) f.Texture.UAxis = vector;
+                else f.Texture.VAxis = vector;
+                return Task.FromResult(true);
+            });
         }
 
         private static string[] GetUvVectorTexts(IEnumerable<Face> faces)
