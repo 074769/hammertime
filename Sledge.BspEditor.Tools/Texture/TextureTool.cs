@@ -296,11 +296,14 @@ namespace Sledge.BspEditor.Tools.Texture
             var sel = GetSelection(document);
             if (sel.IsEmpty) return;
 
+            // Hide Mask turns off everything drawn over the selected faces: the fill, the yellow outline and the axis lines
+            var hideFaceMask = ShouldHideFaceMask;
+            if (hideFaceMask) return;
+
             var verts = new List<VertexStandard>();
             var indices = new List<int>();
             var groups = new List<BufferGroup>();
 
-            var hideFaceMask = ShouldHideFaceMask;
             var selectionColour = Color.FromArgb(32, Color.Red).ToVector4();
 
 
