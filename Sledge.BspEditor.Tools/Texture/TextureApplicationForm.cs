@@ -370,6 +370,8 @@ namespace Sledge.BspEditor.Tools.Texture
                 textures.Add(name);
             }
 
+            var uvTexts = GetUvVectorTexts(faces);
+
             var labelText = "";
             var d = Document;
             if (textures.Any() && d != null)
@@ -403,6 +405,13 @@ namespace Sledge.BspEditor.Tools.Texture
                 if (_currentTextureProperties.AllAlignedToWorld) AlignToWorldCheckbox.CheckState = CheckState.Checked;
                 else if (_currentTextureProperties.NoneAlignedToWorld) AlignToWorldCheckbox.CheckState = CheckState.Unchecked;
                 else AlignToWorldCheckbox.CheckState = CheckState.Indeterminate;
+
+                UvUX.Text = uvTexts[0];
+                UvUY.Text = uvTexts[1];
+                UvUZ.Text = uvTexts[2];
+                UvVX.Text = uvTexts[3];
+                UvVY.Text = uvTexts[4];
+                UvVZ.Text = uvTexts[5];
 
                 TextureDetailsLabel.Text = labelText;
                 _selectedTextures = textures;
@@ -601,6 +610,52 @@ namespace Sledge.BspEditor.Tools.Texture
                 ApplyFaceValues(f);
                 return Task.FromResult(true);
             });
+        }
+
+        private void ScaleXNegateClicked(object sender, EventArgs e)
+        {
+            NegateScale(ScaleXValue, _currentTextureProperties.DifferentXScaleValues);
+        }
+
+        private void ScaleYNegateClicked(object sender, EventArgs e)
+        {
+            NegateScale(ScaleYValue, _currentTextureProperties.DifferentYScaleValues);
+        }
+
+        // 1.0000 <-> -1.0000. Does nothing while the selected faces disagree on the value (the box is blank then).
+        private void NegateScale(Sledge.Shell.Controls.NumericUpDownEx box, bool differentValues)
+        {
+            if (differentValues || box.Value == 0) return;
+            box.Value = -box.Value;
+        }
+
+        private static string[] GetUvVectorTexts(IEnumerable<Face> faces)
+        {
+            var texts = new string[6];
+            System.Numerics.Vector3? u = null, v = null;
+            var uDiffers = false;
+            var vDiffers = false;
+
+            foreach (var face in faces)
+            {
+                var t = face.Texture;
+                if (u == null)
+                {
+                    u = t.UAxis;
+                    v = t.VAxis;
+                    continue;
+                }
+
+                if ((u.Value - t.UAxis).LengthSquared() > 1e-6f) uDiffers = true;
+                if ((v.Value - t.VAxis).LengthSquared() > 1e-6f) vDiffers = true;
+            }
+
+            string Fmt(float f) => (Math.Abs(f) < 0.00005f ? 0f : f).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
+
+            if (u != null && !uDiffers) { texts[0] = Fmt(u.Value.X); texts[1] = Fmt(u.Value.Y); texts[2] = Fmt(u.Value.Z); }
+            if (v != null && !vDiffers) { texts[3] = Fmt(v.Value.X); texts[4] = Fmt(v.Value.Y); texts[5] = Fmt(v.Value.Z); }
+            for (var i = 0; i < texts.Length; i++) texts[i] = texts[i] ?? "";
+            return texts;
         }
 
         private void ScaleXValueChanged(object sender, EventArgs e)

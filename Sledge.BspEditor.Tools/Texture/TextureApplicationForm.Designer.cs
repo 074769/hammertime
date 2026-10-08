@@ -51,8 +51,8 @@
             tableLayoutPanel1 = new System.Windows.Forms.TableLayoutPanel();
             ScaleXValue = new Sledge.Shell.Controls.NumericUpDownEx();
             ScaleLabel = new System.Windows.Forms.Label();
-            label2 = new System.Windows.Forms.Label();
-            label3 = new System.Windows.Forms.Label();
+            ScaleXNegateButton = new System.Windows.Forms.Button();
+            ScaleYNegateButton = new System.Windows.Forms.Button();
             ShiftLabel = new System.Windows.Forms.Label();
             ScaleYValue = new Sledge.Shell.Controls.NumericUpDownEx();
             ShiftXValue = new Sledge.Shell.Controls.NumericUpDownEx();
@@ -76,6 +76,13 @@
             RotMinus180Button = new System.Windows.Forms.Button();
             apply_null = new System.Windows.Forms.Button();
             lightmapGrp = new System.Windows.Forms.Panel();
+            UvVectorsLabel = new System.Windows.Forms.Label();
+            UvUX = new System.Windows.Forms.TextBox();
+            UvUY = new System.Windows.Forms.TextBox();
+            UvUZ = new System.Windows.Forms.TextBox();
+            UvVX = new System.Windows.Forms.TextBox();
+            UvVY = new System.Windows.Forms.TextBox();
+            UvVZ = new System.Windows.Forms.TextBox();
             AlignGroup.SuspendLayout();
             JustifyGroup.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)RotationValue).BeginInit();
@@ -117,11 +124,11 @@
             // 
             AlignGroup.Controls.Add(AlignToFaceCheckbox);
             AlignGroup.Controls.Add(AlignToWorldCheckbox);
-            AlignGroup.Location = new System.Drawing.Point(140, 140);
+            AlignGroup.Location = new System.Drawing.Point(211, 10);
             AlignGroup.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             AlignGroup.Name = "AlignGroup";
             AlignGroup.Padding = new System.Windows.Forms.Padding(4, 3, 4, 3);
-            AlignGroup.Size = new System.Drawing.Size(142, 60);
+            AlignGroup.Size = new System.Drawing.Size(100, 96);
             AlignGroup.TabIndex = 30;
             AlignGroup.TabStop = false;
             AlignGroup.Text = "Align";
@@ -129,7 +136,7 @@
             // AlignToFaceCheckbox
             // 
             AlignToFaceCheckbox.AutoSize = true;
-            AlignToFaceCheckbox.Location = new System.Drawing.Point(74, 25);
+            AlignToFaceCheckbox.Location = new System.Drawing.Point(12, 58);
             AlignToFaceCheckbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             AlignToFaceCheckbox.Name = "AlignToFaceCheckbox";
             AlignToFaceCheckbox.Size = new System.Drawing.Size(50, 19);
@@ -141,7 +148,7 @@
             // AlignToWorldCheckbox
             // 
             AlignToWorldCheckbox.AutoSize = true;
-            AlignToWorldCheckbox.Location = new System.Drawing.Point(8, 25);
+            AlignToWorldCheckbox.Location = new System.Drawing.Point(12, 26);
             AlignToWorldCheckbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             AlignToWorldCheckbox.Name = "AlignToWorldCheckbox";
             AlignToWorldCheckbox.Size = new System.Drawing.Size(58, 19);
@@ -158,7 +165,7 @@
             JustifyGroup.Controls.Add(JustifyBottomButton);
             JustifyGroup.Controls.Add(JustifyCenterButton);
             JustifyGroup.Controls.Add(JustifyLeftButton);
-            JustifyGroup.Location = new System.Drawing.Point(14, 112);
+            JustifyGroup.Location = new System.Drawing.Point(14, 116);
             JustifyGroup.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             JustifyGroup.Name = "JustifyGroup";
             JustifyGroup.Padding = new System.Windows.Forms.Padding(4, 3, 4, 3);
@@ -191,7 +198,7 @@
             // 
             // TreatAsOneCheckbox
             // 
-            TreatAsOneCheckbox.Location = new System.Drawing.Point(144, 114);
+            TreatAsOneCheckbox.Location = new System.Drawing.Point(14, 228);
             TreatAsOneCheckbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             TreatAsOneCheckbox.Name = "TreatAsOneCheckbox";
             TreatAsOneCheckbox.Size = new System.Drawing.Size(134, 24);
@@ -259,12 +266,12 @@
             // 
             RotationValue.BackColor = System.Drawing.SystemColors.Window;
             RotationValue.DecimalPlaces = 2;
-            RotationValue.Location = new System.Drawing.Point(279, 20);
+            RotationValue.Location = new System.Drawing.Point(402, 30);
             RotationValue.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             RotationValue.Maximum = new decimal(new int[] { 360, 0, 0, 0 });
             RotationValue.Minimum = new decimal(new int[] { 360, 0, 0, int.MinValue });
             RotationValue.Name = "RotationValue";
-            RotationValue.Size = new System.Drawing.Size(66, 23);
+            RotationValue.Size = new System.Drawing.Size(70, 23);
             RotationValue.TabIndex = 18;
             RotationValue.ValueChanged += RotationValueChanged;
             RotationValue.Enter += FocusTextInControl;
@@ -293,10 +300,10 @@
             // 
             // RotationLabel
             // 
-            RotationLabel.Location = new System.Drawing.Point(203, 15);
+            RotationLabel.Location = new System.Drawing.Point(402, 10);
             RotationLabel.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
             RotationLabel.Name = "RotationLabel";
-            RotationLabel.Size = new System.Drawing.Size(69, 29);
+            RotationLabel.Size = new System.Drawing.Size(70, 18);
             RotationLabel.TabIndex = 17;
             RotationLabel.Text = "Rotation";
             RotationLabel.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
@@ -314,15 +321,13 @@
             // 
             tableLayoutPanel1.CellBorderStyle = System.Windows.Forms.TableLayoutPanelCellBorderStyle.Single;
             tableLayoutPanel1.ColumnCount = 3;
-            tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 23F));
-            tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 76F));
-            tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 267F));
-            tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 23F));
-            tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 23F));
+            tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 27F));
+            tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 78F));
+            tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 78F));
             tableLayoutPanel1.Controls.Add(ScaleXValue, 1, 1);
             tableLayoutPanel1.Controls.Add(ScaleLabel, 1, 0);
-            tableLayoutPanel1.Controls.Add(label2, 0, 1);
-            tableLayoutPanel1.Controls.Add(label3, 0, 2);
+            tableLayoutPanel1.Controls.Add(ScaleXNegateButton, 0, 1);
+            tableLayoutPanel1.Controls.Add(ScaleYNegateButton, 0, 2);
             tableLayoutPanel1.Controls.Add(ShiftLabel, 2, 0);
             tableLayoutPanel1.Controls.Add(ScaleYValue, 1, 2);
             tableLayoutPanel1.Controls.Add(ShiftXValue, 2, 1);
@@ -334,7 +339,7 @@
             tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 29F));
             tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 29F));
             tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 29F));
-            tableLayoutPanel1.Size = new System.Drawing.Size(182, 92);
+            tableLayoutPanel1.Size = new System.Drawing.Size(187, 92);
             tableLayoutPanel1.TabIndex = 20;
             // 
             // ScaleXValue
@@ -363,25 +368,25 @@
             ScaleLabel.Text = "Scale";
             ScaleLabel.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             // 
-            // label2
+            // ScaleXNegateButton
             // 
-            label2.Location = new System.Drawing.Point(5, 31);
-            label2.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
-            label2.Name = "label2";
-            label2.Size = new System.Drawing.Size(15, 29);
-            label2.TabIndex = 2;
-            label2.Text = "X";
-            label2.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            ScaleXNegateButton.Dock = System.Windows.Forms.DockStyle.Fill;
+            ScaleXNegateButton.Margin = new System.Windows.Forms.Padding(1);
+            ScaleXNegateButton.Name = "ScaleXNegateButton";
+            ScaleXNegateButton.TabIndex = 2;
+            ScaleXNegateButton.Text = "X";
+            ScaleXNegateButton.UseVisualStyleBackColor = true;
+            ScaleXNegateButton.Click += ScaleXNegateClicked;
             // 
-            // label3
+            // ScaleYNegateButton
             // 
-            label3.Location = new System.Drawing.Point(5, 61);
-            label3.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
-            label3.Name = "label3";
-            label3.Size = new System.Drawing.Size(15, 30);
-            label3.TabIndex = 2;
-            label3.Text = "Y";
-            label3.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            ScaleYNegateButton.Dock = System.Windows.Forms.DockStyle.Fill;
+            ScaleYNegateButton.Margin = new System.Windows.Forms.Padding(1);
+            ScaleYNegateButton.Name = "ScaleYNegateButton";
+            ScaleYNegateButton.TabIndex = 3;
+            ScaleYNegateButton.Text = "Y";
+            ScaleYNegateButton.UseVisualStyleBackColor = true;
+            ScaleYNegateButton.Click += ScaleYNegateClicked;
             // 
             // ShiftLabel
             // 
@@ -524,10 +529,10 @@
             // 
             // ResetButton
             // 
-            ResetButton.Location = new System.Drawing.Point(279, 47);
+            ResetButton.Location = new System.Drawing.Point(402, 57);
             ResetButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             ResetButton.Name = "ResetButton";
-            ResetButton.Size = new System.Drawing.Size(66, 27);
+            ResetButton.Size = new System.Drawing.Size(70, 23);
             ResetButton.TabIndex = 38;
             ResetButton.Text = "Reset";
             ResetButton.UseVisualStyleBackColor = true;
@@ -535,9 +540,9 @@
             // 
             // apply_null
             // 
-            apply_null.Location = new System.Drawing.Point(279, 80);
+            apply_null.Location = new System.Drawing.Point(402, 83);
             apply_null.Name = "apply_null";
-            apply_null.Size = new System.Drawing.Size(66, 27);
+            apply_null.Size = new System.Drawing.Size(70, 23);
             apply_null.TabIndex = 39;
             apply_null.Text = "NULL";
             apply_null.UseVisualStyleBackColor = true;
@@ -545,7 +550,7 @@
             // 
             // RotateLabel
             // 
-            RotateLabel.Location = new System.Drawing.Point(14, 224);
+            RotateLabel.Location = new System.Drawing.Point(143, 118);
             RotateLabel.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
             RotateLabel.Name = "RotateLabel";
             RotateLabel.Size = new System.Drawing.Size(80, 18);
@@ -555,7 +560,7 @@
             // 
             // RotPlus45Button
             // 
-            RotPlus45Button.Location = new System.Drawing.Point(14, 246);
+            RotPlus45Button.Location = new System.Drawing.Point(143, 140);
             RotPlus45Button.Margin = new System.Windows.Forms.Padding(0);
             RotPlus45Button.Name = "RotPlus45Button";
             RotPlus45Button.Size = new System.Drawing.Size(44, 23);
@@ -567,7 +572,7 @@
             // 
             // RotPlus90Button
             // 
-            RotPlus90Button.Location = new System.Drawing.Point(63, 246);
+            RotPlus90Button.Location = new System.Drawing.Point(192, 140);
             RotPlus90Button.Margin = new System.Windows.Forms.Padding(0);
             RotPlus90Button.Name = "RotPlus90Button";
             RotPlus90Button.Size = new System.Drawing.Size(44, 23);
@@ -579,7 +584,7 @@
             // 
             // RotPlus180Button
             // 
-            RotPlus180Button.Location = new System.Drawing.Point(112, 246);
+            RotPlus180Button.Location = new System.Drawing.Point(241, 140);
             RotPlus180Button.Margin = new System.Windows.Forms.Padding(0);
             RotPlus180Button.Name = "RotPlus180Button";
             RotPlus180Button.Size = new System.Drawing.Size(44, 23);
@@ -591,7 +596,7 @@
             // 
             // RotMinus45Button
             // 
-            RotMinus45Button.Location = new System.Drawing.Point(14, 272);
+            RotMinus45Button.Location = new System.Drawing.Point(143, 166);
             RotMinus45Button.Margin = new System.Windows.Forms.Padding(0);
             RotMinus45Button.Name = "RotMinus45Button";
             RotMinus45Button.Size = new System.Drawing.Size(44, 23);
@@ -603,7 +608,7 @@
             // 
             // RotMinus90Button
             // 
-            RotMinus90Button.Location = new System.Drawing.Point(63, 272);
+            RotMinus90Button.Location = new System.Drawing.Point(192, 166);
             RotMinus90Button.Margin = new System.Windows.Forms.Padding(0);
             RotMinus90Button.Name = "RotMinus90Button";
             RotMinus90Button.Size = new System.Drawing.Size(44, 23);
@@ -615,7 +620,7 @@
             // 
             // RotMinus180Button
             // 
-            RotMinus180Button.Location = new System.Drawing.Point(112, 272);
+            RotMinus180Button.Location = new System.Drawing.Point(241, 166);
             RotMinus180Button.Margin = new System.Windows.Forms.Padding(0);
             RotMinus180Button.Name = "RotMinus180Button";
             RotMinus180Button.Size = new System.Drawing.Size(44, 23);
@@ -630,17 +635,105 @@
             lightmapGrp.Controls.Add(SmoothingGroupsButton);
             lightmapGrp.Controls.Add(LightmapValue);
             lightmapGrp.Controls.Add(LightmapLabel);
-            lightmapGrp.Location = new System.Drawing.Point(205, 224);
+            lightmapGrp.Location = new System.Drawing.Point(299, 196);
             lightmapGrp.Name = "lightmapGrp";
             lightmapGrp.Size = new System.Drawing.Size(140, 61);
             lightmapGrp.TabIndex = 39;
             lightmapGrp.Text = "groupBox1";
+            // 
+            // UvVectorsLabel
+            // 
+            UvVectorsLabel.Location = new System.Drawing.Point(299, 118);
+            UvVectorsLabel.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
+            UvVectorsLabel.Name = "UvVectorsLabel";
+            UvVectorsLabel.Size = new System.Drawing.Size(173, 18);
+            UvVectorsLabel.TabIndex = 50;
+            UvVectorsLabel.Text = "UV vectors ( X Y Z ):";
+            // 
+            // UvUX
+            // 
+            UvUX.BackColor = System.Drawing.SystemColors.Window;
+            UvUX.Location = new System.Drawing.Point(299, 140);
+            UvUX.Name = "UvUX";
+            UvUX.ReadOnly = true;
+            UvUX.Size = new System.Drawing.Size(54, 23);
+            UvUX.TabIndex = 51;
+            UvUX.TabStop = false;
+            UvUX.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            HoverTip.SetToolTip(UvUX, "U axis, X");
+            // 
+            // UvUY
+            // 
+            UvUY.BackColor = System.Drawing.SystemColors.Window;
+            UvUY.Location = new System.Drawing.Point(358, 140);
+            UvUY.Name = "UvUY";
+            UvUY.ReadOnly = true;
+            UvUY.Size = new System.Drawing.Size(54, 23);
+            UvUY.TabIndex = 52;
+            UvUY.TabStop = false;
+            UvUY.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            HoverTip.SetToolTip(UvUY, "U axis, Y");
+            // 
+            // UvUZ
+            // 
+            UvUZ.BackColor = System.Drawing.SystemColors.Window;
+            UvUZ.Location = new System.Drawing.Point(417, 140);
+            UvUZ.Name = "UvUZ";
+            UvUZ.ReadOnly = true;
+            UvUZ.Size = new System.Drawing.Size(54, 23);
+            UvUZ.TabIndex = 53;
+            UvUZ.TabStop = false;
+            UvUZ.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            HoverTip.SetToolTip(UvUZ, "U axis, Z");
+            // 
+            // UvVX
+            // 
+            UvVX.BackColor = System.Drawing.SystemColors.Window;
+            UvVX.Location = new System.Drawing.Point(299, 166);
+            UvVX.Name = "UvVX";
+            UvVX.ReadOnly = true;
+            UvVX.Size = new System.Drawing.Size(54, 23);
+            UvVX.TabIndex = 54;
+            UvVX.TabStop = false;
+            UvVX.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            HoverTip.SetToolTip(UvVX, "V axis, X");
+            // 
+            // UvVY
+            // 
+            UvVY.BackColor = System.Drawing.SystemColors.Window;
+            UvVY.Location = new System.Drawing.Point(358, 166);
+            UvVY.Name = "UvVY";
+            UvVY.ReadOnly = true;
+            UvVY.Size = new System.Drawing.Size(54, 23);
+            UvVY.TabIndex = 55;
+            UvVY.TabStop = false;
+            UvVY.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            HoverTip.SetToolTip(UvVY, "V axis, Y");
+            // 
+            // UvVZ
+            // 
+            UvVZ.BackColor = System.Drawing.SystemColors.Window;
+            UvVZ.Location = new System.Drawing.Point(417, 166);
+            UvVZ.Name = "UvVZ";
+            UvVZ.ReadOnly = true;
+            UvVZ.Size = new System.Drawing.Size(54, 23);
+            UvVZ.TabIndex = 56;
+            UvVZ.TabStop = false;
+            UvVZ.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            HoverTip.SetToolTip(UvVZ, "V axis, Z");
             // 
             // TextureApplicationForm
             // 
             AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             ClientSize = new System.Drawing.Size(486, 632);
+            Controls.Add(UvVectorsLabel);
+            Controls.Add(UvUX);
+            Controls.Add(UvUY);
+            Controls.Add(UvUZ);
+            Controls.Add(UvVX);
+            Controls.Add(UvVY);
+            Controls.Add(UvVZ);
             Controls.Add(RotateLabel);
             Controls.Add(TreatAsOneCheckbox);
             Controls.Add(RotMinus180Button);
@@ -692,6 +785,13 @@
 
         #endregion
         private System.Windows.Forms.CheckBox HideMaskCheckbox;
+        private System.Windows.Forms.Label UvVectorsLabel;
+        private System.Windows.Forms.TextBox UvUX;
+        private System.Windows.Forms.TextBox UvUY;
+        private System.Windows.Forms.TextBox UvUZ;
+        private System.Windows.Forms.TextBox UvVX;
+        private System.Windows.Forms.TextBox UvVY;
+        private System.Windows.Forms.TextBox UvVZ;
         private System.Windows.Forms.Button SmoothingGroupsButton;
         private System.Windows.Forms.GroupBox AlignGroup;
         private System.Windows.Forms.GroupBox JustifyGroup;
@@ -711,8 +811,8 @@
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanel1;
         private Sledge.Shell.Controls.NumericUpDownEx ScaleXValue;
         private System.Windows.Forms.Label ScaleLabel;
-        private System.Windows.Forms.Label label2;
-        private System.Windows.Forms.Label label3;
+        private System.Windows.Forms.Button ScaleXNegateButton;
+        private System.Windows.Forms.Button ScaleYNegateButton;
         private System.Windows.Forms.Label ShiftLabel;
         private Sledge.Shell.Controls.NumericUpDownEx ScaleYValue;
         private Sledge.Shell.Controls.NumericUpDownEx ShiftXValue;
