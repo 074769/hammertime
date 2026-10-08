@@ -296,9 +296,8 @@ namespace Sledge.BspEditor.Tools.Texture
             var sel = GetSelection(document);
             if (sel.IsEmpty) return;
 
-            // Hide Mask turns off everything drawn over the selected faces: the fill, the yellow outline and the axis lines
+            // Hide Mask turns off the fill and the yellow outline over the selected faces; the texture axes stay visible
             var hideFaceMask = ShouldHideFaceMask;
-            if (hideFaceMask) return;
 
             var verts = new List<VertexStandard>();
             var indices = new List<int>();
@@ -336,7 +335,7 @@ namespace Sledge.BspEditor.Tools.Texture
                 builder.Append(verts, indices.Select(x => (uint) x), groups);
             }
 
-            // Add wireframes - selection outlines and texture axes
+            // Add wireframes - selection outlines (hidden with the mask) and texture axes (always drawn)
             var lineColour = Color.Yellow.ToVector4();
             var uAxisColour = Color.Yellow.ToVector4();
             var vAxisColour = Color.Lime.ToVector4();
@@ -346,11 +345,14 @@ namespace Sledge.BspEditor.Tools.Texture
                 var offs = verts.Count;
 
                 // outlines
-                verts.AddRange(face.Vertices.Select(x => new VertexStandard { Position = x, Colour = lineColour, Tint = Vector4.One }));
-                for (var i = 0; i < face.Vertices.Count; i++)
+                if (!hideFaceMask)
                 {
-                    indices.Add(offs + i);
-                    indices.Add(offs + (i + 1) % face.Vertices.Count);
+                    verts.AddRange(face.Vertices.Select(x => new VertexStandard { Position = x, Colour = lineColour, Tint = Vector4.One }));
+                    for (var i = 0; i < face.Vertices.Count; i++)
+                    {
+                        indices.Add(offs + i);
+                        indices.Add(offs + (i + 1) % face.Vertices.Count);
+                    }
                 }
 
                 // texture axes
