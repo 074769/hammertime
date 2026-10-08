@@ -176,13 +176,22 @@ namespace Sledge.BspEditor.Providers
 				Assert(parts[22] == "[");
 				Assert(parts[27] == "]");
 
-				face.Texture.UAxis = NumericsExtensions.Parse(parts[17], parts[18], parts[19], ns, CultureInfo.InvariantCulture);
+				// The axes are used as written (s = P . axis / scale + shift), so a vector that isn't unit length
+				// (skewed textures) has its length folded into the scale, because the texture stores unit axes.
+				var uAxis = NumericsExtensions.Parse(parts[17], parts[18], parts[19], ns, CultureInfo.InvariantCulture);
+				var vAxis = NumericsExtensions.Parse(parts[23], parts[24], parts[25], ns, CultureInfo.InvariantCulture);
+				var xScale = float.Parse(parts[29], ns, CultureInfo.InvariantCulture);
+				var yScale = float.Parse(parts[30], ns, CultureInfo.InvariantCulture);
+				var uLength = uAxis.Length();
+				var vLength = vAxis.Length();
+
+				face.Texture.UAxis = uAxis;
 				face.Texture.XShift = float.Parse(parts[20], ns, CultureInfo.InvariantCulture);
-				face.Texture.VAxis = NumericsExtensions.Parse(parts[23], parts[24], parts[25], ns, CultureInfo.InvariantCulture);
+				face.Texture.VAxis = vAxis;
 				face.Texture.YShift = float.Parse(parts[26], ns, CultureInfo.InvariantCulture);
 				face.Texture.Rotation = float.Parse(parts[28], ns, CultureInfo.InvariantCulture);
-				face.Texture.XScale = float.Parse(parts[29], ns, CultureInfo.InvariantCulture);
-				face.Texture.YScale = float.Parse(parts[30], ns, CultureInfo.InvariantCulture);
+				face.Texture.XScale = uLength > 0.0001f ? xScale / uLength : xScale;
+				face.Texture.YScale = vLength > 0.0001f ? yScale / vLength : yScale;
 			}
 
 			return face;

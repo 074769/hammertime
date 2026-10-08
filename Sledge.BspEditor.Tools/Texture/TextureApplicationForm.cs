@@ -731,6 +731,11 @@ namespace Sledge.BspEditor.Tools.Texture
                 return;
             }
 
+            // The typed numbers are the raw vector, so (like Hammer) its length scales the texture. The texture stores unit axes,
+            // so that length goes into the scale: P . (k * axis) / scale == P . axis / (scale / k).
+            // If the row already showed a typed vector, its length is already part of the current scale.
+            var length = vector.Length();
+            var previousLength = _uvTyped[isU ? 0 : 1]?.Length() ?? 1f;
             _uvTyped[isU ? 0 : 1] = vector;
 
             // Mark as shown straight away so Enter followed by Leave doesn't apply it twice
@@ -738,8 +743,19 @@ namespace Sledge.BspEditor.Tools.Texture
 
             await ApplyChanges((mo, f) =>
             {
-                if (isU) f.Texture.UAxis = vector;
-                else f.Texture.VAxis = vector;
+                if (isU)
+                {
+                    var rawScale = f.Texture.XScale * previousLength;
+                    f.Texture.UAxis = vector;
+                    f.Texture.XScale = rawScale / length;
+                }
+                else
+                {
+                    var rawScale = f.Texture.YScale * previousLength;
+                    f.Texture.VAxis = vector;
+                    f.Texture.YScale = rawScale / length;
+                }
+
                 return Task.FromResult(true);
             });
         }
