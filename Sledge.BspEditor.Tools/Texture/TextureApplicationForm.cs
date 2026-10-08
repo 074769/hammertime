@@ -385,12 +385,12 @@ namespace Sledge.BspEditor.Tools.Texture
             this.InvokeLater(() =>
             {
 
-                ScaleXValue.Value = (decimal)_currentTextureProperties.XScale;
-                ScaleYValue.Value = (decimal)_currentTextureProperties.YScale;
-                ShiftXValue.Value = (decimal)_currentTextureProperties.XShift;
-                ShiftYValue.Value = (decimal)_currentTextureProperties.YShift;
-                RotationValue.Value = (decimal)_currentTextureProperties.Rotation;
-                LightmapValue.Value = (decimal)(_currentTextureProperties.LightmapScale ?? 1);
+                SetNumericValue(ScaleXValue, _currentTextureProperties.XScale);
+                SetNumericValue(ScaleYValue, _currentTextureProperties.YScale);
+                SetNumericValue(ShiftXValue, _currentTextureProperties.XShift);
+                SetNumericValue(ShiftYValue, _currentTextureProperties.YShift);
+                SetNumericValue(RotationValue, _currentTextureProperties.Rotation);
+                SetNumericValue(LightmapValue, _currentTextureProperties.LightmapScale ?? 1);
 
                 if (_currentTextureProperties.DifferentXScaleValues) ScaleXValue.Text = "";
                 if (_currentTextureProperties.DifferentYScaleValues) ScaleYValue.Text = "";
@@ -622,6 +622,13 @@ namespace Sledge.BspEditor.Tools.Texture
         {
             if (differentValues || box.Value == 0) return;
             box.Value = -box.Value;
+        }
+
+        // A face can hold a value the box doesn't allow (e.g. a lightmap scale of 0), so clamp instead of throwing
+        private static void SetNumericValue(NumericUpDown box, float value)
+        {
+            var clamped = float.IsFinite(value) ? Math.Clamp(value, (float)box.Minimum, (float)box.Maximum) : (float)box.Minimum;
+            box.Value = Math.Clamp((decimal)clamped, box.Minimum, box.Maximum);
         }
 
         private readonly string[] _uvShown = new string[6];
@@ -1059,12 +1066,24 @@ namespace Sledge.BspEditor.Tools.Texture
             _freeze = wasFrozen;
 
             // Reset only the clones inside ApplyChanges - the live faces are never edited outside an operation
+            _uvTyped[0] = _uvTyped[1] = null;
+
             await ApplyChanges((mo, f) =>
             {
                 _currentTextureProperties.Reset();
+                ResetUvAxes(f);
                 ApplyFaceValues(f);
                 return Task.FromResult(true);
             });
+        }
+
+        // Back to the default projection: face-aligned if that's what the face currently uses, otherwise aligned to the world axis.
+        private static void ResetUvAxes(Face f)
+        {
+            var normal = f.Plane.Normal;
+            var world = f.Plane.GetClosestAxisToNormal();
+            var useFace = f.Texture.IsAlignedToNormal(normal) && !f.Texture.IsAlignedToNormal(world);
+            f.Texture.AlignToNormal(useFace ? normal : world);
         }
 
         private async void RotateButton_Click(object sender, EventArgs e)
