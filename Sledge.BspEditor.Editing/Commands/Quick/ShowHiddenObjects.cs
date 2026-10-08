@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.Composition;
+﻿using System.Collections.Generic;
+using System.ComponentModel.Composition;
 using System.Linq;
 using System.Threading.Tasks;
 using Sledge.BspEditor.Commands;
@@ -28,14 +29,17 @@ namespace Sledge.BspEditor.Editing.Commands.Quick
 
         protected override async Task Invoke(MapDocument document, CommandParameters parameters)
         {
-            var transaction = new Transaction();
-
+            // Single bulk operation instead of one operation per object (avoids the
+            // per-object whole-map bounding-box recomputation that made this laggy).
+            var ids = new List<long>();
             foreach (var mo in document.Map.Root.Find(x => x.Data.Get<QuickHidden>().Any()))
             {
-                transaction.Add(new RemoveMapObjectData(mo.ID, mo.Data.GetOne<QuickHidden>()));
+                ids.Add(mo.ID);
             }
 
-            await MapDocumentOperation.Perform(document, transaction);
+            if (ids.Count == 0) return;
+
+            await MapDocumentOperation.Perform(document, new SetQuickHidden(null, ids));
         }
     }
 }

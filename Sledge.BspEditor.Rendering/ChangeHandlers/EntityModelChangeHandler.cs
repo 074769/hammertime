@@ -31,6 +31,9 @@ namespace Sledge.BspEditor.Rendering.ChangeHandlers
 
         public async Task Changed(Change change)
         {
+            // Model derivation depends on entity class/properties, not visibility flags.
+            if (VisibilityOnlyFastPath.IsActive(change)) return;
+
             var gd = await change.Document.Environment.GetGameData();
             foreach (var entity in change.Added.Union(change.Updated).OfType<Entity>())
             {

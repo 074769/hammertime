@@ -47,6 +47,11 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
 
         public Task Changed(Change change)
         {
+            // Visibility flags are per-object by design (LinkedObjects.IsPerObjectData and
+            // IgnoredChildren both exclude them), so syncing them to linked copies is a
+            // no-op. Skip the index build and snapshot diffs for visibility-only changes.
+            if (VisibilityOnlyFastPath.IsActive(change)) return Task.CompletedTask;
+
             var doc = change.Document;
             var snaps = LinkGeometry.Snapshots(doc);
 

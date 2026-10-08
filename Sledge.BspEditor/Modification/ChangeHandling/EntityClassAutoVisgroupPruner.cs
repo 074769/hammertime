@@ -19,6 +19,10 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
 
         public Task Changed(Change change)
         {
+            // Pruner only removes empty groups; it needs Updated/Removed objects to be
+            // non-empty, and visibility-only changes include neither by construction.
+            if (VisibilityOnlyFastPath.IsActive(change)) return Task.CompletedTask;
+
             if (!change.Removed.Any() && !change.Updated.Any()) return Task.CompletedTask;
 
             var empty = change.Document.Map.Data.Get<AutomaticVisgroup>()
