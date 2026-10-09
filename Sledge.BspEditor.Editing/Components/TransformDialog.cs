@@ -105,7 +105,7 @@ namespace Sledge.BspEditor.Editing.Components
 			}
 		else
 		{
-			LinkXYZCheckBox.Checked = true;
+			LinkXYZCheckBox.Checked = false;
 		}
 
 			TypeChanged(null, null);
