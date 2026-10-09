@@ -19,15 +19,23 @@ namespace Sledge.BspEditor.Editing.Components
 
 		public class CannotScaleByZeroException : Exception { }
 
-		private readonly Box _source;
-		private decimal _zeroValue = 0;
-
 		// Remembered state (persisted between dialog invocations within a session)
 		private static bool _remember;
 		private static TransformType _rememberedType = TransformType.Rotate;
 		private static decimal _rememberedX;
 		private static decimal _rememberedY;
 		private static decimal _rememberedZ;
+		private static bool _rememberedUsePivot;
+
+		// Remembered window position (persisted between dialog invocations within a session)
+		private static System.Drawing.Point? _savedLocation;
+
+		// Scale factor applied to the whole dialog (35% larger)
+		private const float ScaleFactor = 1.35f;
+
+		private readonly Box _source;
+		private readonly Vector3 _pivot;
+		private decimal _zeroValue = 0;
 
 		public Vector3 TransformValue
 		{
@@ -69,10 +77,14 @@ namespace Sledge.BspEditor.Editing.Components
 			}
 		}
 
-		public TransformDialog(Box source)
+		public TransformDialog(Box source, Vector3 pivot)
 		{
 			_source = source;
+			_pivot = pivot;
 			InitializeComponent();
+
+			// Scale the entire dialog (and everything inside it) up by 35%
+			ScaleDialog();
 
 			ZeroValueXButton.Click += (sender, e) => ValueX.Value = _zeroValue;
 			ZeroValueYButton.Click += (sender, e) => ValueY.Value = _zeroValue;
@@ -89,6 +101,7 @@ namespace Sledge.BspEditor.Editing.Components
 			if (_remember)
 			{
 				Type = _rememberedType;
+				UsePivotCheckBox.Checked = _rememberedUsePivot;
 			}
 
 			TypeChanged(null, null);
@@ -99,6 +112,38 @@ namespace Sledge.BspEditor.Editing.Components
 				ValueY.Value = _rememberedY;
 				ValueZ.Value = _rememberedZ;
 			}
+
+			// Restore the last window position, otherwise center on the parent/screen
+			if (_savedLocation.HasValue)
+			{
+				StartPosition = FormStartPosition.Manual;
+				Location = _savedLocation.Value;
+			}
+			else
+			{
+				StartPosition = FormStartPosition.CenterParent;
+			}
+
+			FormClosed += (sender, e) => _savedLocation = Location;
+		}
+
+		private void ScaleDialog()
+		{
+			// Disable automatic DPI/font scaling so our manual scale is the only factor
+			AutoScaleMode = AutoScaleMode.None;
+
+			foreach (Control c in Controls)
+			{
+				var loc = c.Location;
+				var size = c.Size;
+				var font = c.Font;
+				c.Location = new System.Drawing.Point((int)(loc.X * ScaleFactor), (int)(loc.Y * ScaleFactor));
+				c.Size = new System.Drawing.Size((int)(size.Width * ScaleFactor), (int)(size.Height * ScaleFactor));
+				c.Font = new System.Drawing.Font(font.FontFamily, font.Size * ScaleFactor, font.Style, font.Unit, font.GdiCharSet, font.GdiVerticalFont);
+			}
+
+			// Grow the form's client area to match
+			ClientSize = new System.Drawing.Size((int)(ClientSize.Width * ScaleFactor), (int)(ClientSize.Height * ScaleFactor));
 		}
 
 		private void SaveRememberedState()
@@ -110,6 +155,7 @@ namespace Sledge.BspEditor.Editing.Components
 				_rememberedX = ValueX.Value;
 				_rememberedY = ValueY.Value;
 				_rememberedZ = ValueZ.Value;
+				_rememberedUsePivot = UsePivotCheckBox.Checked;
 			}
 		}
 
@@ -130,6 +176,7 @@ namespace Sledge.BspEditor.Editing.Components
 				lblScale.Text = strings.GetString(prefix, "Scale");
 				lblMove.Text = strings.GetString(prefix, "Move");
 				lblTeleport.Text = strings.GetString(prefix, "Teleport");
+				UsePivotCheckBox.Text = strings.GetString(prefix, "UsePivot");
 				RememberChoiceCheckBox.Text = strings.GetString(prefix, "RememberChoice");
 
 				OkButton.Text = strings.GetString(prefix, "OK");
@@ -144,9 +191,11 @@ namespace Sledge.BspEditor.Editing.Components
 			{
 				case TransformType.Rotate:
 					var rads = value * (float)Math.PI / 180;
-					var rMov = Matrix4x4.CreateTranslation(selectionBox.Center);
+					// Rotate around the object's pivot when requested, otherwise around the selection center
+					var pivot = UsePivotCheckBox.Checked ? _pivot : selectionBox.Center;
+					var rMov = Matrix4x4.CreateTranslation(pivot);
 					var rRot = Matrix4x4.CreateFromQuaternion(Quaternion.CreateFromYawPitchRoll(rads.Y, rads.X, rads.Z));
-					var rFin = Matrix4x4.CreateTranslation(-selectionBox.Center);
+					var rFin = Matrix4x4.CreateTranslation(-pivot);
 					return rFin * rRot * rMov;
 				case TransformType.Move:
 					return Matrix4x4.CreateTranslation(value);
@@ -170,6 +219,8 @@ namespace Sledge.BspEditor.Editing.Components
 				= SourceValueYButton.Visible
 				  = SourceValueZButton.Visible
 					= lblMove.Checked;
+			// The pivot option only applies to rotation
+			UsePivotCheckBox.Visible = lblRotate.Checked;
 			ZeroValueXButton.Text
 				= ZeroValueYButton.Text
 				  = ZeroValueZButton.Text

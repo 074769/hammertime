@@ -33,6 +33,7 @@
             this.lblMove = new System.Windows.Forms.RadioButton();
             this.lblTeleport = new System.Windows.Forms.RadioButton();
             this.RememberChoiceCheckBox = new System.Windows.Forms.CheckBox();
+            this.UsePivotCheckBox = new System.Windows.Forms.CheckBox();
             this.ValueY = new System.Windows.Forms.NumericUpDown();
             this.ValueZ = new System.Windows.Forms.NumericUpDown();
             this.ValueX = new System.Windows.Forms.NumericUpDown();
@@ -107,6 +108,16 @@
             this.RememberChoiceCheckBox.TabIndex = 4;
             this.RememberChoiceCheckBox.Text = "Remember Choice";
             this.RememberChoiceCheckBox.UseVisualStyleBackColor = true;
+            // 
+            // UsePivotCheckBox
+            // 
+            this.UsePivotCheckBox.AutoSize = true;
+            this.UsePivotCheckBox.Location = new System.Drawing.Point(96, 88);
+            this.UsePivotCheckBox.Name = "UsePivotCheckBox";
+            this.UsePivotCheckBox.Size = new System.Drawing.Size(78, 17);
+            this.UsePivotCheckBox.TabIndex = 5;
+            this.UsePivotCheckBox.Text = "Use Pivot";
+            this.UsePivotCheckBox.UseVisualStyleBackColor = true;
             // 
             // ValueY
             // 
@@ -268,6 +279,7 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(278, 175);
+            this.Controls.Add(this.UsePivotCheckBox);
             this.Controls.Add(this.RememberChoiceCheckBox);
             this.Controls.Add(this.lblTeleport);
             this.Controls.Add(this.lblMove);
@@ -308,6 +320,7 @@
         private System.Windows.Forms.RadioButton lblMove;
         private System.Windows.Forms.RadioButton lblTeleport;
         private System.Windows.Forms.CheckBox RememberChoiceCheckBox;
+        private System.Windows.Forms.CheckBox UsePivotCheckBox;
         private System.Windows.Forms.NumericUpDown ValueY;
         private System.Windows.Forms.NumericUpDown ValueZ;
         private System.Windows.Forms.NumericUpDown ValueX;

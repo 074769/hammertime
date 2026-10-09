@@ -45,7 +45,15 @@ namespace Sledge.BspEditor.Editing.Commands.Modification
             var objects = document.Selection.GetSelectedParents().ToList();
             var box = document.Selection.GetSelectionBoundingBox();
 
-            using (var dialog = new TransformDialog(box))
+            // Determine the pivot point used when "Use Pivot" is enabled in the dialog.
+            // If a single entity is selected, use its origin; otherwise fall back to the selection center.
+            var pivot = box.Center;
+            if (objects.Count == 1 && objects[0] is Entity entity)
+            {
+                pivot = entity.Origin;
+            }
+
+            using (var dialog = new TransformDialog(box, pivot))
             {
                 _translator.Value.Translate(dialog);
                 if (dialog.ShowDialog() == DialogResult.OK)

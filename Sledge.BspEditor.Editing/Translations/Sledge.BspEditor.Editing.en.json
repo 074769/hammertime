@@ -345,6 +345,7 @@
       "Scale": "Scale",
       "Move": "Move",
       "Teleport": "Teleport",
+      "UsePivot": "Use Pivot",
       "RememberChoice": "Remember Choice",
       "OK": "OK",
       "Cancel": "Cancel"
