@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 using System.Windows.Forms;
 using Sledge.Common.Shell.Settings;
 
@@ -18,12 +19,7 @@ namespace Sledge.Shell.Settings.Editors
         string ISettingEditor.Label
         {
             get => KeyBox.Text;
-            set
-            {
-                _label.Text = value;
-                KeyBox.Left = _label.Right + 6;
-                KeyBox.Width = Math.Max(80, ClientSize.Width - KeyBox.Left - 6);
-            }
+            set => _label.Text = value;
         }
 
         // Keys settings are stored by their enum name (e.g. "W"), matching the old EnumEditor format.
@@ -45,6 +41,10 @@ namespace Sledge.Shell.Settings.Editors
         public KeyCaptureEditor()
         {
             InitializeComponent();
+
+            // Larger text: the label fills the row on the left, the key box hugs the right.
+            _label.Font = new Font(Font.FontFamily, 12f, FontStyle.Regular);
+            KeyBox.Font = new Font(Font.FontFamily, 14f, FontStyle.Bold);
 
             _value = "None";
             UpdateText();
