@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Drawing;
 using System.Linq;
@@ -110,7 +110,7 @@ namespace Sledge.BspEditor.Rendering.Converters
 			var points = new VertexStandard[numVertices];
 			var indices = new uint[numSolidIndices + numWireframeIndices];
 
-			var c = obj.IsSelected ? Color.Red : EntityBrushColorSettings.Resolve(obj, obj.Data.GetOne<ObjectColor>()?.Color ?? Color.Magenta);
+			var c = obj.IsSelected ? Color.Red : obj.Data.GetOne<ObjectColor>()?.Color ?? Color.Magenta;
 			var colour = new Vector4(c.R, c.G, c.B, c.A) / 255f;
 
 			var flags = obj.IsSelected ? VertexFlags.SelectiveTransformed : VertexFlags.None;
