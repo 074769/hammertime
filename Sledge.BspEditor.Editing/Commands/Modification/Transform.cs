@@ -46,11 +46,19 @@ namespace Sledge.BspEditor.Editing.Commands.Modification
             var box = document.Selection.GetSelectionBoundingBox();
 
             // Determine the pivot point used when "Use Pivot" is enabled in the dialog.
-            // If a single entity is selected, use its origin; otherwise fall back to the selection center.
+            // The rotation widget's pivot is the authoritative pivot: when a pivot has
+            // been placed on the rotation widget it overrides the selection centre, so
+            // rotating with R then using "Use Pivot" rotates around the point the user
+            // actually moved it to. Otherwise fall back to the selection centre, or the
+            // origin of a single selected entity.
             var pivot = box.Center;
             if (objects.Count == 1 && objects[0] is Entity entity)
             {
                 pivot = entity.Origin;
+            }
+            if (document.Selection.RotationPivot.HasValue)
+            {
+                pivot = document.Selection.RotationPivot.Value;
             }
 
             using (var dialog = new TransformDialog(box, pivot))

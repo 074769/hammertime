@@ -52,7 +52,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.ValueZ)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ValueX)).BeginInit();
             this.SuspendLayout();
-            this.Font = new System.Drawing.Font("Segoe UI", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.Font = new System.Drawing.Font("Segoe UI", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             // 
             // lblRotate
             // 
@@ -60,7 +60,7 @@
             this.lblRotate.Checked = true;
             this.lblRotate.Location = new System.Drawing.Point(16, 16);
             this.lblRotate.Name = "lblRotate";
-            this.lblRotate.Size = new System.Drawing.Size(57, 17);
+            this.lblRotate.Size = new System.Drawing.Size(78, 25);
             this.lblRotate.TabIndex = 0;
             this.lblRotate.TabStop = true;
             this.lblRotate.Text = "Rotate";
@@ -72,7 +72,7 @@
             this.lblScale.AutoSize = true;
             this.lblScale.Location = new System.Drawing.Point(16, 48);
             this.lblScale.Name = "lblScale";
-            this.lblScale.Size = new System.Drawing.Size(52, 17);
+            this.lblScale.Size = new System.Drawing.Size(70, 25);
             this.lblScale.TabIndex = 1;
             this.lblScale.Text = "Scale";
             this.lblScale.UseVisualStyleBackColor = true;
@@ -83,7 +83,7 @@
             this.lblMove.AutoSize = true;
             this.lblMove.Location = new System.Drawing.Point(16, 80);
             this.lblMove.Name = "lblMove";
-            this.lblMove.Size = new System.Drawing.Size(52, 17);
+            this.lblMove.Size = new System.Drawing.Size(70, 25);
             this.lblMove.TabIndex = 2;
             this.lblMove.Text = "Move";
             this.lblMove.UseVisualStyleBackColor = true;
@@ -94,7 +94,7 @@
             this.lblTeleport.AutoSize = true;
             this.lblTeleport.Location = new System.Drawing.Point(16, 112);
             this.lblTeleport.Name = "lblTeleport";
-            this.lblTeleport.Size = new System.Drawing.Size(67, 17);
+            this.lblTeleport.Size = new System.Drawing.Size(91, 25);
             this.lblTeleport.TabIndex = 3;
             this.lblTeleport.Text = "Teleport";
             this.lblTeleport.UseVisualStyleBackColor = true;
@@ -103,9 +103,9 @@
             // RememberChoiceCheckBox
             // 
             this.RememberChoiceCheckBox.AutoSize = true;
-            this.RememberChoiceCheckBox.Location = new System.Drawing.Point(16, 152);
+            this.RememberChoiceCheckBox.Location = new System.Drawing.Point(16, 148);
             this.RememberChoiceCheckBox.Name = "RememberChoiceCheckBox";
-            this.RememberChoiceCheckBox.Size = new System.Drawing.Size(110, 17);
+            this.RememberChoiceCheckBox.Size = new System.Drawing.Size(159, 25);
             this.RememberChoiceCheckBox.TabIndex = 4;
             this.RememberChoiceCheckBox.Text = "Remember Choice";
             this.RememberChoiceCheckBox.UseVisualStyleBackColor = true;
@@ -113,9 +113,9 @@
             // UsePivotCheckBox
             // 
             this.UsePivotCheckBox.AutoSize = true;
-            this.UsePivotCheckBox.Location = new System.Drawing.Point(138, 112);
+            this.UsePivotCheckBox.Location = new System.Drawing.Point(160, 112);
             this.UsePivotCheckBox.Name = "UsePivotCheckBox";
-            this.UsePivotCheckBox.Size = new System.Drawing.Size(78, 17);
+            this.UsePivotCheckBox.Size = new System.Drawing.Size(109, 25);
             this.UsePivotCheckBox.TabIndex = 5;
             this.UsePivotCheckBox.Text = "Use Pivot";
             this.UsePivotCheckBox.UseVisualStyleBackColor = true;
@@ -123,7 +123,7 @@
             // ValueY
             // 
             this.ValueY.DecimalPlaces = 2;
-            this.ValueY.Location = new System.Drawing.Point(138, 46);
+            this.ValueY.Location = new System.Drawing.Point(160, 48);
             this.ValueY.Maximum = new decimal(new int[] {
             16384,
             0,
@@ -135,13 +135,13 @@
             0,
             -2147483648});
             this.ValueY.Name = "ValueY";
-            this.ValueY.Size = new System.Drawing.Size(80, 26);
+            this.ValueY.Size = new System.Drawing.Size(90, 29);
             this.ValueY.TabIndex = 24;
             // 
             // ValueZ
             // 
             this.ValueZ.DecimalPlaces = 2;
-            this.ValueZ.Location = new System.Drawing.Point(138, 78);
+            this.ValueZ.Location = new System.Drawing.Point(160, 80);
             this.ValueZ.Maximum = new decimal(new int[] {
             16384,
             0,
@@ -153,13 +153,13 @@
             0,
             -2147483648});
             this.ValueZ.Name = "ValueZ";
-            this.ValueZ.Size = new System.Drawing.Size(80, 26);
+            this.ValueZ.Size = new System.Drawing.Size(90, 29);
             this.ValueZ.TabIndex = 25;
             // 
             // ValueX
             // 
             this.ValueX.DecimalPlaces = 2;
-            this.ValueX.Location = new System.Drawing.Point(138, 14);
+            this.ValueX.Location = new System.Drawing.Point(160, 16);
             this.ValueX.Maximum = new decimal(new int[] {
             16384,
             0,
@@ -171,59 +171,59 @@
             0,
             -2147483648});
             this.ValueX.Name = "ValueX";
-            this.ValueX.Size = new System.Drawing.Size(80, 26);
+            this.ValueX.Size = new System.Drawing.Size(90, 29);
             this.ValueX.TabIndex = 26;
             // 
             // SourceValueZButton
             // 
-            this.SourceValueZButton.Location = new System.Drawing.Point(264, 78);
+            this.SourceValueZButton.Location = new System.Drawing.Point(302, 80);
             this.SourceValueZButton.Name = "SourceValueZButton";
-            this.SourceValueZButton.Size = new System.Drawing.Size(64, 26);
+            this.SourceValueZButton.Size = new System.Drawing.Size(90, 29);
             this.SourceValueZButton.TabIndex = 18;
             this.SourceValueZButton.Text = "Source";
             this.SourceValueZButton.UseVisualStyleBackColor = true;
             // 
             // ZeroValueZButton
             // 
-            this.ZeroValueZButton.Location = new System.Drawing.Point(226, 78);
+            this.ZeroValueZButton.Location = new System.Drawing.Point(256, 80);
             this.ZeroValueZButton.Name = "ZeroValueZButton";
-            this.ZeroValueZButton.Size = new System.Drawing.Size(32, 26);
+            this.ZeroValueZButton.Size = new System.Drawing.Size(40, 29);
             this.ZeroValueZButton.TabIndex = 19;
             this.ZeroValueZButton.Text = "0";
             this.ZeroValueZButton.UseVisualStyleBackColor = true;
             // 
             // SourceValueYButton
             // 
-            this.SourceValueYButton.Location = new System.Drawing.Point(264, 46);
+            this.SourceValueYButton.Location = new System.Drawing.Point(302, 48);
             this.SourceValueYButton.Name = "SourceValueYButton";
-            this.SourceValueYButton.Size = new System.Drawing.Size(64, 26);
+            this.SourceValueYButton.Size = new System.Drawing.Size(90, 29);
             this.SourceValueYButton.TabIndex = 20;
             this.SourceValueYButton.Text = "Source";
             this.SourceValueYButton.UseVisualStyleBackColor = true;
             // 
             // ZeroValueYButton
             // 
-            this.ZeroValueYButton.Location = new System.Drawing.Point(226, 46);
+            this.ZeroValueYButton.Location = new System.Drawing.Point(256, 48);
             this.ZeroValueYButton.Name = "ZeroValueYButton";
-            this.ZeroValueYButton.Size = new System.Drawing.Size(32, 26);
+            this.ZeroValueYButton.Size = new System.Drawing.Size(40, 29);
             this.ZeroValueYButton.TabIndex = 21;
             this.ZeroValueYButton.Text = "0";
             this.ZeroValueYButton.UseVisualStyleBackColor = true;
             // 
             // SourceValueXButton
             // 
-            this.SourceValueXButton.Location = new System.Drawing.Point(264, 14);
+            this.SourceValueXButton.Location = new System.Drawing.Point(302, 16);
             this.SourceValueXButton.Name = "SourceValueXButton";
-            this.SourceValueXButton.Size = new System.Drawing.Size(64, 26);
+            this.SourceValueXButton.Size = new System.Drawing.Size(90, 29);
             this.SourceValueXButton.TabIndex = 22;
             this.SourceValueXButton.Text = "Source";
             this.SourceValueXButton.UseVisualStyleBackColor = true;
             // 
             // ZeroValueXButton
             // 
-            this.ZeroValueXButton.Location = new System.Drawing.Point(226, 14);
+            this.ZeroValueXButton.Location = new System.Drawing.Point(256, 16);
             this.ZeroValueXButton.Name = "ZeroValueXButton";
-            this.ZeroValueXButton.Size = new System.Drawing.Size(32, 26);
+            this.ZeroValueXButton.Size = new System.Drawing.Size(40, 29);
             this.ZeroValueXButton.TabIndex = 23;
             this.ZeroValueXButton.Text = "0";
             this.ZeroValueXButton.UseVisualStyleBackColor = true;
@@ -231,36 +231,36 @@
             // label5
             // 
             this.label5.AutoSize = true;
-            this.label5.Location = new System.Drawing.Point(112, 82);
+            this.label5.Location = new System.Drawing.Point(134, 84);
             this.label5.Name = "label5";
-            this.label5.Size = new System.Drawing.Size(22, 20);
+            this.label5.Size = new System.Drawing.Size(22, 21);
             this.label5.TabIndex = 17;
             this.label5.Text = "Z:";
             // 
             // label6
             // 
             this.label6.AutoSize = true;
-            this.label6.Location = new System.Drawing.Point(112, 50);
+            this.label6.Location = new System.Drawing.Point(134, 52);
             this.label6.Name = "label6";
-            this.label6.Size = new System.Drawing.Size(22, 20);
+            this.label6.Size = new System.Drawing.Size(22, 21);
             this.label6.TabIndex = 16;
             this.label6.Text = "Y:";
             // 
             // label7
             // 
             this.label7.AutoSize = true;
-            this.label7.Location = new System.Drawing.Point(112, 18);
+            this.label7.Location = new System.Drawing.Point(134, 20);
             this.label7.Name = "label7";
-            this.label7.Size = new System.Drawing.Size(22, 20);
+            this.label7.Size = new System.Drawing.Size(22, 21);
             this.label7.TabIndex = 15;
             this.label7.Text = "X:";
             // 
             // CancelButton
             // 
             this.CancelButton.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-            this.CancelButton.Location = new System.Drawing.Point(196, 158);
+            this.CancelButton.Location = new System.Drawing.Point(211, 188);
             this.CancelButton.Name = "CancelButton";
-            this.CancelButton.Size = new System.Drawing.Size(100, 34);
+            this.CancelButton.Size = new System.Drawing.Size(110, 38);
             this.CancelButton.TabIndex = 27;
             this.CancelButton.Text = "Cancel";
             this.CancelButton.UseVisualStyleBackColor = true;
@@ -268,9 +268,9 @@
             // OkButton
             // 
             this.OkButton.DialogResult = System.Windows.Forms.DialogResult.OK;
-            this.OkButton.Location = new System.Drawing.Point(88, 158);
+            this.OkButton.Location = new System.Drawing.Point(89, 188);
             this.OkButton.Name = "OkButton";
-            this.OkButton.Size = new System.Drawing.Size(100, 34);
+            this.OkButton.Size = new System.Drawing.Size(110, 38);
             this.OkButton.TabIndex = 28;
             this.OkButton.Text = "OK";
             this.OkButton.UseVisualStyleBackColor = true;
@@ -280,7 +280,7 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
             this.Font = new System.Drawing.Font("Segoe UI", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.ClientSize = new System.Drawing.Size(384, 220);
+            this.ClientSize = new System.Drawing.Size(410, 250);
             this.Controls.Add(this.UsePivotCheckBox);
             this.Controls.Add(this.RememberChoiceCheckBox);
             this.Controls.Add(this.lblTeleport);
