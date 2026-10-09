@@ -29,6 +29,10 @@ namespace Sledge.Shell.Settings.Editors
             {
                 return true;
             }
+            else if (key.Type == typeof(System.Windows.Forms.Keys))
+            {
+                return true;
+            }
             else if (key.Type.IsEnum)
             {
                 return true;
@@ -77,6 +81,10 @@ namespace Sledge.Shell.Settings.Editors
             else if (key.Type == typeof(string))
             {
                 return new TextEditor();
+            }
+            else if (key.Type == typeof(System.Windows.Forms.Keys))
+            {
+                return new KeyCaptureEditor();
             }
             else if (key.Type.IsEnum)
             {
