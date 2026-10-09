@@ -26,6 +26,7 @@ namespace Sledge.BspEditor.Editing.Components
 		private static decimal _rememberedY;
 		private static decimal _rememberedZ;
 		private static bool _rememberedUsePivot;
+		private static bool _rememberedLinkXYZ;
 
 		// Remembered window position (persisted between dialog invocations within a session)
 		private static System.Drawing.Point? _savedLocation;
@@ -90,13 +91,22 @@ namespace Sledge.BspEditor.Editing.Components
 
 			OkButton.Click += (sender, e) => SaveRememberedState();
 
+		ValueX.ValueChanged += ValueChanged;
+		ValueY.ValueChanged += ValueChanged;
+		ValueZ.ValueChanged += ValueChanged;
+
 			// Restore the previously remembered choice/values if enabled
 			RememberChoiceCheckBox.Checked = _remember;
 			if (_remember)
 			{
 				Type = _rememberedType;
 				UsePivotCheckBox.Checked = _rememberedUsePivot;
+			LinkXYZCheckBox.Checked = _rememberedLinkXYZ;
 			}
+		else
+		{
+			LinkXYZCheckBox.Checked = true;
+		}
 
 			TypeChanged(null, null);
 
@@ -125,6 +135,7 @@ namespace Sledge.BspEditor.Editing.Components
 		{
 			_remember = RememberChoiceCheckBox.Checked;
 			if (_remember)
+			_rememberedLinkXYZ = LinkXYZCheckBox.Checked;
 			{
 				_rememberedType = Type;
 				_rememberedX = ValueX.Value;
@@ -196,6 +207,7 @@ namespace Sledge.BspEditor.Editing.Components
 					= lblMove.Checked;
 			// The pivot option only applies to rotation
 			UsePivotCheckBox.Visible = lblRotate.Checked;
+			LinkXYZCheckBox.Visible = lblScale.Checked || lblTeleport.Checked;
 			ZeroValueXButton.Text
 				= ZeroValueYButton.Text
 				  = ZeroValueZButton.Text
@@ -214,6 +226,14 @@ namespace Sledge.BspEditor.Editing.Components
 				if (ValueZ.Value == 1) ValueZ.Value = 0;
 				_zeroValue = 0;
 			}
+		}
+		private void ValueChanged(object sender, EventArgs e)
+		{
+			if (!LinkXYZCheckBox.Checked) return;
+			var value = ((NumericUpDown)sender).Value;
+			if (sender != ValueX) ValueX.Value = value;
+			if (sender != ValueY) ValueY.Value = value;
+			if (sender != ValueZ) ValueZ.Value = value;
 		}
 	}
 }

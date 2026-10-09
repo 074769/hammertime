@@ -119,6 +119,18 @@
             this.UsePivotCheckBox.TabIndex = 5;
             this.UsePivotCheckBox.Text = "Use Pivot";
             this.UsePivotCheckBox.UseVisualStyleBackColor = true;
+
+            // 
+            // LinkXYZCheckBox
+            // 
+            this.LinkXYZCheckBox.AutoSize = true;
+            this.LinkXYZCheckBox.Location = new System.Drawing.Point(160, 112);
+            this.LinkXYZCheckBox.Name = "LinkXYZCheckBox";
+            this.LinkXYZCheckBox.Size = new System.Drawing.Size(109, 25);
+            this.LinkXYZCheckBox.TabIndex = 6;
+            this.LinkXYZCheckBox.Text = "Link XYZ";
+            this.LinkXYZCheckBox.UseVisualStyleBackColor = true;
+
             // 
             // ValueY
             // 
@@ -271,6 +283,9 @@
             this.OkButton.Location = new System.Drawing.Point(89, 188);
             this.OkButton.Name = "OkButton";
             this.OkButton.Size = new System.Drawing.Size(110, 38);
+
+            this.Controls.Add(this.LinkXYZCheckBox);
+
             this.OkButton.TabIndex = 28;
             this.OkButton.Text = "OK";
             this.OkButton.UseVisualStyleBackColor = true;
@@ -323,6 +338,7 @@
         private System.Windows.Forms.RadioButton lblTeleport;
         private System.Windows.Forms.CheckBox RememberChoiceCheckBox;
         private System.Windows.Forms.CheckBox UsePivotCheckBox;
+private System.Windows.Forms.CheckBox LinkXYZCheckBox;
         private System.Windows.Forms.NumericUpDown ValueY;
         private System.Windows.Forms.NumericUpDown ValueZ;
         private System.Windows.Forms.NumericUpDown ValueX;
