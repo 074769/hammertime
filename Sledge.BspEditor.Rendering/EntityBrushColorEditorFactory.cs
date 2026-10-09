@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.Composition;
+﻿using System;
+using System.ComponentModel.Composition;
 using Sledge.Common.Translations;
 using Sledge.Common.Shell.Settings;
 

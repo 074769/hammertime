@@ -3,6 +3,7 @@ using System.ComponentModel.Composition;
 using System.Drawing;
 using System.Linq;
 using System.Numerics;
+using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.DataStructures.Geometric;
 using Sledge.Rendering.Cameras;
