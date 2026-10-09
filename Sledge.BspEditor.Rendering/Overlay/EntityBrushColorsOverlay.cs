@@ -50,10 +50,13 @@ namespace Sledge.BspEditor.Rendering.Overlay
         private static Color GetEntityColour(Entity entity, List<EntityColourOverride> overrides, Color pointColour, Color brushEntityColour)
         {
             var entityName = entity.EntityData?.Name;
-            var overrideColour = overrides.FirstOrDefault(o => !string.IsNullOrWhiteSpace(o.EntityName) && o.EntityName == entityName);
-            if (overrideColour != null)
+            if (!string.IsNullOrEmpty(entityName))
             {
-                return overrideColour.Colour;
+                // Match case-insensitively and ignore surrounding whitespace so a manually-typed
+                // entity class name still applies even if its casing differs from the map's.
+                var match = overrides.FirstOrDefault(o => !string.IsNullOrWhiteSpace(o.EntityName)
+                    && string.Equals(o.EntityName.Trim(), entityName.Trim(), System.StringComparison.OrdinalIgnoreCase));
+                if (match != null) return match.Colour;
             }
 
             var hasFaceChildren = entity.Hierarchy.OfType<Solid>().Any(s => s.Faces.Any());
@@ -72,7 +75,13 @@ namespace Sledge.BspEditor.Rendering.Overlay
                 }
                 for (var i = 0; i < face.Length; i++)
                 {
-                    im.AddLine(verts[i], verts[(i + 1) % face.Length], colour);
+                    var a = verts[i];
+                    var b = verts[(i + 1) % face.Length];
+                    // Draw a wider black stroke behind the coloured stroke so the entity's
+                    // colour reads clearly against any background fill (the same contrast trick
+                    // EntityMovementOverlay uses for its helper arrows).
+                    im.AddLine(a, b, Color.Black, 3f);
+                    im.AddLine(a, b, colour, 2f);
                 }
             }
         }
