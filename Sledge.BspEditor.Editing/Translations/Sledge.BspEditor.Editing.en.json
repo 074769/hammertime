@@ -342,8 +342,10 @@
       "Title": "Transform",
       "Source": "Source",
       "Rotate": "Rotate",
-      "Translate": "Translate",
       "Scale": "Scale",
+      "Move": "Move",
+      "Teleport": "Teleport",
+      "RememberChoice": "Remember Choice",
       "OK": "OK",
       "Cancel": "Cancel"
     },

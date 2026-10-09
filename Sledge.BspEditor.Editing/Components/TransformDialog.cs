@@ -12,14 +12,22 @@ namespace Sledge.BspEditor.Editing.Components
 		public enum TransformType
 		{
 			Rotate,
-			Translate,
-			Scale
+			Scale,
+			Move,
+			Teleport
 		}
 
 		public class CannotScaleByZeroException : Exception { }
 
 		private readonly Box _source;
 		private decimal _zeroValue = 0;
+
+		// Remembered state (persisted between dialog invocations within a session)
+		private static bool _remember;
+		private static TransformType _rememberedType = TransformType.Rotate;
+		private static decimal _rememberedX;
+		private static decimal _rememberedY;
+		private static decimal _rememberedZ;
 
 		public Vector3 TransformValue
 		{
@@ -38,7 +46,8 @@ namespace Sledge.BspEditor.Editing.Components
 			{
 				if (lblRotate.Checked) return TransformType.Rotate;
 				if (lblScale.Checked) return TransformType.Scale;
-				return TransformType.Translate;
+				if (lblTeleport.Checked) return TransformType.Teleport;
+				return TransformType.Move;
 			}
 			set
 			{
@@ -50,8 +59,11 @@ namespace Sledge.BspEditor.Editing.Components
 					case TransformType.Scale:
 						lblScale.Checked = true;
 						break;
+					case TransformType.Teleport:
+						lblTeleport.Checked = true;
+						break;
 					default:
-						lblTranslate.Checked = true;
+						lblMove.Checked = true;
 						break;
 				}
 			}
@@ -70,7 +82,35 @@ namespace Sledge.BspEditor.Editing.Components
 			SourceValueYButton.Click += (sender, e) => ValueY.Value = (decimal)_source.Length;
 			SourceValueZButton.Click += (sender, e) => ValueZ.Value = (decimal)_source.Height;
 
+			OkButton.Click += (sender, e) => SaveRememberedState();
+
+			// Restore the previously remembered choice/values if enabled
+			RememberChoiceCheckBox.Checked = _remember;
+			if (_remember)
+			{
+				Type = _rememberedType;
+			}
+
 			TypeChanged(null, null);
+
+			if (_remember)
+			{
+				ValueX.Value = _rememberedX;
+				ValueY.Value = _rememberedY;
+				ValueZ.Value = _rememberedZ;
+			}
+		}
+
+		private void SaveRememberedState()
+		{
+			_remember = RememberChoiceCheckBox.Checked;
+			if (_remember)
+			{
+				_rememberedType = Type;
+				_rememberedX = ValueX.Value;
+				_rememberedY = ValueY.Value;
+				_rememberedZ = ValueZ.Value;
+			}
 		}
 
 		public void Translate(ITranslationStringProvider strings)
@@ -87,8 +127,10 @@ namespace Sledge.BspEditor.Editing.Components
 				SourceValueZButton.Text = src;
 
 				lblRotate.Text = strings.GetString(prefix, "Rotate");
-				lblTranslate.Text = strings.GetString(prefix, "Translate");
 				lblScale.Text = strings.GetString(prefix, "Scale");
+				lblMove.Text = strings.GetString(prefix, "Move");
+				lblTeleport.Text = strings.GetString(prefix, "Teleport");
+				RememberChoiceCheckBox.Text = strings.GetString(prefix, "RememberChoice");
 
 				OkButton.Text = strings.GetString(prefix, "OK");
 				CancelButton.Text = strings.GetString(prefix, "Cancel");
@@ -106,8 +148,11 @@ namespace Sledge.BspEditor.Editing.Components
 					var rRot = Matrix4x4.CreateFromQuaternion(Quaternion.CreateFromYawPitchRoll(rads.Y, rads.X, rads.Z));
 					var rFin = Matrix4x4.CreateTranslation(-selectionBox.Center);
 					return rFin * rRot * rMov;
-				case TransformType.Translate:
+				case TransformType.Move:
 					return Matrix4x4.CreateTranslation(value);
+				case TransformType.Teleport:
+					// Teleport the selection so its center lands on the entered absolute coordinates
+					return Matrix4x4.CreateTranslation(value - selectionBox.Center);
 				case TransformType.Scale:
 					if (Math.Abs(value.X) < 0.001 || Math.Abs(value.Y) < 0.001 || Math.Abs(value.Z) < 0.001) throw new CannotScaleByZeroException();
 					var sMov = Matrix4x4.CreateTranslation(-selectionBox.Center);
@@ -124,7 +169,7 @@ namespace Sledge.BspEditor.Editing.Components
 			SourceValueXButton.Visible
 				= SourceValueYButton.Visible
 				  = SourceValueZButton.Visible
-					= lblTranslate.Checked;
+					= lblMove.Checked;
 			ZeroValueXButton.Text
 				= ZeroValueYButton.Text
 				  = ZeroValueZButton.Text

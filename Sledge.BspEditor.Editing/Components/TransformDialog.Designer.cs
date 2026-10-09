@@ -29,8 +29,10 @@
         private void InitializeComponent()
         {
             this.lblRotate = new System.Windows.Forms.RadioButton();
-            this.lblTranslate = new System.Windows.Forms.RadioButton();
             this.lblScale = new System.Windows.Forms.RadioButton();
+            this.lblMove = new System.Windows.Forms.RadioButton();
+            this.lblTeleport = new System.Windows.Forms.RadioButton();
+            this.RememberChoiceCheckBox = new System.Windows.Forms.CheckBox();
             this.ValueY = new System.Windows.Forms.NumericUpDown();
             this.ValueZ = new System.Windows.Forms.NumericUpDown();
             this.ValueX = new System.Windows.Forms.NumericUpDown();
@@ -63,27 +65,48 @@
             this.lblRotate.UseVisualStyleBackColor = true;
             this.lblRotate.Click += new System.EventHandler(this.TypeChanged);
             // 
-            // lblTranslate
-            // 
-            this.lblTranslate.AutoSize = true;
-            this.lblTranslate.Location = new System.Drawing.Point(12, 38);
-            this.lblTranslate.Name = "lblTranslate";
-            this.lblTranslate.Size = new System.Drawing.Size(69, 17);
-            this.lblTranslate.TabIndex = 0;
-            this.lblTranslate.Text = "Translate";
-            this.lblTranslate.UseVisualStyleBackColor = true;
-            this.lblTranslate.Click += new System.EventHandler(this.TypeChanged);
-            // 
             // lblScale
             // 
             this.lblScale.AutoSize = true;
-            this.lblScale.Location = new System.Drawing.Point(12, 64);
+            this.lblScale.Location = new System.Drawing.Point(12, 38);
             this.lblScale.Name = "lblScale";
             this.lblScale.Size = new System.Drawing.Size(52, 17);
-            this.lblScale.TabIndex = 0;
+            this.lblScale.TabIndex = 1;
             this.lblScale.Text = "Scale";
             this.lblScale.UseVisualStyleBackColor = true;
             this.lblScale.Click += new System.EventHandler(this.TypeChanged);
+            // 
+            // lblMove
+            // 
+            this.lblMove.AutoSize = true;
+            this.lblMove.Location = new System.Drawing.Point(12, 64);
+            this.lblMove.Name = "lblMove";
+            this.lblMove.Size = new System.Drawing.Size(52, 17);
+            this.lblMove.TabIndex = 2;
+            this.lblMove.Text = "Move";
+            this.lblMove.UseVisualStyleBackColor = true;
+            this.lblMove.Click += new System.EventHandler(this.TypeChanged);
+            // 
+            // lblTeleport
+            // 
+            this.lblTeleport.AutoSize = true;
+            this.lblTeleport.Location = new System.Drawing.Point(12, 90);
+            this.lblTeleport.Name = "lblTeleport";
+            this.lblTeleport.Size = new System.Drawing.Size(67, 17);
+            this.lblTeleport.TabIndex = 3;
+            this.lblTeleport.Text = "Teleport";
+            this.lblTeleport.UseVisualStyleBackColor = true;
+            this.lblTeleport.Click += new System.EventHandler(this.TypeChanged);
+            // 
+            // RememberChoiceCheckBox
+            // 
+            this.RememberChoiceCheckBox.AutoSize = true;
+            this.RememberChoiceCheckBox.Location = new System.Drawing.Point(12, 116);
+            this.RememberChoiceCheckBox.Name = "RememberChoiceCheckBox";
+            this.RememberChoiceCheckBox.Size = new System.Drawing.Size(110, 17);
+            this.RememberChoiceCheckBox.TabIndex = 4;
+            this.RememberChoiceCheckBox.Text = "Remember Choice";
+            this.RememberChoiceCheckBox.UseVisualStyleBackColor = true;
             // 
             // ValueY
             // 
@@ -223,7 +246,7 @@
             // CancelButton
             // 
             this.CancelButton.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-            this.CancelButton.Location = new System.Drawing.Point(135, 89);
+            this.CancelButton.Location = new System.Drawing.Point(135, 142);
             this.CancelButton.Name = "CancelButton";
             this.CancelButton.Size = new System.Drawing.Size(75, 23);
             this.CancelButton.TabIndex = 27;
@@ -233,7 +256,7 @@
             // OkButton
             // 
             this.OkButton.DialogResult = System.Windows.Forms.DialogResult.OK;
-            this.OkButton.Location = new System.Drawing.Point(54, 89);
+            this.OkButton.Location = new System.Drawing.Point(54, 142);
             this.OkButton.Name = "OkButton";
             this.OkButton.Size = new System.Drawing.Size(75, 23);
             this.OkButton.TabIndex = 28;
@@ -244,7 +267,10 @@
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(278, 120);
+            this.ClientSize = new System.Drawing.Size(278, 175);
+            this.Controls.Add(this.RememberChoiceCheckBox);
+            this.Controls.Add(this.lblTeleport);
+            this.Controls.Add(this.lblMove);
             this.Controls.Add(this.CancelButton);
             this.Controls.Add(this.OkButton);
             this.Controls.Add(this.ValueY);
@@ -260,7 +286,6 @@
             this.Controls.Add(this.label6);
             this.Controls.Add(this.label7);
             this.Controls.Add(this.lblScale);
-            this.Controls.Add(this.lblTranslate);
             this.Controls.Add(this.lblRotate);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
@@ -279,8 +304,10 @@
         #endregion
 
         private System.Windows.Forms.RadioButton lblRotate;
-        private System.Windows.Forms.RadioButton lblTranslate;
         private System.Windows.Forms.RadioButton lblScale;
+        private System.Windows.Forms.RadioButton lblMove;
+        private System.Windows.Forms.RadioButton lblTeleport;
+        private System.Windows.Forms.CheckBox RememberChoiceCheckBox;
         private System.Windows.Forms.NumericUpDown ValueY;
         private System.Windows.Forms.NumericUpDown ValueZ;
         private System.Windows.Forms.NumericUpDown ValueX;

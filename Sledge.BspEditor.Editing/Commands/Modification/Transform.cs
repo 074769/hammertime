@@ -61,7 +61,7 @@ namespace Sledge.BspEditor.Editing.Commands.Modification
 
                         // Check for texture transform
                         var tl = document.Map.Data.GetOne<TransformationFlags>() ?? new TransformationFlags();
-                        if (dialog.Type == TransformDialog.TransformType.Rotate || dialog.Type == TransformDialog.TransformType.Translate)
+                        if (dialog.Type == TransformDialog.TransformType.Rotate || dialog.Type == TransformDialog.TransformType.Move || dialog.Type == TransformDialog.TransformType.Teleport)
                         {
                             if (tl.TextureLock) transaction.Add(new TransformTexturesUniform(transform, objects.SelectMany(x => x.FindAll())));
                         }
