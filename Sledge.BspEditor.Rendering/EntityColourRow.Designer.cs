@@ -30,6 +30,9 @@ namespace Sledge.BspEditor.Rendering
         private void InitializeComponent()
         {
             SuspendLayout();
+            EntityNameTextBox = new TextBox();
+            ColorPanel = new Panel();
+            RemoveButton = new Button();
             // 
             // ColorPanel
             // 

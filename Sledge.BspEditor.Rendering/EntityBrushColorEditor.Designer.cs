@@ -33,6 +33,12 @@ namespace Sledge.BspEditor.Rendering
         private void InitializeComponent()
         {
             SuspendLayout();
+            _titleLabel = new Label();
+            _btnPanel = new FlowLayoutPanel();
+            _btnAdd = new Button();
+            _btnImport = new Button();
+            _btnExport = new Button();
+            _rowPanel = new Panel();
             // 
             // _titleLabel
             // 
