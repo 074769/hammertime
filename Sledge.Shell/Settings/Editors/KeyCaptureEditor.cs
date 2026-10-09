@@ -42,9 +42,9 @@ namespace Sledge.Shell.Settings.Editors
         {
             InitializeComponent();
 
-            // Larger text: the label fills the row on the left, the key box hugs the right.
-            _label.Font = new Font(Font.FontFamily, 12f, FontStyle.Regular);
-            KeyBox.Font = new Font(Font.FontFamily, 14f, FontStyle.Bold);
+            // Sized so all 11 rows fit the settings panel without scrolling.
+            _label.Font = new Font(Font.FontFamily, 10f, FontStyle.Regular);
+            KeyBox.Font = new Font(Font.FontFamily, 10f, FontStyle.Bold);
 
             _value = "None";
             UpdateText();

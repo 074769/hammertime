@@ -24,7 +24,7 @@ namespace Sledge.Shell.Settings.Editors
             // _label
             //
             this._label.AutoSize = true;
-            this._label.Location = new System.Drawing.Point(6, 12);
+            this._label.Location = new System.Drawing.Point(6, 6);
             this._label.Name = "_label";
             this._label.Size = new System.Drawing.Size(35, 13);
             this._label.TabIndex = 0;
@@ -33,10 +33,10 @@ namespace Sledge.Shell.Settings.Editors
             // KeyBox
             //
             this.KeyBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.KeyBox.Location = new System.Drawing.Point(208, 6);
+            this.KeyBox.Location = new System.Drawing.Point(208, 3);
             this.KeyBox.Name = "KeyBox";
             this.KeyBox.ReadOnly = true;
-            this.KeyBox.Size = new System.Drawing.Size(130, 30);
+            this.KeyBox.Size = new System.Drawing.Size(130, 20);
             this.KeyBox.TabIndex = 1;
             this.KeyBox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             //
@@ -47,7 +47,7 @@ namespace Sledge.Shell.Settings.Editors
             this.Controls.Add(this.KeyBox);
             this.Controls.Add(this._label);
             this.Name = "KeyCaptureEditor";
-            this.Size = new System.Drawing.Size(350, 42);
+            this.Size = new System.Drawing.Size(350, 26);
             this.ResumeLayout(false);
             this.PerformLayout();
 
