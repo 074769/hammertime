@@ -60,7 +60,14 @@
             "TiltUpKey": "Up key for 3D view movement tilt",
             "TiltDownKey": "Down key for 3D view movement tilt",
             "FreeLookKey": "Key for 3D view free look"
-        }
+        },
+        "EntityBrushColor": {
+            "PointEntityColour": "Point entity colour",
+            "WorldBrushColour": "World brush colour",
+            "BrushEntityColour": "Brush entity colour",
+            "CustomEntityColours": "Custom entity colour overrides"
+        },
+        "@Group.Rendering/EntityBrushColor": "Entity brush colour"
     },
     "Components": {
         "ViewportZoomStatusItem": {
@@ -77,5 +84,13 @@
             "OrthographicFront": "2D Front",
             "OrthographicSide": "2D Side"
         }
+    },
+    "EntityBrushColorEditor": {
+        "Add": "Add",
+        "Import": "Import",
+        "Export": "Export",
+        "OverridesLabel": "Custom entity colour overrides ({0})",
+        "ImportFailed": "Could not import file: {0}",
+        "ExportFailed": "Could not export file: {0}"
     }
 }
