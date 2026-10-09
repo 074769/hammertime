@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Numerics;
 using System.Drawing;
@@ -66,7 +66,7 @@ namespace Sledge.BspEditor.Rendering.Converters
 				vColor = document.Map.Data.Get<Visgroup>().FirstOrDefault(x => x.ID == vId.ID)?.Colour;
 			}
 
-			var colour = (obj.IsSelected ? Color.Red : vColor.HasValue ? vColor.Value : obj.Data.GetOne<ObjectColor>()?.Color ?? Color.White).ToVector4();
+			var colour = (obj.IsSelected ? Color.Red : vColor.HasValue ? vColor.Value : EntityBrushColorSettings.Resolve(obj, obj.Data.GetOne<ObjectColor>()?.Color ?? Color.White)).ToVector4();
 
 			var tint = Vector4.One;
 

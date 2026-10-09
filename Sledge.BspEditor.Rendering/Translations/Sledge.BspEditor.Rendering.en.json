@@ -67,7 +67,7 @@
             "BrushEntityColour": "Brush entity colour",
             "CustomEntityColours": "Custom entity colour overrides"
         },
-        "@Group.Rendering/EntityBrushColor": "Entity brush colour"
+        "@Group.Rendering/EntityBrushColor": "Custom Grid lines"
     },
     "Components": {
         "ViewportZoomStatusItem": {
