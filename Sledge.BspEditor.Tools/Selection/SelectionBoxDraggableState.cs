@@ -169,10 +169,11 @@ namespace Sledge.BspEditor.Tools.Selection
 				task = MapDocumentOperation.Perform(document, transaction);
 			}
 
+			// Keep the pivot exactly where the user placed it after a rotation.
+			// It is only re-centred when the selection itself changes (see SelectTool.SelectionChanged).
 			task.ContinueWith(_ =>
 			{
 				Engine.Interface.SetSelectiveTransform(Matrix4x4.Identity);
-				SetRotationOrigin(document.Selection.GetSelectionBoundingBox().Center);
 			});
 		}
 		private Vector3? GetPointEntityNewAngle(Primitives.MapObjects.Entity entity, Matrix4x4 transformation)
