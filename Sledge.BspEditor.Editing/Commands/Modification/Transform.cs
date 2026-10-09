@@ -45,7 +45,23 @@ namespace Sledge.BspEditor.Editing.Commands.Modification
             var objects = document.Selection.GetSelectedParents().ToList();
             var box = document.Selection.GetSelectionBoundingBox();
 
-            using (var dialog = new TransformDialog(box))
+            // Determine the pivot point used when "Use Pivot" is enabled in the dialog.
+            // The rotation widget's pivot is the authoritative pivot: when a pivot has
+            // been placed on the rotation widget it overrides the selection centre, so
+            // rotating with R then using "Use Pivot" rotates around the point the user
+            // actually moved it to. Otherwise fall back to the selection centre, or the
+            // origin of a single selected entity.
+            var pivot = box.Center;
+            if (objects.Count == 1 && objects[0] is Entity entity)
+            {
+                pivot = entity.Origin;
+            }
+            if (document.Selection.RotationPivot.HasValue)
+            {
+                pivot = document.Selection.RotationPivot.Value;
+            }
+
+            using (var dialog = new TransformDialog(box, pivot))
             {
                 _translator.Value.Translate(dialog);
                 if (dialog.ShowDialog() == DialogResult.OK)
@@ -61,7 +77,7 @@ namespace Sledge.BspEditor.Editing.Commands.Modification
 
                         // Check for texture transform
                         var tl = document.Map.Data.GetOne<TransformationFlags>() ?? new TransformationFlags();
-                        if (dialog.Type == TransformDialog.TransformType.Rotate || dialog.Type == TransformDialog.TransformType.Translate)
+                        if (dialog.Type == TransformDialog.TransformType.Rotate || dialog.Type == TransformDialog.TransformType.Move || dialog.Type == TransformDialog.TransformType.Teleport)
                         {
                             if (tl.TextureLock) transaction.Add(new TransformTexturesUniform(transform, objects.SelectMany(x => x.FindAll())));
                         }

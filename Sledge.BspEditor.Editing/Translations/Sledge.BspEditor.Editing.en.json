@@ -342,8 +342,11 @@
       "Title": "Transform",
       "Source": "Source",
       "Rotate": "Rotate",
-      "Translate": "Translate",
       "Scale": "Scale",
+      "Move": "Move",
+      "Teleport": "Teleport",
+      "UsePivot": "Use Pivot",
+      "RememberChoice": "Remember Choice",
       "OK": "OK",
       "Cancel": "Cancel"
     },

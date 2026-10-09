@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Numerics;
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
@@ -121,6 +122,8 @@ namespace Sledge.BspEditor.Primitives.MapData
         {
             return IsEmpty ? Box.Empty : new Box(_selectedObjects.Select(x => x.BoundingBox).Where(x => x != null).DefaultIfEmpty(Box.Empty));
         }
+
+        public Vector3? RotationPivot { get; set; }
 
         public IEnumerable<IMapObject> GetSelectedParents()
         {

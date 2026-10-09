@@ -12,13 +12,27 @@ namespace Sledge.BspEditor.Editing.Components
 		public enum TransformType
 		{
 			Rotate,
-			Translate,
-			Scale
+			Scale,
+			Move,
+			Teleport
 		}
 
 		public class CannotScaleByZeroException : Exception { }
 
+		// Remembered state (persisted between dialog invocations within a session)
+		private static bool _remember;
+		private static TransformType _rememberedType = TransformType.Rotate;
+		private static decimal _rememberedX;
+		private static decimal _rememberedY;
+		private static decimal _rememberedZ;
+		private static bool _rememberedUsePivot;
+		private static bool _rememberedLinkXYZ;
+
+		// Remembered window position (persisted between dialog invocations within a session)
+		private static System.Drawing.Point? _savedLocation;
+
 		private readonly Box _source;
+		private readonly Vector3 _pivot;
 		private decimal _zeroValue = 0;
 
 		public Vector3 TransformValue
@@ -38,7 +52,8 @@ namespace Sledge.BspEditor.Editing.Components
 			{
 				if (lblRotate.Checked) return TransformType.Rotate;
 				if (lblScale.Checked) return TransformType.Scale;
-				return TransformType.Translate;
+				if (lblTeleport.Checked) return TransformType.Teleport;
+				return TransformType.Move;
 			}
 			set
 			{
@@ -50,16 +65,20 @@ namespace Sledge.BspEditor.Editing.Components
 					case TransformType.Scale:
 						lblScale.Checked = true;
 						break;
+					case TransformType.Teleport:
+						lblTeleport.Checked = true;
+						break;
 					default:
-						lblTranslate.Checked = true;
+						lblMove.Checked = true;
 						break;
 				}
 			}
 		}
 
-		public TransformDialog(Box source)
+		public TransformDialog(Box source, Vector3 pivot)
 		{
 			_source = source;
+			_pivot = pivot;
 			InitializeComponent();
 
 			ZeroValueXButton.Click += (sender, e) => ValueX.Value = _zeroValue;
@@ -70,7 +89,60 @@ namespace Sledge.BspEditor.Editing.Components
 			SourceValueYButton.Click += (sender, e) => ValueY.Value = (decimal)_source.Length;
 			SourceValueZButton.Click += (sender, e) => ValueZ.Value = (decimal)_source.Height;
 
+			OkButton.Click += (sender, e) => SaveRememberedState();
+
+		ValueX.ValueChanged += ValueChanged;
+		ValueY.ValueChanged += ValueChanged;
+		ValueZ.ValueChanged += ValueChanged;
+
+			// Restore the previously remembered choice/values if enabled
+			RememberChoiceCheckBox.Checked = _remember;
+			if (_remember)
+			{
+				Type = _rememberedType;
+				UsePivotCheckBox.Checked = _rememberedUsePivot;
+			LinkXYZCheckBox.Checked = _rememberedLinkXYZ;
+			}
+		else
+		{
+			LinkXYZCheckBox.Checked = false;
+		}
+
 			TypeChanged(null, null);
+
+			if (_remember)
+			{
+				ValueX.Value = _rememberedX;
+				ValueY.Value = _rememberedY;
+				ValueZ.Value = _rememberedZ;
+			}
+
+			// Restore the last window position, otherwise center on the parent/screen
+			if (_savedLocation.HasValue)
+			{
+				StartPosition = FormStartPosition.Manual;
+				Location = _savedLocation.Value;
+			}
+			else
+			{
+				StartPosition = FormStartPosition.CenterParent;
+			}
+
+			FormClosed += (sender, e) => _savedLocation = Location;
+		}
+
+		private void SaveRememberedState()
+		{
+			_remember = RememberChoiceCheckBox.Checked;
+			if (_remember)
+			_rememberedLinkXYZ = LinkXYZCheckBox.Checked;
+			{
+				_rememberedType = Type;
+				_rememberedX = ValueX.Value;
+				_rememberedY = ValueY.Value;
+				_rememberedZ = ValueZ.Value;
+				_rememberedUsePivot = UsePivotCheckBox.Checked;
+			}
 		}
 
 		public void Translate(ITranslationStringProvider strings)
@@ -87,8 +159,11 @@ namespace Sledge.BspEditor.Editing.Components
 				SourceValueZButton.Text = src;
 
 				lblRotate.Text = strings.GetString(prefix, "Rotate");
-				lblTranslate.Text = strings.GetString(prefix, "Translate");
 				lblScale.Text = strings.GetString(prefix, "Scale");
+				lblMove.Text = strings.GetString(prefix, "Move");
+				lblTeleport.Text = strings.GetString(prefix, "Teleport");
+				UsePivotCheckBox.Text = strings.GetString(prefix, "UsePivot");
+				RememberChoiceCheckBox.Text = strings.GetString(prefix, "RememberChoice");
 
 				OkButton.Text = strings.GetString(prefix, "OK");
 				CancelButton.Text = strings.GetString(prefix, "Cancel");
@@ -102,12 +177,17 @@ namespace Sledge.BspEditor.Editing.Components
 			{
 				case TransformType.Rotate:
 					var rads = value * (float)Math.PI / 180;
-					var rMov = Matrix4x4.CreateTranslation(selectionBox.Center);
+					// Rotate around the object's pivot when requested, otherwise around the selection center
+					var pivot = UsePivotCheckBox.Checked ? _pivot : selectionBox.Center;
+					var rMov = Matrix4x4.CreateTranslation(pivot);
 					var rRot = Matrix4x4.CreateFromQuaternion(Quaternion.CreateFromYawPitchRoll(rads.Y, rads.X, rads.Z));
-					var rFin = Matrix4x4.CreateTranslation(-selectionBox.Center);
+					var rFin = Matrix4x4.CreateTranslation(-pivot);
 					return rFin * rRot * rMov;
-				case TransformType.Translate:
+				case TransformType.Move:
 					return Matrix4x4.CreateTranslation(value);
+				case TransformType.Teleport:
+					// Teleport the selection so its center lands on the entered absolute coordinates
+					return Matrix4x4.CreateTranslation(value - selectionBox.Center);
 				case TransformType.Scale:
 					if (Math.Abs(value.X) < 0.001 || Math.Abs(value.Y) < 0.001 || Math.Abs(value.Z) < 0.001) throw new CannotScaleByZeroException();
 					var sMov = Matrix4x4.CreateTranslation(-selectionBox.Center);
@@ -124,7 +204,10 @@ namespace Sledge.BspEditor.Editing.Components
 			SourceValueXButton.Visible
 				= SourceValueYButton.Visible
 				  = SourceValueZButton.Visible
-					= lblTranslate.Checked;
+					= lblMove.Checked;
+			// The pivot option only applies to rotation
+			UsePivotCheckBox.Visible = lblRotate.Checked;
+			LinkXYZCheckBox.Visible = lblScale.Checked || lblTeleport.Checked;
 			ZeroValueXButton.Text
 				= ZeroValueYButton.Text
 				  = ZeroValueZButton.Text
@@ -143,6 +226,14 @@ namespace Sledge.BspEditor.Editing.Components
 				if (ValueZ.Value == 1) ValueZ.Value = 0;
 				_zeroValue = 0;
 			}
+		}
+		private void ValueChanged(object sender, EventArgs e)
+		{
+			if (!LinkXYZCheckBox.Checked) return;
+			var value = ((NumericUpDown)sender).Value;
+			if (sender != ValueX) ValueX.Value = value;
+			if (sender != ValueY) ValueY.Value = value;
+			if (sender != ValueZ) ValueZ.Value = value;
 		}
 	}
 }

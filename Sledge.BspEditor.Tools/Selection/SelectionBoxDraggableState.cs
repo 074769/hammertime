@@ -169,10 +169,11 @@ namespace Sledge.BspEditor.Tools.Selection
 				task = MapDocumentOperation.Perform(document, transaction);
 			}
 
+			// Keep the pivot exactly where the user placed it after a rotation.
+			// It is only re-centred when the selection itself changes (see SelectTool.SelectionChanged).
 			task.ContinueWith(_ =>
 			{
 				Engine.Interface.SetSelectiveTransform(Matrix4x4.Identity);
-				SetRotationOrigin(document.Selection.GetSelectionBoundingBox().Center);
 			});
 		}
 		private Vector3? GetPointEntityNewAngle(Primitives.MapObjects.Entity entity, Matrix4x4 transformation)
@@ -201,6 +202,16 @@ namespace Sledge.BspEditor.Tools.Selection
 				widget.Active = State.Action != BoxAction.Idle && CurrentTransformationMode == widget.WidgetTransformationMode && ShowWidgets && enabled;
 				widget.SetPivotPoint(_rotationOrigin.Position);
 				widget.State = State;
+
+		// Keep the rotation widget pivot in sync with the document's selection,
+		// so the Ctrl+M Transform dialog (Use Pivot) sees the pivot the user
+		// placed on the rotation widget instead of the selection centre.
+		var doc = (Tool != null) ? Tool.GetDocument() : null;
+		if (doc != null)
+		{
+			doc.Selection.RotationPivot = _rotationOrigin.Position;
+		}
+
 			}
 
 			// The motion widgets are informational (not tied to a transformation mode),

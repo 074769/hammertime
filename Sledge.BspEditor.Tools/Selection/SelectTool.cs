@@ -396,7 +396,10 @@ namespace Sledge.BspEditor.Tools.Selection
 				_selectionBox.State.Start = box.Start;
 				_selectionBox.State.End = box.End;
 				_selectionBox.State.Action = BoxAction.Drawn;
-				_selectionBox.SetRotationOrigin(box.Center);
+				// Do NOT reset the rotation origin here. This runs on every object change,
+				// including the change a rotation/move produces, which would drag the pivot
+				// back to the new bounding-box center. The pivot stays where the user placed
+				// it and is only re-centred on an actual selection change (SelectionChanged).
 				_selectionBox.ModelsOrigin = document.Selection.Select(x => x.Data.GetOne<EntityModel>()).Where(x => x != null).Select(x => x.Renderable.Origin).ToList();
 			}
 			_selectionBox.Update();
