@@ -122,6 +122,7 @@
 
             // 
             // LinkXYZCheckBox
+            this.LinkXYZCheckBox = new System.Windows.Forms.CheckBox();
             // 
             this.LinkXYZCheckBox.AutoSize = true;
             this.LinkXYZCheckBox.Location = new System.Drawing.Point(160, 112);
