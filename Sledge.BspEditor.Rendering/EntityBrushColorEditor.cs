@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
+using Newtonsoft.Json;
 using Sledge.Common.Translations;
 using Sledge.Common.Shell.Settings;
 
@@ -27,9 +28,17 @@ namespace Sledge.BspEditor.Rendering
             set => _titleLabel.Text = value;
         }
 
+        /// <summary>
+        /// Always rebuilt from the live row controls so Add/Import/Edit/Remove are reflected
+        /// when SettingsForm persists the editor value (see SettingsForm.OnValueChanged).
+        /// </summary>
         public object Value
         {
-            get => _overrides;
+            get
+            {
+                RefreshOverridesFromRows();
+                return _overrides;
+            }
             set
             {
                 _overrides = value as List<EntityColourOverride> ?? new List<EntityColourOverride>();
@@ -70,6 +79,34 @@ namespace Sledge.BspEditor.Rendering
             _btnExport.Text = GetString("Export", "Export");
         }
 
+        private void RefreshRows()
+        {
+            _rowPanel.Controls.Clear();
+            foreach (var item in _overrides)
+            {
+                var row = new EntityColourRow
+                {
+                    EntityName = item.EntityName,
+                    Colour = item.Colour
+                };
+                row.NameChanged += Row_NameChanged;
+                row.ColourChanged += Row_ColourChanged;
+                row.RemoveRequested += Row_RemoveRequested;
+                _rowPanel.Controls.Add(row);
+            }
+        }
+
+        /// <summary>
+        /// Rebuild the in-memory override list from the live row controls so that rows
+        /// added, edited or removed in the UI are reflected in <see cref="Value"/>.
+        /// </summary>
+        private void RefreshOverridesFromRows()
+        {
+            _overrides = _rowPanel.Controls.OfType<EntityColourRow>()
+                .Select(r => new EntityColourOverride(r.EntityName, r.Colour))
+                .ToList();
+        }
+
         private void OnAddClick(object sender, EventArgs e)
         {
             var row = new EntityColourRow
@@ -108,23 +145,6 @@ namespace Sledge.BspEditor.Rendering
             OnValueChanged?.Invoke(this, Key);
         }
 
-        private void RefreshRows()
-        {
-            _rowPanel.Controls.Clear();
-            foreach (var item in _overrides)
-            {
-                var row = new EntityColourRow
-                {
-                    EntityName = item.EntityName,
-                    Colour = item.Colour
-                };
-                row.NameChanged += Row_NameChanged;
-                row.ColourChanged += Row_ColourChanged;
-                row.RemoveRequested += Row_RemoveRequested;
-                _rowPanel.Controls.Add(row);
-            }
-        }
-
         private void OnImportClick(object sender, EventArgs e)
         {
             using (var ofd = new OpenFileDialog
@@ -138,9 +158,10 @@ namespace Sledge.BspEditor.Rendering
                 try
                 {
                     var text = System.IO.File.ReadAllText(ofd.FileName);
-                    var imported = Newtonsoft.Json.JsonConvert.DeserializeObject<List<EntityColourOverride>>(text);
+                    var imported = JsonConvert.DeserializeObject<List<EntityColourOverride>>(text);
                     if (imported != null)
                     {
+                        RefreshOverridesFromRows(); // start from the live list
                         foreach (var item in imported.Where(x => x != null))
                         {
                             if (!_overrides.Any(o => o.EntityName == item.EntityName)) _overrides.Add(item);
@@ -172,7 +193,8 @@ namespace Sledge.BspEditor.Rendering
                 if (sfd.ShowDialog() != DialogResult.OK) return;
                 try
                 {
-                    var text = Newtonsoft.Json.JsonConvert.SerializeObject(_overrides, Newtonsoft.Json.Formatting.Indented);
+                    RefreshOverridesFromRows(); // export the live list, not a stale cache
+                    var text = JsonConvert.SerializeObject(_overrides, Formatting.Indented);
                     System.IO.File.WriteAllText(sfd.FileName, text);
                 }
                 catch (Exception ex)

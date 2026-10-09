@@ -9,8 +9,8 @@ namespace Sledge.BspEditor.Rendering
         private IContainer components = null;
 
         public TextBox EntityNameTextBox;
-        public Panel ColorPanel;
         public Button RemoveButton;
+        public Panel ColorPanel;
 
         protected override void Dispose(bool disposing)
         {
@@ -29,57 +29,59 @@ namespace Sledge.BspEditor.Rendering
         /// </summary>
         private void InitializeComponent()
         {
-            SuspendLayout();
             EntityNameTextBox = new TextBox();
-            ColorPanel = new Panel();
             RemoveButton = new Button();
+            ColorPanel = new Panel();
+            SuspendLayout();
             // 
-            // ColorPanel
+            // RemoveButton
             // 
-            ColorPanel.Anchor = AnchorStyles.Left | AnchorStyles.Top;
-            ColorPanel.BackColor = Color.Gray;
-            ColorPanel.Cursor = System.Windows.Forms.Cursors.Hand;
-            ColorPanel.Location = new System.Drawing.Point(3, 3);
-            ColorPanel.Name = "ColorPanel";
-            ColorPanel.Size = new System.Drawing.Size(30, 22);
-            ColorPanel.TabIndex = 0;
-            ColorPanel.TabStop = false;
+            RemoveButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)));
+            RemoveButton.Cursor = System.Windows.Forms.Cursors.Hand;
+            RemoveButton.DialogResult = System.Windows.Forms.DialogResult.None;
+            RemoveButton.Location = new System.Drawing.Point(3, 2);
+            RemoveButton.Name = "RemoveButton";
+            RemoveButton.Size = new System.Drawing.Size(26, 22);
+            RemoveButton.TabIndex = 2;
+            RemoveButton.Text = "X";
+            RemoveButton.UseVisualStyleBackColor = true;
             // 
             // EntityNameTextBox
             // 
-            EntityNameTextBox.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top;
+            EntityNameTextBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
             EntityNameTextBox.Location = new System.Drawing.Point(38, 3);
             EntityNameTextBox.Name = "EntityNameTextBox";
             EntityNameTextBox.Size = new System.Drawing.Size(257, 20);
             EntityNameTextBox.TabIndex = 1;
             // 
-            // RemoveButton
+            // ColorPanel
             // 
-            RemoveButton.Anchor = AnchorStyles.Right | AnchorStyles.Top;
-            RemoveButton.Cursor = System.Windows.Forms.Cursors.Hand;
-            RemoveButton.Location = new System.Drawing.Point(296, 2);
-            RemoveButton.Name = "RemoveButton";
-            RemoveButton.Size = new System.Drawing.Size(26, 22);
-            RemoveButton.TabIndex = 2;
-            RemoveButton.Text = "X";
+            ColorPanel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            ColorPanel.BackColor = System.Drawing.Color.Gray;
+            ColorPanel.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            ColorPanel.Cursor = System.Windows.Forms.Cursors.Hand;
+            ColorPanel.Location = new System.Drawing.Point(296, 3);
+            ColorPanel.Name = "ColorPanel";
+            ColorPanel.Size = new System.Drawing.Size(30, 22);
+            ColorPanel.TabIndex = 0;
+            ColorPanel.TabStop = false;
             // 
             // EntityColourRow
             // 
-            AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
-            AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            Controls.Add(ColorPanel);
-            Controls.Add(EntityNameTextBox);
-            Controls.Add(RemoveButton);
-            Dock = DockStyle.Top;
-            Height = 28;
-            Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-            Name = "EntityColourRow";
-            Size = new System.Drawing.Size(350, 28);
-            ResumeLayout(false);
-            PerformLayout();
+            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
+            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.Controls.Add(this.ColorPanel);
+            this.Controls.Add(this.EntityNameTextBox);
+            this.Controls.Add(this.RemoveButton);
+            this.Dock = System.Windows.Forms.DockStyle.Top;
+            this.Height = 28;
+            this.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
+            this.Name = "EntityColourRow";
+            this.Size = new System.Drawing.Size(350, 28);
+            this.ResumeLayout(false);
+            this.PerformLayout();
         }
 
         #endregion
-    
     }
 }
