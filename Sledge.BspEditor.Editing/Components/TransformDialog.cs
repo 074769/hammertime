@@ -30,9 +30,6 @@ namespace Sledge.BspEditor.Editing.Components
 		// Remembered window position (persisted between dialog invocations within a session)
 		private static System.Drawing.Point? _savedLocation;
 
-		// Scale factor applied to the whole dialog (35% larger)
-		private const float ScaleFactor = 1.35f;
-
 		private readonly Box _source;
 		private readonly Vector3 _pivot;
 		private decimal _zeroValue = 0;
@@ -83,9 +80,6 @@ namespace Sledge.BspEditor.Editing.Components
 			_pivot = pivot;
 			InitializeComponent();
 
-			// Scale the entire dialog (and everything inside it) up by 35%
-			ScaleDialog();
-
 			ZeroValueXButton.Click += (sender, e) => ValueX.Value = _zeroValue;
 			ZeroValueYButton.Click += (sender, e) => ValueY.Value = _zeroValue;
 			ZeroValueZButton.Click += (sender, e) => ValueZ.Value = _zeroValue;
@@ -125,25 +119,6 @@ namespace Sledge.BspEditor.Editing.Components
 			}
 
 			FormClosed += (sender, e) => _savedLocation = Location;
-		}
-
-		private void ScaleDialog()
-		{
-			// Disable automatic DPI/font scaling so our manual scale is the only factor
-			AutoScaleMode = AutoScaleMode.None;
-
-			foreach (Control c in Controls)
-			{
-				var loc = c.Location;
-				var size = c.Size;
-				var font = c.Font;
-				c.Location = new System.Drawing.Point((int)(loc.X * ScaleFactor), (int)(loc.Y * ScaleFactor));
-				c.Size = new System.Drawing.Size((int)(size.Width * ScaleFactor), (int)(size.Height * ScaleFactor));
-				c.Font = new System.Drawing.Font(font.FontFamily, font.Size * ScaleFactor, font.Style, font.Unit, font.GdiCharSet, font.GdiVerticalFont);
-			}
-
-			// Grow the form's client area to match
-			ClientSize = new System.Drawing.Size((int)(ClientSize.Width * ScaleFactor), (int)(ClientSize.Height * ScaleFactor));
 		}
 
 		private void SaveRememberedState()
