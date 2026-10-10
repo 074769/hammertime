@@ -57,6 +57,15 @@ namespace Sledge.BspEditor.Rendering.Grid
 			_validated = false;
 		}
 
+		/// <summary>
+		/// Force the grid (line positions and colours) to be rebuilt on the next render.
+		/// Used when the grid settings change, so that no scene rebuild is needed.
+		/// </summary>
+		public void Invalidate()
+		{
+			_validated = false;
+		}
+
 		public bool ShouldRender(IPipeline pipeline, IViewport viewport)
 		{
 			return pipeline.Type == PipelineType.Wireframe && viewport == _viewport && _grid != null && viewport.Camera.Type == CameraType.Orthographic;

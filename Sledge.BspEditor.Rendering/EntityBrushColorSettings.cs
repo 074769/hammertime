@@ -71,7 +71,9 @@ namespace Sledge.BspEditor.Rendering
         /// <summary>
         /// The unique name of the settings container.
         /// </summary>
-        public string Name => "Sledge.BspEditor.Rendering.EntityBrushColor";
+        public const string ContainerName = "Sledge.BspEditor.Rendering.EntityBrushColor";
+
+        public string Name => ContainerName;
 
         /// <summary>
         /// True once values have been loaded into the container.

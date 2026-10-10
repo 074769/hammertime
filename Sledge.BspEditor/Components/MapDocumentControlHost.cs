@@ -423,7 +423,10 @@ namespace Sledge.BspEditor.Components
 				}
 				_activeDocument.Map.Data.Replace(dd);
 				_activeDocument.Map.Data.Replace(tl);
-				Oy.Publish("SettingsChanged", new object());
+
+				// The display flags above changed: refresh the scene only. This isn't a
+				// settings change, so don't make the toolbars/menus rebuild.
+				Oy.Publish("Scene:Refresh");
 
 				if (tags[1] == "Unshaded")
 				{

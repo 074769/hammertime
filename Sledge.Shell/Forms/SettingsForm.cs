@@ -26,6 +26,7 @@ namespace Sledge.Shell.Forms
 
         private Dictionary<ISettingsContainer, List<SettingKey>> _keys;
         private Dictionary<ISettingsContainer, JsonSettingsStore> _values;
+        private Dictionary<ISettingsContainer, JsonSettingsStore> _originalValues;
 		private bool _darktheme;
 
 		public string Title
@@ -80,6 +81,9 @@ namespace Sledge.Shell.Forms
                     x.Value.StoreValues(fss);
                     return fss;
                 });
+                // Keep a pristine copy of the values the dialog opened with, so that OK
+                // can tell which containers the user actually changed.
+                _originalValues = _values.ToDictionary(x => x.Key, x => new JsonSettingsStore(x.Value.ToJson()));
                 LoadGroupList();
             }
             base.OnVisibleChanged(e);
@@ -242,14 +246,44 @@ namespace Sledge.Shell.Forms
 
         private void OkClicked(object sender, EventArgs e)
         {
+            // Work out what the user actually changed in this dialog. LoadValues can have
+            // side effects (window and dock layout, engine state, environments, ...), so
+            // containers that didn't change must not be touched at all.
+            var changes = CalculateChanges();
+
             foreach (var kv in _values)
             {
-                kv.Key.LoadValues(kv.Value);
+                if (changes.MayHaveChanged(kv.Key.Name)) kv.Key.LoadValues(kv.Value);
             }
-            Oy.Publish("SettingPreChanged");
+
+            Oy.Publish("SettingPreChanged", changes);
             Oy.Publish("Settings:Save");
-            Oy.Publish("SettingsChanged", new object());
+            Oy.Publish("SettingsChanged", changes);
             Close();
+        }
+
+        /// <summary>
+        /// Diff the values the dialog opened with against the values the user left behind,
+        /// and return the containers that actually changed.
+        /// </summary>
+        private SettingsChangeSet CalculateChanges()
+        {
+            var changed = new List<string>();
+            foreach (var kv in _values)
+            {
+                // No snapshot to compare against: assume the container changed
+                if (_originalValues == null || !_originalValues.TryGetValue(kv.Key, out var original))
+                {
+                    changed.Add(kv.Key.Name);
+                    continue;
+                }
+
+                if (original.GetDifferentKeys(kv.Value).Any())
+                {
+                    changed.Add(kv.Key.Name);
+                }
+            }
+            return new SettingsChangeSet(changed);
         }
 
         private void CancelClicked(object sender, EventArgs e)

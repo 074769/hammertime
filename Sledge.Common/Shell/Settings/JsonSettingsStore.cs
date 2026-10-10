@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace Sledge.Common.Shell.Settings
@@ -61,6 +62,31 @@ namespace Sledge.Common.Shell.Settings
         public void Delete(string key)
         {
             if (_keys.ContainsKey(key)) _keys.Remove(key);
+        }
+
+        /// <summary>
+        /// Compare this store with another one and return the keys whose values differ,
+        /// including keys that only exist in one of the two stores.
+        /// Used to work out what actually changed before applying settings.
+        /// </summary>
+        /// <param name="other">The store to compare against</param>
+        /// <returns>The keys that differ between the two stores</returns>
+        public IEnumerable<string> GetDifferentKeys(JsonSettingsStore other)
+        {
+            var keys = new HashSet<string>(_keys.Keys);
+            keys.UnionWith(other._keys.Keys);
+            foreach (var key in keys)
+            {
+                if (GetRawValue(key) != other.GetRawValue(key)) yield return key;
+            }
+        }
+
+        private string GetRawValue(string key)
+        {
+            if (!_keys.TryGetValue(key, out var prop)) return null;
+            var value = prop.Value;
+            if (value == null || value.Type == JTokenType.Null) return null;
+            return value.ToString(Formatting.None);
         }
 
         public string ToJson()
