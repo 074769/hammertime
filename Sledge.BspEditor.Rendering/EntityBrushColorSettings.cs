@@ -56,11 +56,16 @@ namespace Sledge.BspEditor.Rendering
                     var match = CustomEntityColours?.FirstOrDefault(o => o != null
                         && !string.IsNullOrWhiteSpace(o.EntityName)
                         && string.Equals(o.EntityName.Trim(), name, StringComparison.OrdinalIgnoreCase));
-                    if (match != null) return match.Colour;
+                    if (match != null) return Opaque(match.Colour);
                 }
-                return entity.Hierarchy.HasChildren ? BrushEntityColour : PointEntityColour;
+                return Opaque(entity.Hierarchy.HasChildren ? BrushEntityColour : PointEntityColour);
             }
-            return obj is Solid ? WorldBrushColour : fallback;
+            return obj is Solid ? Opaque(WorldBrushColour) : fallback;
+        }
+
+        private static Color Opaque(Color c)
+        {
+            return Color.FromArgb(255, c.R, c.G, c.B);
         }
 
         /// <summary>

@@ -21,8 +21,9 @@ namespace Sledge.Shell.Settings.Editors
             get => ColorPanel.BackColor;
             set
             {
-                var v = value ?? Color.Black;
-                ColorPanel.BackColor = (Color) v;
+                var v = (Color) (value ?? Color.Black);
+                // Colours that come back from the settings file can have alpha 0, which paints the swatch blank
+                ColorPanel.BackColor = Color.FromArgb(255, v.R, v.G, v.B);
                 var c = ColorPanel.BackColor;
                 HexBox.Text = $@"{c.R:X2}{c.G:X2}{c.B:X2}";
             }

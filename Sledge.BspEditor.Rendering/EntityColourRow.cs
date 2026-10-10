@@ -77,7 +77,7 @@ namespace Sledge.BspEditor.Rendering
         public Color Colour
         {
             get => ColorPanel.BackColor;
-            set => ColorPanel.BackColor = value;
+            set => ColorPanel.BackColor = Color.FromArgb(255, value.R, value.G, value.B); // saved colours can have alpha 0 (blank swatch)
         }
 
         private void ColorPanel_Click(object sender, EventArgs e)
