@@ -50,6 +50,10 @@ namespace Sledge.Shell.Registers
 
 		private void SettingsChanged(object obj)
 		{
+			// Only the environment settings can invalidate a document's environment.
+			// (The container name lives in BspEditor, which this assembly doesn't reference.)
+			if (!SettingsChangeSet.FromPayload(obj).MayHaveChanged("Sledge.BspEditor.Environment.EnvironmentRegister")) return;
+
 			foreach (var document in _openDocuments)
 			{
 				var loader = _loaders.FirstOrDefault(x => x.CanLoad(document.FileName)) ?? _loaders.FirstOrDefault();

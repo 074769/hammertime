@@ -5,10 +5,12 @@ using System.Linq;
 using System.Threading.Tasks;
 using LogicAndTrick.Oy;
 using Sledge.BspEditor.Documents;
+using Sledge.BspEditor.Grid;
 using Sledge.BspEditor.Modification;
 using Sledge.BspEditor.Primitives.MapData;
 using Sledge.Common.Shell.Documents;
 using Sledge.Common.Shell.Hooks;
+using Sledge.Common.Shell.Settings;
 using Sledge.Rendering.Engine;
 using Sledge.Rendering.Viewports;
 
@@ -33,6 +35,7 @@ namespace Sledge.BspEditor.Rendering.Grid
             Oy.Subscribe<IDocument>("Document:Activated", DocumentActivated);
             Oy.Subscribe<IDocument>("Document:Closed", DocumentClosed);
             Oy.Subscribe<Change>("MapDocument:Changed", DocumentChanged);
+            Oy.Subscribe<object>("SettingsChanged", SettingsChanged);
 
             _engine.Value.ViewportCreated += ViewportCreated;
             _engine.Value.ViewportDestroyed += ViewportDestroyed;
@@ -97,6 +100,37 @@ namespace Sledge.BspEditor.Rendering.Grid
                 _engine.Value.Remove(gr);
                 gr.Dispose();
             }
+        }
+
+        // Settings events
+
+        /// <summary>
+        /// The containers that decide what the grid looks like: the grid line colours and
+        /// the grid line rules. Their values are baked into the grid buffers, so the grid
+        /// renderables (but not the scene) have to be rebuilt when they change.
+        /// </summary>
+        private static readonly string[] GridSettingsContainers =
+        {
+            Renderer.ContainerName,
+            SquareGridFactory.ContainerName
+        };
+
+        private Task SettingsChanged(object o)
+        {
+            if (!SettingsChangeSet.FromPayload(o).MayHaveChanged(GridSettingsContainers))
+            {
+                return Task.FromResult(0);
+            }
+
+            lock (_lock)
+            {
+                foreach (var gr in _viewportRenderables.Values)
+                {
+                    gr.Invalidate();
+                }
+            }
+
+            return Task.FromResult(0);
         }
 
         // Grid handling

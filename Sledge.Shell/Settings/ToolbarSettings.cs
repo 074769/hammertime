@@ -74,7 +74,12 @@ namespace Sledge.Shell.Settings
 		public static ToolbarLayout Layout { get; private set; } = new ToolbarLayout();
 		public static int IconSize { get; private set; } = 32;
 
-		public string Name => "Sledge.Shell.Toolbar";
+		/// <summary>
+		/// The unique name of the settings container.
+		/// </summary>
+		public const string ContainerName = "Sledge.Shell.Toolbar";
+
+		public string Name => ContainerName;
 		public bool ValuesLoaded { get; private set; }
 
 		public IEnumerable<SettingKey> GetKeys()

@@ -40,7 +40,12 @@ namespace Sledge.BspEditor.Rendering.Converters
 		[Setting("DrawCenterHandles")] private bool _drawCenterHandles = true;
 		// [Setting("CenterHandlesActiveViewportOnly")] private bool _centerHandlesActiveViewportOnly = false;
 
-		string ISettingsContainer.Name => "Sledge.BspEditor.Rendering.Converters.CenterHandlesConverter";
+		/// <summary>
+		/// The unique name of the settings container.
+		/// </summary>
+		public const string ContainerName = "Sledge.BspEditor.Rendering.Converters.CenterHandlesConverter";
+
+		string ISettingsContainer.Name => ContainerName;
 		public bool ValuesLoaded { get; private set; } = false;
 
 		IEnumerable<SettingKey> ISettingsContainer.GetKeys()

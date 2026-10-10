@@ -10,6 +10,7 @@ using Sledge.BspEditor.Rendering.Resources;
 using Sledge.Common;
 using Sledge.Common.Shell.Documents;
 using Sledge.Common.Shell.Hooks;
+using Sledge.Common.Shell.Settings;
 using Sledge.DataStructures.GameData;
 using Sledge.DataStructures.Geometric;
 using Sledge.FileSystem;
@@ -68,6 +69,7 @@ namespace Sledge.BspEditor.Rendering.Scene
 		public Task OnStartup()
 		{
 			Oy.Subscribe<object>("SettingsChanged", SettingsChanged);
+			Oy.Subscribe<object>("Scene:Refresh", SceneRefresh);
 			Oy.Subscribe<IDocument>("Document:Activated", DocumentActivated);
 			Oy.Subscribe<IDocument>("Document:Closed", DocumentClosed);
 			Oy.Subscribe<Change>("MapDocument:Changed", DocumentChanged);
@@ -147,7 +149,40 @@ namespace Sledge.BspEditor.Rendering.Scene
 			}
 		}
 
-		private async Task SettingsChanged(object o)
+		/// <summary>
+		/// The settings containers whose values are baked into the scene buffers when the
+		/// scene is built. Everything else (grid colours, gizmo scale, clear colour, MSAA,
+		/// toolbar, hotkeys, ...) is applied by its own component and must not trigger a
+		/// full scene rebuild.
+		/// </summary>
+		private static readonly string[] SceneSettingsContainers =
+		{
+			EntityBrushColorSettings.ContainerName,
+			CenterHandlesConverter.ContainerName,
+			EnvironmentRegister.ContainerName
+		};
+
+		private Task SettingsChanged(object o)
+		{
+			// A publisher that doesn't describe what changed is treated as "everything changed"
+			if (!SettingsChangeSet.FromPayload(o).MayHaveChanged(SceneSettingsContainers))
+			{
+				return Task.CompletedTask;
+			}
+
+			return RebuildScene();
+		}
+
+		/// <summary>
+		/// A dedicated message for "the scene is stale, rebuild it" (e.g. viewport display
+		/// toggles). This isn't a settings change, so nothing else should rebuild.
+		/// </summary>
+		private Task SceneRefresh(object o)
+		{
+			return RebuildScene();
+		}
+
+		private async Task RebuildScene()
 		{
 			var doc = _activeDocument.TryGetTarget(out var md) ? md : null;
 			await UpdateScene(doc, null);

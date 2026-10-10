@@ -46,7 +46,12 @@ namespace Sledge.BspEditor.Grid
 			return grid is SquareGrid;
 		}
 
-		string ISettingsContainer.Name => "Sledge.BspEditor.Grid.SquareGridFactory";
+		/// <summary>
+		/// The unique name of the settings container.
+		/// </summary>
+		public const string ContainerName = "Sledge.BspEditor.Grid.SquareGridFactory";
+
+		string ISettingsContainer.Name => ContainerName;
 
 		public IEnumerable<SettingKey> GetKeys()
 		{

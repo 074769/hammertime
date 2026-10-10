@@ -83,7 +83,12 @@ namespace Sledge.BspEditor.Environment
             return null;
         }
 
-        public string Name => "Sledge.BspEditor.Environment.EnvironmentRegister";
+        /// <summary>
+        /// The unique name of the settings container.
+        /// </summary>
+        public const string ContainerName = "Sledge.BspEditor.Environment.EnvironmentRegister";
+
+        public string Name => ContainerName;
 
         public IEnumerable<SettingKey> GetKeys()
         {

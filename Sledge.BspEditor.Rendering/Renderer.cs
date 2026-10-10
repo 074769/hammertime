@@ -36,7 +36,12 @@ namespace Sledge.BspEditor.Rendering
 
 		// Settings container
 
-		public string Name => "Sledge.BspEditor.Rendering.Renderer";
+		/// <summary>
+		/// The unique name of the settings container.
+		/// </summary>
+		public const string ContainerName = "Sledge.BspEditor.Rendering.Renderer";
+
+		public string Name => ContainerName;
 		public bool ValuesLoaded { get; private set; } = false;
 
 		public IEnumerable<SettingKey> GetKeys()

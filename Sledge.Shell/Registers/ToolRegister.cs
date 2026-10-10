@@ -12,6 +12,7 @@ using Sledge.Common.Shell.Components;
 using Sledge.Common.Shell.Context;
 using Sledge.Common.Shell.Documents;
 using Sledge.Common.Shell.Hooks;
+using Sledge.Common.Shell.Settings;
 using Sledge.Common.Shell.Hotkeys;
 using Sledge.Shell.Settings;
 
@@ -42,9 +43,11 @@ namespace Sledge.Shell.Registers
 			// Subscribe to context changes
 			Oy.Subscribe<IContext>("Context:Changed", ContextChanged);
 
-			// Rebuild the toolbar when settings change (order, visibility and icons are user settings)
-			Oy.Subscribe<object>("SettingsChanged", async _ =>
+			// Rebuild the toolbar when its own settings change (order, visibility and icons).
+			// Any other settings change must not touch the toolbar.
+			Oy.Subscribe<object>("SettingsChanged", async o =>
 			{
+				if (!SettingsChangeSet.FromPayload(o).MayHaveChanged(ToolbarSettings.ContainerName)) return;
 				if (_lastContext != null) await ContextChanged(_lastContext);
 			});
 
