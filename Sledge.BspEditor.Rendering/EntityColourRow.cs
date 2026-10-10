@@ -2,6 +2,7 @@
 using System.ComponentModel;
 using System.Drawing;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
 namespace Sledge.BspEditor.Rendering
@@ -24,6 +25,10 @@ namespace Sledge.BspEditor.Rendering
             ColorPanel.Click += ColorPanel_Click;
             RemoveButton.Click += RemoveButton_Click;
             EntityNameTextBox.TextChanged += EntityNameTextBox_TextChanged;
+            HexBox.TextChanged += HexBox_TextChanged;
+            HexBox.Leave += HexBox_Leave;
+            ColorPanel.BackColor = Color.Gray;
+            UpdateHexFromColour();
 
             // Autocomplete of common entity class names so users match the right FGD class.
             EntityNameTextBox.AutoCompleteMode = AutoCompleteMode.Suggest;
@@ -78,7 +83,11 @@ namespace Sledge.BspEditor.Rendering
         public Color Colour
         {
             get => ColorPanel.BackColor;
-            set => ColorPanel.BackColor = Color.FromArgb(255, value.R, value.G, value.B); // saved colours can have alpha 0 (blank swatch)
+            set
+            {
+                ColorPanel.BackColor = Color.FromArgb(255, value.R, value.G, value.B); // saved colours can have alpha 0 (blank swatch)
+                UpdateHexFromColour();
+            }
         }
 
         private void ColorPanel_Click(object sender, EventArgs e)
@@ -88,9 +97,40 @@ namespace Sledge.BspEditor.Rendering
                 if (cp.ShowDialog() == DialogResult.OK)
                 {
                     ColorPanel.BackColor = cp.Color;
+                    UpdateHexFromColour();
                     ColourChanged?.Invoke(this, EventArgs.Empty);
                 }
             }
+        }
+
+        private bool _updatingHex;
+
+        private static string ToHex(Color c)
+        {
+            return $"{c.R:X2}{c.G:X2}{c.B:X2}";
+        }
+
+        private void UpdateHexFromColour()
+        {
+            _updatingHex = true;
+            try { HexBox.Text = ToHex(ColorPanel.BackColor); }
+            finally { _updatingHex = false; }
+        }
+
+        private void HexBox_TextChanged(object sender, EventArgs e)
+        {
+            if (_updatingHex) return;
+            // Accept #000 and #000000 styles, like the colour settings above
+            if (!Regex.IsMatch(HexBox.Text, "^([0-9A-Fa-f]{3}){1,2}$")) return;
+            var c = ColorTranslator.FromHtml('#' + HexBox.Text);
+            ColorPanel.BackColor = Color.FromArgb(255, c.R, c.G, c.B);
+            ColourChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void HexBox_Leave(object sender, EventArgs e)
+        {
+            // Restore a valid value if the typed text was incomplete
+            if (!Regex.IsMatch(HexBox.Text, "^[0-9A-Fa-f]{6}$")) UpdateHexFromColour();
         }
 
         private void RemoveButton_Click(object sender, EventArgs e)

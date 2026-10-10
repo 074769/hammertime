@@ -11,6 +11,8 @@ namespace Sledge.BspEditor.Rendering
         public TextBox EntityNameTextBox;
         public Button RemoveButton;
         public Panel ColorPanel;
+        public Label HashLabel;
+        public TextBox HexBox;
 
         protected override void Dispose(bool disposing)
         {
@@ -32,6 +34,8 @@ namespace Sledge.BspEditor.Rendering
             EntityNameTextBox = new TextBox();
             RemoveButton = new Button();
             ColorPanel = new Panel();
+            HashLabel = new Label();
+            HexBox = new TextBox();
             SuspendLayout();
             // 
             // RemoveButton
@@ -51,7 +55,7 @@ namespace Sledge.BspEditor.Rendering
             EntityNameTextBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
             EntityNameTextBox.Location = new System.Drawing.Point(38, 3);
             EntityNameTextBox.Name = "EntityNameTextBox";
-            EntityNameTextBox.Size = new System.Drawing.Size(257, 20);
+            EntityNameTextBox.Size = new System.Drawing.Size(190, 20);
             EntityNameTextBox.TabIndex = 1;
             // 
             // ColorPanel
@@ -60,17 +64,38 @@ namespace Sledge.BspEditor.Rendering
             ColorPanel.BackColor = System.Drawing.Color.Gray;
             ColorPanel.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             ColorPanel.Cursor = System.Windows.Forms.Cursors.Hand;
-            ColorPanel.Location = new System.Drawing.Point(296, 3);
+            ColorPanel.Location = new System.Drawing.Point(232, 3);
             ColorPanel.Name = "ColorPanel";
             ColorPanel.Size = new System.Drawing.Size(30, 22);
             ColorPanel.TabIndex = 0;
             ColorPanel.TabStop = false;
+            // 
+            // HashLabel
+            // 
+            HashLabel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            HashLabel.AutoSize = true;
+            HashLabel.Location = new System.Drawing.Point(268, 7);
+            HashLabel.Name = "HashLabel";
+            HashLabel.Size = new System.Drawing.Size(14, 13);
+            HashLabel.TabIndex = 3;
+            HashLabel.Text = "#";
+            // 
+            // HexBox
+            // 
+            HexBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            HexBox.Location = new System.Drawing.Point(285, 3);
+            HexBox.MaxLength = 6;
+            HexBox.Name = "HexBox";
+            HexBox.Size = new System.Drawing.Size(58, 20);
+            HexBox.TabIndex = 4;
             // 
             // EntityColourRow
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.Controls.Add(this.ColorPanel);
+            this.Controls.Add(this.HashLabel);
+            this.Controls.Add(this.HexBox);
             this.Controls.Add(this.EntityNameTextBox);
             this.Controls.Add(this.RemoveButton);
             this.Dock = System.Windows.Forms.DockStyle.Top;
