@@ -20,6 +20,7 @@ namespace Sledge.BspEditor.Rendering
         public EntityColourRow()
         {
             InitializeComponent();
+            ColorPanel.Tag = "NoTheme"; // DialogRegister's theme pass skips controls with this tag
             ColorPanel.Click += ColorPanel_Click;
             RemoveButton.Click += RemoveButton_Click;
             EntityNameTextBox.TextChanged += EntityNameTextBox_TextChanged;

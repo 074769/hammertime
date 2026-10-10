@@ -76,8 +76,12 @@ namespace Sledge.Shell.Registers
 			}
 		}
 
+		/// <summary>Controls with this Tag (colour swatches) keep their own BackColor when the theme is applied.</summary>
+		public const string NoThemeTag = "NoTheme";
+
 		public static void ColorControlsRecursively(Control control, bool darkMode)
 		{
+			if (control.Tag is string tag && tag == NoThemeTag) return;
 			foreach (Control childControl in control.Controls)
 			{
 				ColorControlsRecursively(childControl, darkMode);

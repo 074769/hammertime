@@ -35,6 +35,7 @@ namespace Sledge.Shell.Settings.Editors
         public ColorEditor()
         {
             InitializeComponent();
+            ColorPanel.Tag = Sledge.Shell.Registers.DialogRegister.NoThemeTag;
         }
 
         private void PickColor(object sender, EventArgs e)
