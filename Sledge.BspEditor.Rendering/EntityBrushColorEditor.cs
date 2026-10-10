@@ -164,7 +164,10 @@ namespace Sledge.BspEditor.Rendering
                         RefreshOverridesFromRows(); // start from the live list
                         foreach (var item in imported.Where(x => x != null))
                         {
-                            if (!_overrides.Any(o => o.EntityName == item.EntityName)) _overrides.Add(item);
+                            // Entities that are already listed take the imported colour, new ones are added
+                            var existing = _overrides.FirstOrDefault(o => string.Equals(o.EntityName, item.EntityName, StringComparison.OrdinalIgnoreCase));
+                            if (existing != null) existing.Colour = item.Colour;
+                            else _overrides.Add(item);
                         }
                         RefreshRows();
                         NotifyChanged();
