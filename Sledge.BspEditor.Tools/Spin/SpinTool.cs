@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Drawing;
+using System.Globalization;
 using System.Linq;
 using System.Numerics;
 using System.Windows.Forms;
@@ -27,19 +28,21 @@ using Plane = Sledge.DataStructures.Geometric.Plane;
 namespace Sledge.BspEditor.Tools.Spin
 {
     /// <summary>
-    /// Spin tool: duplicates the selected solids around an axis running through
-    /// the rotation gizmo pivot (Selection.RotationPivot, falling back to the
-    /// selection centre) and bisects every piece against the radial half-space
-    /// planes of its own angular slot, so the result forms a clean arch with
-    /// radial seams. The interaction is similar to Blender's spin tool: drag in
-    /// a 2D viewport around the pivot to sweep out the total angle.
+    /// Spin tool: duplicates the selected solids around the rotation pivot
+    /// (Selection.RotationPivot, falling back to the selection centre) so they
+    /// form an arch.
     ///
-    /// Textures: the texture axes of every duplicate are rotated along with the
-    /// geometry (like texture lock). Every second piece then has its texture
-    /// mapping mirrored about the mid-radial plane of its slot. Together these
-    /// two steps make the texture on the visible arc surfaces continue across
-    /// the seams between adjacent pieces without a jump - the pattern is
-    /// mirrored per segment ("flipped scale") so the faces tile up seamlessly.
+    /// Auto steps (default): the selection's own angular width is the step, so
+    /// piece j is exactly the selection rotated into slot j. Nothing needs cutting.
+    ///
+    /// Manual steps: the sweep is divided into Steps equal slots. Each piece is
+    /// trimmed to its slot (when Bisect is on). A piece that can't be trimmed
+    /// cleanly is left unchanged and reported, never kept overlapping.
+    ///
+    /// Every piece is a copy of the selection, so the rotated texture axes move
+    /// with the geometry (like texture lock). Odd pieces then get their texture
+    /// mapping mirrored about the mid-radial plane of their slot, which makes the
+    /// pattern continue across each seam.
     /// </summary>
     [Export(typeof(ITool))]
     [Export]
@@ -48,29 +51,50 @@ namespace Sledge.BspEditor.Tools.Spin
     {
         public static readonly Capability SpinToolCapability = Capability.Create("SpinTool");
 
-        /// <summary>Number of segments (pieces) in the resulting arch.</summary>
+        /// <summary>Largest number of pieces a spin can make.</summary>
+        public const int MaxSteps = 64;
+
+        /// <summary>Mouse movement (in pixels) before a press counts as a drag.</summary>
+        private const float DragThresholdPixels = 4f;
+
+        /// <summary>Screen-space grab radius for the pivot (gizmo) handle.</summary>
+        private const int PivotDragSize = 8;
+
+        /// <summary>Vertices within this distance of the straight line between their neighbours are removed (map units).</summary>
+        private const float CollinearTolerance = 0.05f;
+
+        /// <summary>Manual mode: number of equal slots the sweep is divided into.</summary>
         public int Steps { get; set; } = 8;
 
-        /// <summary>Total sweep angle in degrees, used when applying from the panel or with Enter.</summary>
+        /// <summary>Total sweep in degrees. Used by the panel, Enter and the Spin button; set by dragging.</summary>
         public float AngleDegrees { get; set; } = 90f;
 
-        /// <summary>When true, every piece is cut by the radial planes bounding its slot.</summary>
+        /// <summary>When true each step is exactly one piece wide, so pieces tile without cutting.</summary>
+        public bool AutoSteps { get; set; } = true;
+
+        /// <summary>Manual mode only: trim every piece to its own slot.</summary>
         public bool BisectPieces { get; set; } = true;
 
         /// <summary>When true, every second piece gets its texture mapping mirrored so the pattern tiles seamlessly.</summary>
         public bool MirrorUvs { get; set; } = true;
 
         // Drag state
+        private bool _pressed;
         private bool _dragging;
         private bool _movingPivot;
+        private int _downX;
+        private int _downY;
         private Vector3 _dragPivot;
-        private float _dragStartAngle;
-        private float _dragSweep;
+        private float _lastAngle;
+        private float _rawSweep;
 
-        /// <summary>Screen-space grab radius for the pivot (gizmo) handle.</summary>
-        private const int PivotDragSize = 8;
+        /// <summary>
+        /// Key of the selection the current pivot belongs to. A selection change
+        /// made outside a spin clears the pivot; the spin's own result keeps it.
+        /// </summary>
+        private string _pivotKey;
 
-        // The 2D view the tool was last used in; the spin axis is derived from it
+        // The 2D view the tool was last used in; Enter and the Spin button spin around its axis
         private OrthographicCamera.OrthographicType _viewType = OrthographicCamera.OrthographicType.Top;
 
         public SpinTool()
@@ -90,6 +114,22 @@ namespace Sledge.BspEditor.Tools.Spin
 
         public override Capability ToolCapability => SpinToolCapability;
 
+        protected override IEnumerable<Subscription> Subscribe()
+        {
+            yield return Oy.Subscribe<IDocument>("MapDocument:SelectionChanged", x =>
+            {
+                var document = GetDocument();
+                if (document == null || x != document) return;
+
+                var key = SelectionKey(document.Selection.Select(s => s.ID));
+                if (key == _pivotKey) return;
+
+                // The selection changed from outside a spin, so the old pivot no longer applies
+                _pivotKey = key;
+                document.Selection.RotationPivot = null;
+            });
+        }
+
         #region Viewport interaction
 
         protected override void MouseDown(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
@@ -107,22 +147,24 @@ namespace Sledge.BspEditor.Tools.Spin
             if (Math.Abs(screenPivot.X - e.X) <= PivotDragSize && Math.Abs(screenPivot.Y - e.Y) <= PivotDragSize)
             {
                 _movingPivot = true;
+                _pressed = false;
                 _dragging = false;
                 _dragPivot = pivot;
                 return;
             }
 
-            GetSpinFrame(camera.ViewType, out var u, out var v, out _);
-
-            // Clicks too close to the pivot can't define a meaningful angle
+            // Clicks too close to the pivot can't define an angle
             var point = camera.ScreenToWorld(e.X, e.Y);
             if ((point - pivot).Length() < 1f) return;
 
-            _dragging = true;
-            _movingPivot = false;
+            var frame = FrameFromView(camera.ViewType);
+            _pressed = true;
+            _dragging = false;
+            _downX = e.X;
+            _downY = e.Y;
             _dragPivot = pivot;
-            _dragStartAngle = AngleAt(point, pivot, u, v);
-            _dragSweep = 0f;
+            _lastAngle = AngleAt(point, pivot, frame.U, frame.V);
+            _rawSweep = 0f;
         }
 
         protected override void MouseMove(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
@@ -139,13 +181,21 @@ namespace Sledge.BspEditor.Tools.Spin
                 return;
             }
 
-            if (!_dragging) return;
+            if (!_pressed) return;
 
-            GetSpinFrame(camera.ViewType, out var u, out var v, out _);
-            var p = camera.ScreenToWorld(e.X, e.Y);
-            var sweep = NormalizeDegrees(AngleAt(p, _dragPivot, u, v) - _dragStartAngle);
-            if (KeyboardState.Shift) sweep = (float) Math.Round(sweep / 45f) * 45f;
-            _dragSweep = sweep;
+            if (!_dragging)
+            {
+                var dx = e.X - _downX;
+                var dy = e.Y - _downY;
+                if (dx * dx + dy * dy < DragThresholdPixels * DragThresholdPixels) return;
+                _dragging = true;
+            }
+
+            // Accumulate the angle step by step, so a drag can go past 180 degrees
+            var frame = FrameFromView(camera.ViewType);
+            var angle = AngleAt(camera.ScreenToWorld(e.X, e.Y), _dragPivot, frame.U, frame.V);
+            _rawSweep += NormalizeDegrees(angle - _lastAngle);
+            _lastAngle = angle;
         }
 
         protected override void MouseUp(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
@@ -157,20 +207,26 @@ namespace Sledge.BspEditor.Tools.Spin
                 return;
             }
 
-            if (!_dragging) return;
-            _dragging = false;
-            if (e.Button != MouseButtons.Left) return;
+            if (!_pressed) return;
 
-            // A real drag uses the dragged sweep angle; a plain click uses the panel's angle
-            var dragged = Math.Abs(_dragSweep) >= 1f;
-            var angle = dragged ? _dragSweep : AngleDegrees;
-            if (dragged)
-            {
-                // Keep the panel in sync with the angle that was actually used
-                AngleDegrees = _dragSweep;
-                Oy.Publish("SpinTool:SetAngle", _dragSweep.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture));
-            }
-            PerformSpin(document, angle);
+            var dragged = _dragging;
+            var sweep = CurrentDragSweep();
+            _pressed = false;
+            _dragging = false;
+
+            // A plain click does nothing; only a real drag spins
+            if (e.Button != MouseButtons.Left || !dragged || Math.Abs(sweep) < 1f) return;
+
+            var frame = FrameFromView(camera.ViewType);
+            var solids = SelectedSolids(document);
+            if (solids.Count == 0) return;
+
+            // Keep the panel in sync with the sweep that is actually applied
+            var plan = MakePlan(solids, sweep, GetPivot(document), frame);
+            AngleDegrees = plan.Sweep;
+            Oy.Publish("SpinTool:SetAngle", plan.Sweep.ToString("0.#", CultureInfo.InvariantCulture));
+
+            PerformSpin(document, plan.Sweep, frame);
         }
 
         protected override void KeyDown(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
@@ -187,12 +243,13 @@ namespace Sledge.BspEditor.Tools.Spin
         {
             if (e.KeyCode == Keys.Escape)
             {
+                _pressed = false;
                 _dragging = false;
                 _movingPivot = false;
             }
             else if (e.KeyCode == Keys.Enter)
             {
-                PerformSpin(document, AngleDegrees);
+                PerformSpin(document, AngleDegrees, FrameFromView(_viewType));
             }
         }
 
@@ -207,189 +264,439 @@ namespace Sledge.BspEditor.Tools.Spin
         {
             var document = GetDocument();
             if (document == null) return;
-            PerformSpin(document, AngleDegrees);
+            PerformSpin(document, AngleDegrees, FrameFromView(_viewType));
         }
 
-        private void PerformSpin(MapDocument document, float totalAngle)
+        /// <summary>
+        /// Text for the sidebar: the axis in use and what the spin will produce.
+        /// </summary>
+        public string GetInfoText()
         {
-            var solids = document.Selection.OfType<Solid>().Where(x => x.Hierarchy.Parent != null).ToList();
-            if (!solids.Any()) return;
+            var document = GetDocument();
+            if (document == null) return "";
 
-            var steps = Math.Max(1, Math.Min(64, Steps));
-            totalAngle = NormalizeDegrees(totalAngle);
-            if (Math.Abs(totalAngle) < 0.01f) return;
+            var axis = AxisName(_viewType);
+            var solids = SelectedSolids(document);
+            if (solids.Count == 0) return $"Axis: {axis}. Select solids to spin.";
 
-            GetSpinFrame(_viewType, out var u, out var v, out var axis);
+            var plan = MakePlan(solids, AngleDegrees, GetPivot(document), FrameFromView(_viewType));
+            if (plan.Auto)
+            {
+                return $"Axis: {axis}. {plan.Steps} pieces of {plan.Width:0.##} deg each, {Math.Abs(plan.Sweep):0.##} deg in total.";
+            }
+
+            var text = $"Axis: {axis}. {plan.Steps} steps of {Math.Abs(plan.Delta):0.##} deg.";
+            if (plan.Width > Math.Abs(plan.Delta) + 0.05f)
+            {
+                text += BisectPieces
+                    ? $" Pieces are {plan.Width:0.##} deg wide, wider than a step, so the excess is trimmed."
+                    : $" Pieces are {plan.Width:0.##} deg wide, wider than a step, so they will overlap.";
+            }
+            else if (plan.Width > 0 && plan.Width < Math.Abs(plan.Delta) - 0.05f)
+            {
+                text += $" Pieces are {plan.Width:0.##} deg wide, narrower than a step, so gaps will show.";
+            }
+            return text;
+        }
+
+        private void PerformSpin(MapDocument document, float requestedSweep, SpinFrame frame)
+        {
+            var solids = SelectedSolids(document);
+            if (solids.Count == 0 || Math.Abs(requestedSweep) < 0.01f) return;
 
             var pivot = GetPivot(document);
-            var delta = totalAngle / steps;
+            var plan = MakePlan(solids, requestedSweep, pivot, frame);
 
-            // A slot wider than ~179 degrees can't be represented as the
-            // intersection of two half-spaces, so skip cutting in that case.
-            var bisect = BisectPieces && Math.Abs(delta) < 179f;
-
+            // Auto steps tile exactly, so trimming only applies to manual steps
+            var bisect = !plan.Auto && BisectPieces && Math.Abs(plan.Delta) < 179f;
             var generator = document.Map.NumberGenerator;
+
             var transaction = new Transaction();
-            var changed = false;
+            var removed = new List<long>();
+            var added = new List<long>();
+            var failed = 0;
 
             foreach (var solid in solids)
             {
-                try
+                // Each solid is all or nothing: if any of its pieces can't be made cleanly, it stays as it was
+                var result = SpinSolid(solid, plan, pivot, frame, bisect, MirrorUvs, generator);
+                if (result == null)
                 {
-                    SpinSolid(document, transaction, solid, steps, pivot, axis, u, v, delta, bisect, generator, ref changed);
-                }
-                catch
-                {
-                    // A degenerate solid must not abort the spin for the rest of the selection
+                    failed++;
                     continue;
                 }
+
+                if (result.Operations.IsEmpty) continue;
+                transaction.Add(result.Operations);
+                removed.AddRange(result.Removed);
+                added.AddRange(result.Added);
             }
 
-            if (!changed || transaction.IsEmpty) return;
-            MapDocumentOperation.Perform(document, transaction);
+            if (!transaction.IsEmpty)
+            {
+                // The selection after the spin is everything still selected, minus the
+                // replaced originals, plus the new pieces. Record it so the pivot survives this spin.
+                var after = document.Selection.Select(x => x.ID).Except(removed).Concat(added);
+                _pivotKey = SelectionKey(after);
+                MapDocumentOperation.Perform(document, transaction);
+            }
+
+            if (failed > 0)
+            {
+                MessageBox.Show(
+                    $"{failed} solid(s) could not be cut cleanly to their slot and were left unchanged.",
+                    "Spin Tool",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
         }
 
-        private void SpinSolid(MapDocument document, Transaction transaction, Solid solid, int steps, Vector3 pivot, Vector3 axis, Vector3 u, Vector3 v, float delta, bool bisect, UniqueNumberGenerator generator, ref bool changed)
+        private sealed class SolidSpin
         {
-            var parent = solid.Hierarchy.Parent.ID;
+            public readonly Transaction Operations = new Transaction();
+            public readonly List<long> Removed = new List<long>();
+            public readonly List<long> Added = new List<long>();
+        }
 
-            // Slots are anchored to the solid's own angular extent: positive
-            // sweeps align with the leading (minimum) edge, negative sweeps
-            // with the trailing (maximum) edge, so a slot always covers the
-            // rotated copy that belongs to it.
-            AngularExtent(solid, pivot, u, v, out var minAngle, out var maxAngle);
-            var startAngle = delta > 0 ? minAngle : maxAngle;
-
-            // Piece 0 is the original: trim it down to its own slot
-            if (bisect)
+        /// <summary>
+        /// Builds the operations that replace one solid by its pieces. Returns null
+        /// if the solid can't be made into clean pieces; nothing is changed then.
+        /// </summary>
+        private static SolidSpin SpinSolid(Solid solid, Plan plan, Vector3 pivot, SpinFrame frame, bool bisect, bool mirror, UniqueNumberGenerator generator)
+        {
+            try
             {
-                var piece = CutToSlot(document, solid, pivot, axis, u, v, startAngle, delta);
-                if (piece != null)
-                {
-                    transaction.Add(new Detatch(parent, solid));
-                    transaction.Add(new Attach(parent, piece));
-                    changed = true;
-                }
-            }
+                var parent = solid.Hierarchy.Parent.ID;
+                var result = new SolidSpin();
 
-            // One duplicate per step. The last copy sits on the final slot
-            // boundary and is not needed, so steps - 1 duplicates are made.
-            for (var j = 1; j < steps; j++)
-            {
-                var copy = (Solid) solid.Copy(generator);
-                copy.IsSelected = true;
-
-                var rotation = Matrix4x4.CreateTranslation(-pivot)
-                               * Matrix4x4.CreateFromAxisAngle(axis, delta * j * MathF.PI / 180f)
-                               * Matrix4x4.CreateTranslation(pivot);
-                copy.Transform(rotation);
-                foreach (var face in copy.Faces)
+                // One piece per step. Piece 0 is the original; the rest are copies.
+                for (var j = 0; j < plan.Steps; j++)
                 {
-                    face.Texture.TransformUniform(rotation);
-                }
-
-                var current = copy;
-                if (bisect)
-                {
-                    current = CutToSlot(document, copy, pivot, axis, u, v, startAngle + delta * j, delta) ?? copy;
-                }
-
-                if (MirrorUvs && j % 2 == 1)
-                {
-                    // Mirror the texture mapping about the mid-radial plane of
-                    // this piece's slot. Combined with the rotated axes this
-                    // makes the pattern continue seamlessly over each seam.
-                    var normal = TangentAt(axis, u, v, startAngle + delta * (j + 0.5f));
-                    var mirror = CreateReflection(normal, pivot);
-                    foreach (var face in current.Faces)
+                    Solid piece;
+                    if (j == 0)
                     {
-                        face.Texture.TransformUniform(mirror);
+                        piece = solid;
+                    }
+                    else
+                    {
+                        var copy = (Solid) solid.Copy(generator);
+                        copy.IsSelected = true;
+
+                        var rotation = Matrix4x4.CreateTranslation(-pivot)
+                                       * Matrix4x4.CreateFromAxisAngle(frame.Axis, plan.Delta * j * MathF.PI / 180f)
+                                       * Matrix4x4.CreateTranslation(pivot);
+                        copy.Transform(rotation);
+                        foreach (var face in copy.Faces)
+                        {
+                            face.Texture.TransformUniform(rotation);
+                        }
+                        piece = copy;
+                    }
+
+                    if (bisect)
+                    {
+                        // Null means nothing of this piece lies in its slot
+                        if (!TrimToSlot(piece, pivot, frame, plan.Anchor + plan.Delta * j, plan.Delta, generator, out var trimmed)) return null;
+                        piece = trimmed;
+                    }
+
+                    if (mirror && j % 2 == 1 && piece != null)
+                    {
+                        // Mirror the texture mapping about the mid-radial plane of this piece's slot
+                        var normal = TangentAt(frame.Axis, frame.U, frame.V, plan.Anchor + plan.Delta * (j + 0.5f));
+                        var reflection = CreateReflection(normal, pivot);
+                        foreach (var face in piece.Faces)
+                        {
+                            face.Texture.TransformUniform(reflection);
+                        }
+                    }
+
+                    if (j == 0)
+                    {
+                        if (!ReferenceEquals(piece, solid))
+                        {
+                            result.Operations.Add(new Detatch(parent, solid));
+                            result.Removed.Add(solid.ID);
+                            if (piece != null)
+                            {
+                                result.Operations.Add(new Attach(parent, piece));
+                                result.Added.Add(piece.ID);
+                            }
+                        }
+                    }
+                    else if (piece != null)
+                    {
+                        result.Operations.Add(new Attach(parent, piece));
+                        result.Added.Add(piece.ID);
                     }
                 }
 
-                transaction.Add(new Attach(parent, current));
-                changed = true;
+                return result;
+            }
+            catch (Exception)
+            {
+                // A degenerate solid must not corrupt the spin; the caller reports it
+                return null;
             }
         }
 
         /// <summary>
-        /// Cuts a solid down to the angular slot [start, start + sweep] around the
-        /// pivot by intersecting it with the two half-spaces bounded by the radial
-        /// planes through the pivot. Returns the cut solid, or null when the solid
-        /// doesn't intersect the slot or the cut fails (the caller then keeps the
-        /// uncut original).
+        /// Trims a solid to the angular slot [start, start + sweep] around the pivot.
+        /// Returns true on success: result is the solid itself when nothing needed
+        /// trimming, a new trimmed solid, or null when nothing lies in the slot.
+        /// Returns false when the trimmed piece can't be made valid.
         /// </summary>
-        private static Solid CutToSlot(MapDocument document, Solid solid, Vector3 pivot, Vector3 axis, Vector3 u, Vector3 v, float startDegrees, float sweepDegrees)
+        private static bool TrimToSlot(Solid solid, Vector3 pivot, SpinFrame frame, float startDegrees, float sweepDegrees, UniqueNumberGenerator generator, out Solid result)
         {
-            if (Math.Abs(sweepDegrees) < 0.01f || Math.Abs(sweepDegrees) >= 179f) return null;
-
-            // Skip solids that can't be split: every face needs a usable plane
-            // (Polyhedron.Split reads face.Plane, which throws on faces with
-            // fewer than 3 vertices). Solid.Split only guards the result, not
-            // the input, so validate up front.
-            if (!solid.Faces.Any() || solid.Faces.Any(x => x.Vertices.Count < 3)) return null;
+            result = solid;
+            if (Math.Abs(sweepDegrees) < 0.01f || Math.Abs(sweepDegrees) >= 179f) return true;
+            if (solid.Faces.Any(x => x.Vertices.Count < 3)) return false;
 
             var sign = sweepDegrees > 0 ? 1f : -1f;
-            var endDegrees = startDegrees + sweepDegrees;
+            var startPlane = new Plane(TangentAt(frame.Axis, frame.U, frame.V, startDegrees) * sign, pivot);
+            var endPlane = new Plane(TangentAt(frame.Axis, frame.U, frame.V, startDegrees + sweepDegrees) * -sign, pivot);
 
-            // Front of the start plane = the swept side of the start boundary,
-            // front of the end plane = the swept side of the end boundary.
-            // Note: Plane's constructor is (normal, pointOnPlane).
-            var startPlane = new Plane(TangentAt(axis, u, v, startDegrees) * sign, pivot);
-            var endPlane = new Plane(TangentAt(axis, u, v, endDegrees) * -sign, pivot);
-
-            try
+            if (!KeepFront(solid, startPlane, generator, out var afterStart, out var emptyStart)) return false;
+            if (emptyStart)
             {
-                Solid current = solid;
-
-                current.Split(document.Map.NumberGenerator, startPlane, out _, out var front);
-                if (front == null) return null;
-                current = front;
-
-                current.Split(document.Map.NumberGenerator, endPlane, out _, out front);
-                if (front == null) return null;
-                current = front;
-
-                // Nothing was cut away; keep the original object untouched
-                if (ReferenceEquals(current, solid)) return null;
-
-                if (!current.IsValid()) return null;
-
-                return current;
+                result = null;
+                return true;
             }
-            catch
+
+            if (!KeepFront(afterStart, endPlane, generator, out var afterEnd, out var emptyEnd)) return false;
+            if (emptyEnd)
             {
-                // The half-space intersection can still fail on degenerate input;
-                // the caller then keeps the uncut solid instead of losing it.
-                return null;
+                result = null;
+                return true;
             }
+
+            // Nothing was trimmed, so the solid is already inside its slot
+            if (ReferenceEquals(afterEnd, solid)) return true;
+
+            CleanFaces(afterEnd);
+            if (!afterEnd.IsValid()) return false;
+
+            result = afterEnd;
+            return true;
+        }
+
+        /// <summary>
+        /// Keeps the part of a solid on the front side of a plane. Returns false if
+        /// the split fails, or empty when nothing lies on the front side.
+        /// </summary>
+        private static bool KeepFront(Solid solid, Plane plane, UniqueNumberGenerator generator, out Solid result, out bool empty)
+        {
+            result = null;
+            empty = false;
+
+            if (solid.Split(generator, plane, out var back, out var front))
+            {
+                if (front == null || !front.Faces.Any())
+                {
+                    empty = true;
+                    return true;
+                }
+                result = front;
+                return true;
+            }
+
+            // The plane doesn't cut the solid: it is wholly in front (keep it) or wholly behind (nothing left)
+            if (front != null)
+            {
+                result = solid;
+                return true;
+            }
+            if (back != null)
+            {
+                empty = true;
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Removes vertices that sit on the straight line between their neighbours.
+        /// The precision split leaves such vertices on the cut lines, slightly off the
+        /// exact line, and the validity check rejects them, which is what made
+        /// trimmed pieces fall back to uncut, overlapping copies.
+        /// </summary>
+        private static void CleanFaces(Solid solid)
+        {
+            foreach (var face in solid.Faces)
+            {
+                var vertices = face.Vertices.ToList();
+                var cleaned = RemoveNearlyCollinear(vertices, CollinearTolerance);
+                if (cleaned.Count == vertices.Count) continue;
+
+                face.Vertices.Clear();
+                face.Vertices.AddRange(cleaned);
+            }
+        }
+
+        private static List<Vector3> RemoveNearlyCollinear(List<Vector3> vertices, float tolerance)
+        {
+            var list = vertices.ToList();
+            var changed = true;
+            while (changed && list.Count > 3)
+            {
+                changed = false;
+                for (var i = 0; i < list.Count; i++)
+                {
+                    var a = list[(i + list.Count - 1) % list.Count];
+                    var b = list[i];
+                    var c = list[(i + 1) % list.Count];
+
+                    // Only vertices lying between their neighbours; spikes are never collapsed
+                    if (Vector3.Dot(a - b, c - b) >= 0) continue;
+
+                    var ac = c - a;
+                    var length = ac.Length();
+                    if (length < 1e-6f) continue;
+
+                    var distance = Vector3.Cross(b - a, ac).Length() / length;
+                    if (distance < tolerance)
+                    {
+                        list.RemoveAt(i);
+                        changed = true;
+                        break;
+                    }
+                }
+            }
+            return list;
+        }
+
+        #endregion
+
+        #region Plan
+
+        /// <summary>
+        /// How a spin is laid out: where the first piece starts, how far each step
+        /// turns, and how many steps. The preview and the result both use this, so
+        /// they always match.
+        /// </summary>
+        private struct Plan
+        {
+            public bool Auto;
+            public int Steps;
+            public float Delta;   // degrees per step, signed
+            public float Anchor;  // degrees, where the first piece starts
+            public float Width;   // selection width in degrees, 0 when unknown
+            public float Sweep => Delta * Steps;
+        }
+
+        private Plan MakePlan(List<Solid> solids, float requested, Vector3 pivot, SpinFrame frame)
+        {
+            var sign = requested < 0 ? -1f : 1f;
+            var hasSpan = TryGetSpan(solids, pivot, frame, out var min, out var max);
+            var width = hasSpan ? max - min : 0f;
+
+            // The leading edge of the selection, for the spin direction
+            var anchor = hasSpan ? (sign > 0 ? min : max) : 0f;
+
+            if (AutoSteps && width >= 0.5f && width < 179f)
+            {
+                var steps = (int) Math.Round(Math.Abs(requested) / width);
+                steps = Math.Max(1, Math.Min(MaxSteps, steps));
+                return new Plan { Auto = true, Steps = steps, Delta = sign * width, Anchor = anchor, Width = width };
+            }
+
+            var count = Math.Max(1, Math.Min(MaxSteps, Steps));
+            return new Plan { Auto = false, Steps = count, Delta = requested / count, Anchor = anchor, Width = width };
+        }
+
+        /// <summary>
+        /// The angular range covered by the selected solids' vertices, in degrees.
+        /// Vertices on the spin axis are skipped, since they have no angle.
+        /// </summary>
+        private static bool TryGetSpan(List<Solid> solids, Vector3 pivot, SpinFrame frame, out float min, out float max)
+        {
+            min = max = 0f;
+
+            var angles = new List<float>();
+            foreach (var solid in solids)
+            {
+                foreach (var face in solid.Faces)
+                {
+                    foreach (var p in face.Vertices)
+                    {
+                        var diff = p - pivot;
+                        var radial = diff - frame.Axis * Vector3.Dot(diff, frame.Axis);
+                        if (radial.Length() < 0.01f) continue;
+                        angles.Add(AngleAt(p, pivot, frame.U, frame.V));
+                    }
+                }
+            }
+            if (angles.Count == 0) return false;
+
+            // The circular mean is the reference, so ranges that cross +/-180 degrees still work
+            double sin = 0, cos = 0;
+            foreach (var angle in angles)
+            {
+                var radians = angle * Math.PI / 180d;
+                sin += Math.Sin(radians);
+                cos += Math.Cos(radians);
+            }
+            var mean = (float) (Math.Atan2(sin, cos) * 180d / Math.PI);
+
+            var unwrapped = angles.Select(x => NormalizeDegrees(x - mean)).ToList();
+            min = mean + unwrapped.Min();
+            max = mean + unwrapped.Max();
+            return true;
         }
 
         #endregion
 
         #region Spin frame helpers
 
-        private static void GetSpinFrame(OrthographicCamera.OrthographicType view, out Vector3 u, out Vector3 v, out Vector3 axis)
+        private struct SpinFrame
+        {
+            public Vector3 U;
+            public Vector3 V;
+            public Vector3 Axis;
+        }
+
+        /// <summary>
+        /// The spin plane for a 2D view. U, V and Axis form a right-handed frame,
+        /// so positive angles turn counter-clockwise when seen from the Axis direction.
+        /// </summary>
+        private static SpinFrame FrameFromView(OrthographicCamera.OrthographicType view)
         {
             switch (view)
             {
                 case OrthographicCamera.OrthographicType.Front:
-                    axis = Vector3.UnitX;
-                    u = Vector3.UnitY;
-                    v = Vector3.UnitZ;
-                    break;
+                    return new SpinFrame { Axis = Vector3.UnitX, U = Vector3.UnitY, V = Vector3.UnitZ };
                 case OrthographicCamera.OrthographicType.Side:
-                    // Negated so (u, v, axis) stays right-handed in this view
-                    axis = -Vector3.UnitY;
-                    u = Vector3.UnitX;
-                    v = Vector3.UnitZ;
-                    break;
+                    // Negated so (U, V, Axis) stays right-handed in this view
+                    return new SpinFrame { Axis = -Vector3.UnitY, U = Vector3.UnitX, V = Vector3.UnitZ };
                 default:
-                    axis = Vector3.UnitZ;
-                    u = Vector3.UnitX;
-                    v = Vector3.UnitY;
-                    break;
+                    return new SpinFrame { Axis = Vector3.UnitZ, U = Vector3.UnitX, V = Vector3.UnitY };
             }
+        }
+
+        private static string AxisName(OrthographicCamera.OrthographicType view)
+        {
+            switch (view)
+            {
+                case OrthographicCamera.OrthographicType.Front: return "X";
+                case OrthographicCamera.OrthographicType.Side: return "-Y";
+                default: return "Z";
+            }
+        }
+
+        private static List<Solid> SelectedSolids(MapDocument document)
+        {
+            return document.Selection.OfType<Solid>().Where(x => x.Hierarchy.Parent != null).ToList();
+        }
+
+        private static string SelectionKey(IEnumerable<long> ids)
+        {
+            return string.Join(",", ids.OrderBy(x => x));
+        }
+
+        private float CurrentDragSweep()
+        {
+            // Shift snaps the sweep to 45 degree increments
+            return KeyboardState.Shift ? (float) Math.Round(_rawSweep / 45f) * 45f : _rawSweep;
         }
 
         private static Vector3 GetPivot(MapDocument document)
@@ -423,32 +730,6 @@ namespace Sledge.BspEditor.Tools.Spin
         }
 
         /// <summary>
-        /// The minimum and maximum angular positions of the solid's vertices in
-        /// the spin plane, relative to the pivot. The circular mean is used as
-        /// the reference so vertices that wrap around the +/-180 degree boundary
-        /// don't break the extremes.
-        /// </summary>
-        private static void AngularExtent(Solid solid, Vector3 pivot, Vector3 u, Vector3 v, out float min, out float max)
-        {
-            min = max = 0f;
-            var angles = solid.Faces.SelectMany(x => x.Vertices).Select(x => AngleAt(x, pivot, u, v)).ToList();
-            if (angles.Count == 0) return;
-
-            double sin = 0, cos = 0;
-            foreach (var angle in angles)
-            {
-                var radians = angle * Math.PI / 180d;
-                sin += Math.Sin(radians);
-                cos += Math.Cos(radians);
-            }
-
-            var mean = (float) (Math.Atan2(sin, cos) * 180d / Math.PI);
-            var unwrapped = angles.Select(x => NormalizeDegrees(x - mean)).ToList();
-            min = NormalizeDegrees(mean + unwrapped.Min());
-            max = NormalizeDegrees(mean + unwrapped.Max());
-        }
-
-        /// <summary>
         /// A matrix reflecting everything about the plane with the given normal
         /// running through the given point. Determinant is -1, which
         /// Texture.TransformUniform supports.
@@ -477,9 +758,10 @@ namespace Sledge.BspEditor.Tools.Spin
         {
             base.Render(document, viewport, camera, worldMin, worldMax, im);
 
-            if (!document.Selection.OfType<Solid>().Any()) return;
+            var solids = SelectedSolids(document);
+            if (solids.Count == 0) return;
 
-            GetSpinFrame(camera.ViewType, out var u, out var v, out _);
+            var frame = FrameFromView(camera.ViewType);
             var pivot = GetPivot(document);
             var radius = Math.Max(64f, document.Selection.GetSelectionBoundingBox().LargestDimension);
 
@@ -489,7 +771,7 @@ namespace Sledge.BspEditor.Tools.Spin
             for (var i = 0; i <= sides; i++)
             {
                 var radians = i * 2f * MathF.PI / sides;
-                var point = pivot + (u * MathF.Cos(radians) + v * MathF.Sin(radians)) * radius;
+                var point = pivot + (frame.U * MathF.Cos(radians) + frame.V * MathF.Sin(radians)) * radius;
                 if (i > 0)
                 {
                     im.AddLine(camera.WorldToScreen(previous).ToVector2(), camera.WorldToScreen(point).ToVector2(), Color.DarkGray);
@@ -499,29 +781,26 @@ namespace Sledge.BspEditor.Tools.Spin
 
             // The pivot (gizmo) marker
             var cross = radius * 0.04f;
-            im.AddLine(camera.WorldToScreen(pivot - u * cross).ToVector2(), camera.WorldToScreen(pivot + u * cross).ToVector2(), Color.Red);
-            im.AddLine(camera.WorldToScreen(pivot - v * cross).ToVector2(), camera.WorldToScreen(pivot + v * cross).ToVector2(), Color.Red);
+            im.AddLine(camera.WorldToScreen(pivot - frame.U * cross).ToVector2(), camera.WorldToScreen(pivot + frame.U * cross).ToVector2(), Color.Red);
+            im.AddLine(camera.WorldToScreen(pivot - frame.V * cross).ToVector2(), camera.WorldToScreen(pivot + frame.V * cross).ToVector2(), Color.Red);
 
-            // The sector that a spin would create: the dragged sweep while
-            // dragging, otherwise the angle configured in the side panel
-            var sweep = _dragging ? _dragSweep : AngleDegrees;
-            var startAngle = _dragging
-                ? _dragStartAngle
-                : AngleAt(document.Selection.GetSelectionBoundingBox().Center, pivot, u, v);
+            // The sector a spin would create, from the same plan the spin uses
+            var requested = _dragging ? CurrentDragSweep() : AngleDegrees;
+            if (Math.Abs(requested) < 0.01f) return;
+            var plan = MakePlan(solids, requested, pivot, frame);
 
-            DrawRadial(im, camera, pivot, u, v, startAngle, radius, Color.White);
-            if (Math.Abs(sweep) < 0.01f) return;
-
-            DrawRadial(im, camera, pivot, u, v, startAngle + sweep, radius, Color.Turquoise);
+            DrawRadial(im, camera, pivot, frame.U, frame.V, plan.Anchor, radius, Color.White);
+            if (Math.Abs(plan.Sweep) < 0.01f) return;
+            DrawRadial(im, camera, pivot, frame.U, frame.V, plan.Anchor + plan.Sweep, radius, Color.Turquoise);
 
             // The swept arc
-            var arcSides = Math.Max(2, (int) (Math.Abs(sweep) / 360f * 96));
+            var arcSides = Math.Max(2, (int) (Math.Abs(plan.Sweep) / 360f * 96));
             previous = default(Vector3);
             for (var i = 0; i <= arcSides; i++)
             {
-                var angle = startAngle + sweep * i / arcSides;
+                var angle = plan.Anchor + plan.Sweep * i / arcSides;
                 var radians = angle * MathF.PI / 180f;
-                var point = pivot + (u * MathF.Cos(radians) + v * MathF.Sin(radians)) * radius;
+                var point = pivot + (frame.U * MathF.Cos(radians) + frame.V * MathF.Sin(radians)) * radius;
                 if (i > 0)
                 {
                     im.AddLine(camera.WorldToScreen(previous).ToVector2(), camera.WorldToScreen(point).ToVector2(), Color.Turquoise);
@@ -530,11 +809,9 @@ namespace Sledge.BspEditor.Tools.Spin
             }
 
             // The step boundaries inside the sector
-            var steps = Math.Max(1, Math.Min(64, Steps));
-            var delta = sweep / steps;
-            for (var k = 1; k < steps; k++)
+            for (var k = 1; k < plan.Steps; k++)
             {
-                DrawRadial(im, camera, pivot, u, v, startAngle + delta * k, radius, Color.LightGray);
+                DrawRadial(im, camera, pivot, frame.U, frame.V, plan.Anchor + plan.Delta * k, radius, Color.LightGray);
             }
         }
 
