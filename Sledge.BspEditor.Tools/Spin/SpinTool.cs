@@ -361,13 +361,26 @@ namespace Sledge.BspEditor.Tools.Spin
                 var tangent = SpinGeometry.Tangent(frame.Axis, frame.U, frame.V, plan.A0);
                 var caps = faces.Where((x, i) => SpinGeometry.Classify(normals[i], tangent) == SpinGeometry.FaceKind.Cap).ToList();
 
+                // The cross-section, from an end cap: pieces built from it share their seam vertices exactly
+                List<(double R, double Z)> profile = null;
+                if (caps.Count > 0) SpinGeometry.TryGetProfile(caps[0].Vertices.ToList(), pivot, frame.Axis, frame.U, frame.V, plan.A0, out profile);
+
                 // Build every piece first, so a failure leaves the solid untouched
                 var pieces = new List<Solid>();
                 for (var j = 0; j < plan.Steps; j++)
                 {
                     if (!SpinGeometry.TrySweep(normals, points, pivot, frame.Axis, frame.U, frame.V, plan.A0, plan.Delta, j, out var planes)) return null;
-                    var polyhedron = SpinGeometry.BuildPiece(planes);
-                    if (polyhedron == null) return null;
+
+                    // Explicit shared vertices when there is a cross-section; otherwise the plane-built piece
+                    var outlines = profile != null
+                        ? SpinGeometry.BuildLoft(profile, pivot, frame.Axis, frame.U, frame.V, plan.A0, plan.Delta, j)
+                        : null;
+                    if (outlines == null)
+                    {
+                        var polyhedron = SpinGeometry.BuildPiece(planes);
+                        if (polyhedron == null) return null;
+                        outlines = polyhedron.Polygons.Select(x => x.Vertices.ToList()).ToList();
+                    }
 
                     // The original side faces are turned into this slot, texture and all
                     var mid = plan.A0 + plan.Delta * (j + 0.5f);
@@ -376,13 +389,13 @@ namespace Sledge.BspEditor.Tools.Spin
                     var flip = mirror && j % 2 == 1;
 
                     var piece = new Solid(generator.Next("MapObject")) { IsSelected = true };
-                    foreach (var polygon in polyhedron.Polygons)
+                    foreach (var outline in outlines)
                     {
-                        var index = SpinGeometry.MatchPlane(polygon, planes);
+                        var index = SpinGeometry.MatchPlane(outline, planes);
                         if (index < 0) return null;
 
                         var face = new Face(generator.Next("Face"));
-                        face.Vertices.AddRange(polygon.Vertices);
+                        face.Vertices.AddRange(outline);
 
                         if (planes[index].Source >= 0)
                         {
@@ -392,7 +405,7 @@ namespace Sledge.BspEditor.Tools.Spin
                         else
                         {
                             // A seam: the texture of the end cap that points the same way, aligned to the seam
-                            var normal = polygon.Plane.Normal;
+                            var normal = SpinGeometry.FaceNormal(outline);
                             var source = (caps.Count > 0 ? caps : faces)
                                 .OrderByDescending(x => Vector3.Dot(Vector3.TransformNormal(x.Plane.Normal, rotation), normal))
                                 .First();

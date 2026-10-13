@@ -85,28 +85,41 @@ namespace Sledge.BspEditor.Tools.Spin
             if (planar.Length() < 1f) return false;
             var towards = planar.Normalise();
 
-            // Candidate extrusion directions come from the faces themselves
-            var candidates = new List<Vector3>();
+            // A spin leaves many faces with the same few normals, so work on the distinct ones.
+            // (Scoring every face against every candidate gets slow once hundreds of solids are selected.)
+            var distinct = new Dictionary<(int, int, int), (Vector3 Normal, int Count)>();
             foreach (var n in normals)
             {
-                var flat = n - axis * Vector3.Dot(n, axis);
+                var key = ((int) MathF.Round(n.X * 1000f), (int) MathF.Round(n.Y * 1000f), (int) MathF.Round(n.Z * 1000f));
+                distinct[key] = distinct.TryGetValue(key, out var found) ? (found.Normal, found.Count + 1) : (n, 1);
+            }
+            var unique = distinct.Values.ToList();
+
+            // Candidate extrusion directions come from the faces themselves
+            var candidates = new Dictionary<(int, int, int), Vector3>();
+            foreach (var entry in unique)
+            {
+                var flat = entry.Normal - axis * Vector3.Dot(entry.Normal, axis);
                 if (flat.Length() < 0.2f) continue;
                 flat = flat.Normalise();
-                candidates.Add(flat);
-                candidates.Add(Vector3.Cross(axis, flat).Normalise());
+                foreach (var c in new[] { flat, Vector3.Cross(axis, flat).Normalise() })
+                {
+                    candidates[((int) MathF.Round(c.X * 1000f), (int) MathF.Round(c.Y * 1000f), (int) MathF.Round(c.Z * 1000f))] = c;
+                }
             }
             if (candidates.Count == 0) return false;
 
             var bestScore = -1;
             var bestAlign = -1f;
             var best = Vector3.Zero;
-            foreach (var t in candidates)
+            foreach (var t in candidates.Values)
             {
-                var score = normals.Count(n =>
+                var score = 0;
+                foreach (var entry in unique)
                 {
-                    var dot = Math.Abs(Vector3.Dot(n, t));
-                    return dot <= SideTolerance || dot >= CapTolerance;
-                });
+                    var dot = Math.Abs(Vector3.Dot(entry.Normal, t));
+                    if (dot <= SideTolerance || dot >= CapTolerance) score += entry.Count;
+                }
 
                 // The profile direction is square to the extrusion direction
                 var radial = Vector3.Cross(t, axis).Normalise();
@@ -195,12 +208,18 @@ namespace Sledge.BspEditor.Tools.Spin
         /// <summary>The index of the plane a polygon lies on, or -1.</summary>
         public static int MatchPlane(Polygon polygon, IReadOnlyList<SweepPlane> planes)
         {
+            return MatchPlane(polygon.Vertices, planes);
+        }
+
+        /// <summary>The index of the plane a set of vertices lies on, or -1.</summary>
+        public static int MatchPlane(IReadOnlyList<Vector3> vertices, IReadOnlyList<SweepPlane> planes)
+        {
             var best = -1;
             var bestError = 0.05f;
             for (var i = 0; i < planes.Count; i++)
             {
                 var n = planes[i].Normal.Normalise();
-                var error = polygon.Vertices.Max(x => Math.Abs(Vector3.Dot(x - planes[i].Point, n)));
+                var error = vertices.Max(x => Math.Abs(Vector3.Dot(x - planes[i].Point, n)));
                 if (error < bestError)
                 {
                     bestError = error;
@@ -208,6 +227,113 @@ namespace Sledge.BspEditor.Tools.Spin
                 }
             }
             return best;
+        }
+
+        /// <summary>The outward normal of a face, from its first three vertices (the same plane the map export writes).</summary>
+        public static Vector3 FaceNormal(IReadOnlyList<Vector3> vertices)
+        {
+            return new Plane(vertices[0], vertices[1], vertices[2]).Normal;
+        }
+
+        /// <summary>
+        /// The cross-section of a solid: the vertices of one end cap, as (radial distance, height)
+        /// in the plane that holds the axis and the profile direction.
+        /// </summary>
+        public static bool TryGetProfile(IReadOnlyList<Vector3> capVertices, Vector3 pivot, Vector3 axis, Vector3 u, Vector3 v, float profileAngle,
+            out List<(double R, double Z)> profile)
+        {
+            profile = new List<(double R, double Z)>();
+            if (capVertices.Count < 3) return false;
+
+            var d = Direction(u, v, profileAngle);
+            foreach (var vertex in capVertices)
+            {
+                var relative = vertex - pivot;
+                profile.Add((Vector3.Dot(relative, d), Vector3.Dot(relative, axis)));
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// One piece built from explicit vertices: the profile at the seam where the slot starts and at the
+        /// seam where it ends, joined by one quad per profile edge. Returns the faces, each wound outward,
+        /// or null if the result isn't a convex solid.
+        ///
+        /// A seam's vertices are computed once, in double precision, from the seam's angle alone, so the two
+        /// pieces that meet there get identical vertices. Their seam faces also start with the same three
+        /// vertices in opposite order, which is what the map export writes as the plane: the compiler sees
+        /// one plane facing both ways, and the two pieces join exactly.
+        /// </summary>
+        public static List<List<Vector3>> BuildLoft(IReadOnlyList<(double R, double Z)> profile, Vector3 pivot, Vector3 axis, Vector3 u, Vector3 v,
+            float profileAngle, float delta, int piece)
+        {
+            var count = profile.Count;
+            if (count < 3) return null;
+
+            var cosHalf = Math.Cos(Math.Abs((double) delta) / 2d * Math.PI / 180d);
+
+            Vector3[] Seam(int k)
+            {
+                var theta = ((double) profileAngle + (double) delta * k) * Math.PI / 180d;
+                var c = Math.Cos(theta);
+                var s = Math.Sin(theta);
+                var seam = new Vector3[count];
+                for (var i = 0; i < count; i++)
+                {
+                    var rho = profile[i].R / cosHalf;
+                    var z = profile[i].Z;
+                    seam[i] = new Vector3(
+                        (float) (pivot.X + (u.X * c + v.X * s) * rho + axis.X * z),
+                        (float) (pivot.Y + (u.Y * c + v.Y * s) * rho + axis.Y * z),
+                        (float) (pivot.Z + (u.Z * c + v.Z * s) * rho + axis.Z * z));
+                }
+                return seam;
+            }
+
+            var start = Seam(piece);
+            var end = Seam(piece + 1);
+
+            var all = start.Concat(end).ToList();
+            var centre = all.Aggregate(Vector3.Zero, (a, b) => a + b) / all.Count;
+
+            // Turn a vertex list so the face looks away from the middle of the piece
+            List<Vector3> Outward(List<Vector3> face)
+            {
+                var middle = face.Aggregate(Vector3.Zero, (a, b) => a + b) / face.Count;
+                if (Vector3.Dot(FaceNormal(face), middle - centre) >= 0) return face;
+                var reversed = new List<Vector3>(face);
+                reversed.Reverse();
+                return reversed;
+            }
+
+            // A seam face: either the profile order, or the profile order reversed but starting at
+            // vertex 2, so the first three vertices are the other side's first three, backwards
+            List<Vector3> SeamFace(Vector3[] seam)
+            {
+                var forward = seam.ToList();
+                var middle = forward.Aggregate(Vector3.Zero, (a, b) => a + b) / forward.Count;
+                if (Vector3.Dot(FaceNormal(forward), middle - centre) >= 0) return forward;
+
+                var backward = new List<Vector3> { seam[2], seam[1], seam[0] };
+                for (var i = count - 1; i >= 3; i--) backward.Add(seam[i]);
+                return backward;
+            }
+
+            var faces = new List<List<Vector3>> { SeamFace(start), SeamFace(end) };
+            for (var i = 0; i < count; i++)
+            {
+                var next = (i + 1) % count;
+                faces.Add(Outward(new List<Vector3> { start[i], start[next], end[next], end[i] }));
+            }
+
+            // Every vertex must lie behind every face
+            foreach (var face in faces)
+            {
+                var normal = FaceNormal(face).Normalise();
+                if (all.Any(x => Vector3.Dot(x - face[0], normal) > 0.01f)) return null;
+            }
+
+            return faces;
         }
 
         /// <summary>A rotation about the axis through the pivot.</summary>
