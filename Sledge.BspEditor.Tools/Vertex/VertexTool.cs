@@ -244,8 +244,12 @@ namespace Sledge.BspEditor.Tools.Vertex
 			return GetLineIntersections(document, box).FirstOrDefault();
 		}
 
-		protected override void MouseDown(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
+		protected override void MouseClick(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
 		{
+			// Select the clicked object on mouse *click* rather than on mouse *down*.
+			// Drawing a vertex selection box is a left-drag, so MouseClick never fires while a box is
+			// being drawn and the object being edited keeps its selection. This only affects the vertex
+			// tool, which is the only tool that reaches this handler.
 			// Get the first element that intersects with the box, selecting or deselecting as needed
 			var closestObject = SelectionTest(document, camera, e) as Solid;
 			SelectObject(document, closestObject);
