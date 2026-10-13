@@ -327,13 +327,10 @@ namespace Sledge.BspEditor.Providers
 					WriteVisgroups(map, bw);
 					WriteWorldspawn(map, bw);
 
-					// Only write docinfo if there's cameras in the document
-					if (map.Data.Get<Camera>().Any())
-					{
-						// Docinfo footer
-						bw.WriteFixedLengthString(Encoding.ASCII, 8, "DOCINFO");
-						WriteCameras(map, bw);
-					}
+					// Always write the docinfo footer (with zero cameras if there are none), like Hammer does:
+					// stricter RMF readers treat a file without it as truncated
+					bw.WriteFixedLengthString(Encoding.ASCII, 8, "DOCINFO");
+					WriteCameras(map, bw);
 				}
 			});
 		}
