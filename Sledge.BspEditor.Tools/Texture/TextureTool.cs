@@ -51,6 +51,10 @@ namespace Sledge.BspEditor.Tools.Texture
         private bool _paintAdds;
         private Face _lastPaintedFace;
 
+        // Right + drag (mouse2): apply the active texture to every face the cursor passes over.
+        private bool _paintApplying;
+        private long _lastAppliedFaceId;
+
         public TextureTool()
         {
             Usage = ToolUsage.View3D;
@@ -181,16 +185,26 @@ namespace Sledge.BspEditor.Tools.Texture
             }
 
             if (e.Button == MouseButtons.Left) SelectFace(document, camera, clickedFace.Face, clickedFace.Solid);
-            else if (e.Button == MouseButtons.Right) ApplyFace(document, camera, clickedFace.Face, clickedFace.Solid);
+            else if (e.Button == MouseButtons.Right)
+            {
+                // Start a paint-apply drag: apply to the clicked face now, then keep applying to each
+                // new face the cursor passes over while the button is held (see MouseMove).
+                _paintApplying = true;
+                _lastAppliedFaceId = clickedFace.Face.ID;
+                ApplyFace(document, camera, clickedFace.Face, clickedFace.Solid);
+            }
         }
 
         protected override void MouseMove(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
         {
-            if (!_paintSelecting) return;
-            if (!KeyboardState.Ctrl)
+            // Nothing to do unless a paint drag is currently in progress.
+            if (!_paintSelecting && !_paintApplying) return;
+
+            if (_paintSelecting && !KeyboardState.Ctrl)
             {
+                // Ctrl was released mid-drag: stop painting the selection.
                 _paintSelecting = false;
-                return;
+                if (!_paintApplying) return;
             }
 
             var (start, end) = camera.CastRayFromScreen(new Vector3(e.X, e.Y, 0));
@@ -204,22 +218,37 @@ namespace Sledge.BspEditor.Tools.Texture
                 .OrderBy(x => (x.Intersection.Value - ray.Start).Length())
                 .FirstOrDefault();
 
-            if (hit == null || ReferenceEquals(hit.Face, _lastPaintedFace)) return;
-            _lastPaintedFace = hit.Face;
+            if (hit == null) return;
 
-            var sel = GetSelection(document);
-            if (sel.IsSelected(hit.Solid, hit.Face) == _paintAdds) return;
+            if (_paintSelecting)
+            {
+                if (ReferenceEquals(hit.Face, _lastPaintedFace)) return;
+                _lastPaintedFace = hit.Face;
 
-            if (_paintAdds) sel.Add(hit.Solid, hit.Face);
-            else sel.Remove(hit.Solid, hit.Face);
+                var sel = GetSelection(document);
+                if (sel.IsSelected(hit.Solid, hit.Face) == _paintAdds) return;
 
-            Oy.Publish("TextureTool:SelectionChanged", sel);
+                if (_paintAdds) sel.Add(hit.Solid, hit.Face);
+                else sel.Remove(hit.Solid, hit.Face);
+
+                Oy.Publish("TextureTool:SelectionChanged", sel);
+                return;
+            }
+
+            // Paint-apply (right + drag). Each apply swaps the face for a clone that keeps the same ID,
+            // so we dedupe by ID rather than by reference - otherwise the cursor would re-apply to the
+            // same face on every move. Reuses ApplyFace so the modifier actions (Alt/Shift, etc.) work.
+            if (hit.Face.ID == _lastAppliedFaceId) return;
+            _lastAppliedFaceId = hit.Face.ID;
+
+            ApplyFace(document, camera, hit.Face, hit.Solid);
         }
 
         protected override void MouseUp(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
         {
             _paintSelecting = false;
             _lastPaintedFace = null;
+            _paintApplying = false;
         }
 
         private Task SelectFace(MapDocument document, PerspectiveCamera camera, Face face, IMapObject parent)
