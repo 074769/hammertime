@@ -1062,6 +1062,9 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 
 			public override void Click(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e, Vector3 position)
 			{
+				// Consume the click so the parent VertexTool doesn't also run its object selection:
+				// clicking a vertex handle manipulates vertices and must not deselect the solid(s) being edited.
+				e.Handled = true;
 				Tool.PointClick(camera, this);
 			}
 
