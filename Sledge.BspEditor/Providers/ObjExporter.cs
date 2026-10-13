@@ -90,6 +90,15 @@ namespace Sledge.BspEditor.Providers
 			{
 				writer.WriteLine("o solid_" + solid.ID.ToString(CultureInfo.InvariantCulture));
 
+				// Weld the vertex positions shared between this solid's faces so the exported faces
+				// reference common corners instead of each writing its own copy. Without this the
+				// brush comes apart into disconnected planes once imported. UVs and normals stay
+				// per-face (brushes are flat-shaded with per-face texture mapping), so only the
+				// 'v' positions are deduplicated here. The dedup key is the exact text written for
+				// the position, so corners weld at the file's precision (4 dp) and a rounding-bit
+				// difference between two faces' copies of the same corner can't split it in two.
+				var vertexIndex = new Dictionary<string, int>();
+
 				string lastMaterial = null;
 
 				foreach (var face in solid.Faces)
@@ -119,10 +128,19 @@ namespace Sledge.BspEditor.Providers
 
 					var normal = face.Plane.Normal;
 
-					foreach (var v in verts)
+					// OBJ indices are 1-based, so store index + 1 to write directly into the face.
+					var faceIndices = new int[verts.Count];
+					for (var i = 0; i < verts.Count; i++)
 					{
-						var p = ConvertAxis(v - offset, options.Axis);
-						writer.WriteLine("v " + Fmt(p.X) + " " + Fmt(p.Y) + " " + Fmt(p.Z));
+						var p = ConvertAxis(verts[i] - offset, options.Axis);
+						var key = Fmt(p.X) + " " + Fmt(p.Y) + " " + Fmt(p.Z);
+						if (!vertexIndex.TryGetValue(key, out var idx))
+						{
+							writer.WriteLine("v " + key);
+							idx = ++vCount;
+							vertexIndex[key] = idx;
+						}
+						faceIndices[i] = idx;
 					}
 
 					foreach (var c in coords)
@@ -138,13 +156,12 @@ namespace Sledge.BspEditor.Providers
 					writer.Write("f");
 					for (var i = verts.Count - 1; i >= 0; i--)
 					{
-						writer.Write(" " + (vCount + i + 1).ToString(CultureInfo.InvariantCulture)
+						writer.Write(" " + faceIndices[i].ToString(CultureInfo.InvariantCulture)
 						             + "/" + (vtCount + i + 1).ToString(CultureInfo.InvariantCulture)
 						             + "/" + (vnCount + 1).ToString(CultureInfo.InvariantCulture));
 					}
 					writer.WriteLine();
 
-					vCount += verts.Count;
 					vtCount += verts.Count;
 					vnCount += 1;
 				}
