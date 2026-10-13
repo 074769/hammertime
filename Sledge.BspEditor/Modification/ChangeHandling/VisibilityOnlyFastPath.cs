@@ -43,6 +43,8 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
             if (change.Added.Any() || change.Removed.Any()) return false;
             if (!change.Updated.Any()) return false;
             if (!change.HasTrackedObjectUpdatesOnly) return false;
+            // An empty set means nothing told us what changed, so it is not provably visibility-only
+            if (!change.AffectedObjectDataTypes.Any()) return false;
             return change.AffectedObjectDataTypes.All(t => NeutralTypes.Contains(t));
         }
     }

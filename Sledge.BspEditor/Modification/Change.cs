@@ -152,6 +152,8 @@ namespace Sledge.BspEditor.Modification
         public Change UpdateRange(IEnumerable<IMapObject> objects)
         {
             var all = objects.ToList();
+            // No object-data type information here (transforms, etc.), so per-data-type fast paths must not apply
+            if (all.Count > 0) _hasUntrackedObjectUpdates = true;
             _updated.UnionWith(all);
             _added.ExceptWith(all);
             _removed.ExceptWith(all);
