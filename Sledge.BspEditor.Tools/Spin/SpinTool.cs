@@ -29,18 +29,20 @@ namespace Sledge.BspEditor.Tools.Spin
     /// <summary>
     /// Spin tool: sweeps the selected solids around an axis through the rotation
     /// pivot (Selection.RotationPivot, falling back to the selection centre) to
-    /// make an arch or ring.
+    /// make an arch, ring or bent pipe.
     ///
-    /// The sweep is divided into Steps equal slots. Each solid is replaced by one
-    /// wedge per slot, built from the solid's radial and vertical extents (its
-    /// profile): two radial seam planes through the pivot, an inner and an outer
-    /// plane square to the slot's middle direction, and a top and bottom plane.
-    /// Neighbouring wedges share a seam plane exactly, so they always connect.
-    /// The first wedge sits on the original solid's own position.
+    /// The selection is a profile, extruded along one direction (a solid that is
+    /// 64 units long, say). The spin starts on the radial line through the pivot
+    /// where that profile lies and turns by Angle, divided into Steps equal slots.
+    /// Every side face of the profile is kept exactly as it is (same tilt, same
+    /// texture); only the two end caps are replaced, by radial seam planes. Each
+    /// slot gets the side faces turned to its middle direction, so neighbouring
+    /// pieces meet on their shared seam exactly.
     ///
-    /// Textures: each wedge takes the texture of the original face that points the
-    /// same way, rotated into the slot. Every second wedge is then mirrored about
-    /// its slot's mid-radial plane so the pattern continues across the seams.
+    /// Textures: the first piece keeps the mapping of the original faces. Every
+    /// second piece is flipped about its middle plane, which makes the texture
+    /// continuous across every seam (a flipped piece and its neighbour map their
+    /// shared seam to the same texture coordinates).
     /// </summary>
     [Export(typeof(ITool))]
     [Export]
@@ -267,9 +269,9 @@ namespace Sledge.BspEditor.Tools.Spin
             if (solids.Count == 0) return $"Axis: {axis}. Select solids to spin.";
 
             var plan = MakePlan(solids, AngleDegrees, GetPivot(document), FrameFromView(_viewType));
-            if (!plan.Valid) return $"Axis: {axis}. The selection has no angle around the axis.";
+            if (!plan.Valid) return $"Axis: {axis}. Move the rotation pivot away from the selection; the solids must be extruded along one direction.";
 
-            var text = $"Axis: {axis}. {plan.Steps} pieces of {Math.Abs(plan.Delta):0.##} deg, {Math.Abs(plan.Sweep):0.##} deg in total.";
+            var text = $"Axis: {axis}. {plan.Steps} pieces of {Math.Abs(plan.Delta):0.##} deg, {Math.Abs(plan.Sweep):0.##} deg from the pivot line.";
             if (Math.Abs(plan.Delta) >= MaxPieceDegrees) text += " Pieces are too wide: use more steps.";
             return text;
         }
@@ -326,7 +328,7 @@ namespace Sledge.BspEditor.Tools.Spin
             if (failed > 0)
             {
                 MessageBox.Show(
-                    $"{failed} solid(s) could not be spun and were left unchanged. A solid must lie fully on one side of the axis, in front of the pivot.",
+                    $"{failed} solid(s) could not be spun and were left unchanged. Every face of a solid must be parallel or square to the profile's extrusion direction.",
                     "Spin Tool",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
@@ -341,8 +343,8 @@ namespace Sledge.BspEditor.Tools.Spin
         }
 
         /// <summary>
-        /// Builds the operations that replace one solid by its wedges. Returns null if
-        /// the solid can't be swept; nothing is changed then.
+        /// Builds the operations that replace one solid by its swept pieces. Returns null
+        /// if the solid can't be swept without changing its shape; nothing is changed then.
         /// </summary>
         private static SolidSpin SpinSolid(Solid solid, Plan plan, Vector3 pivot, SpinFrame frame, bool mirror, UniqueNumberGenerator generator)
         {
@@ -352,42 +354,54 @@ namespace Sledge.BspEditor.Tools.Spin
                 var faces = solid.Faces.ToList();
                 if (faces.Count == 0) return null;
 
-                // The profile is measured along the direction of the first slot
-                var direction = SpinGeometry.Direction(frame.U, frame.V, plan.Mid0);
-                if (!SpinGeometry.TryGetProfile(faces.SelectMany(x => x.Vertices), pivot, frame.Axis, direction,
-                        out var rMin, out var rMax, out var zMin, out var zMax)) return null;
+                var normals = faces.Select(x => x.Plane.Normal).ToList();
+                var points = faces.Select(x => x.Vertices.First()).ToList();
 
-                // Build every wedge first, so a failure leaves the solid untouched
+                // The end caps: their texture goes to the seams
+                var tangent = SpinGeometry.Tangent(frame.Axis, frame.U, frame.V, plan.A0);
+                var caps = faces.Where((x, i) => SpinGeometry.Classify(normals[i], tangent) == SpinGeometry.FaceKind.Cap).ToList();
+
+                // Build every piece first, so a failure leaves the solid untouched
                 var pieces = new List<Solid>();
                 for (var j = 0; j < plan.Steps; j++)
                 {
-                    var mid = plan.Mid0 + plan.Delta * j;
-                    var wedge = SpinGeometry.BuildWedge(SpinGeometry.WedgePlanes(pivot, frame.Axis, frame.U, frame.V, mid, plan.Delta, rMin, rMax, zMin, zMax));
-                    if (wedge == null) return null;
+                    if (!SpinGeometry.TrySweep(normals, points, pivot, frame.Axis, frame.U, frame.V, plan.A0, plan.Delta, j, out var planes)) return null;
+                    var polyhedron = SpinGeometry.BuildPiece(planes);
+                    if (polyhedron == null) return null;
 
-                    // The original's textures, rotated into this slot
-                    var rotation = Matrix4x4.CreateTranslation(-pivot)
-                                   * Matrix4x4.CreateFromAxisAngle(frame.Axis, plan.Delta * j * MathF.PI / 180f)
-                                   * Matrix4x4.CreateTranslation(pivot);
+                    // The original side faces are turned into this slot, texture and all
+                    var mid = plan.A0 + plan.Delta * (j + 0.5f);
+                    var rotation = SpinGeometry.Rotation(pivot, frame.Axis, plan.Delta * (j + 0.5f));
+                    var reflection = SpinGeometry.Reflection(SpinGeometry.Tangent(frame.Axis, frame.U, frame.V, mid), pivot);
+                    var flip = mirror && j % 2 == 1;
 
                     var piece = new Solid(generator.Next("MapObject")) { IsSelected = true };
-                    foreach (var polygon in wedge.Polygons)
+                    foreach (var polygon in polyhedron.Polygons)
                     {
-                        var normal = polygon.Plane.Normal;
-
-                        // The original face that points the same way once rotated into this slot
-                        var best = faces
-                            .Select(f => new { Face = f, Dot = Vector3.Dot(Vector3.TransformNormal(f.Plane.Normal, rotation), normal) })
-                            .OrderByDescending(x => x.Dot)
-                            .First();
+                        var index = SpinGeometry.MatchPlane(polygon, planes);
+                        if (index < 0) return null;
 
                         var face = new Face(generator.Next("Face"));
                         face.Vertices.AddRange(polygon.Vertices);
-                        face.Texture = best.Face.Texture.Clone();
-                        face.Texture.TransformUniform(rotation);
 
-                        // Faces that point nowhere near an original face (the seams) get a fresh alignment
-                        if (best.Dot < 0.999f) face.Texture.AlignToNormal(normal);
+                        if (planes[index].Source >= 0)
+                        {
+                            face.Texture = faces[planes[index].Source].Texture.Clone();
+                            face.Texture.TransformUniform(rotation);
+                        }
+                        else
+                        {
+                            // A seam: the texture of the end cap that points the same way, aligned to the seam
+                            var normal = polygon.Plane.Normal;
+                            var source = (caps.Count > 0 ? caps : faces)
+                                .OrderByDescending(x => Vector3.Dot(Vector3.TransformNormal(x.Plane.Normal, rotation), normal))
+                                .First();
+                            face.Texture = source.Texture.Clone();
+                            face.Texture.TransformUniform(rotation);
+                            face.Texture.AlignToNormal(normal);
+                        }
+
+                        if (flip) face.Texture.TransformUniform(reflection);
 
                         piece.Data.Add(face);
                     }
@@ -396,16 +410,6 @@ namespace Sledge.BspEditor.Tools.Spin
                     foreach (var data in solid.Data.Where(x => !(x is Face)))
                     {
                         piece.Data.Add((IMapObjectData) data.Clone());
-                    }
-
-                    if (mirror && j % 2 == 1)
-                    {
-                        // Mirror the texture mapping about the mid-radial plane of this slot
-                        var reflection = CreateReflection(SpinGeometry.Tangent(frame.Axis, frame.U, frame.V, mid), pivot);
-                        foreach (var face in piece.Faces)
-                        {
-                            face.Texture.TransformUniform(reflection);
-                        }
                     }
 
                     pieces.Add(piece);
@@ -433,58 +437,44 @@ namespace Sledge.BspEditor.Tools.Spin
         #region Plan
 
         /// <summary>
-        /// How a spin is laid out: the angle of the first slot's middle, how far each
-        /// step turns, and how many steps. The preview and the result both use this,
-        /// so they always match.
+        /// How a spin is laid out: the angle where the profile lies, how far each step
+        /// turns, and how many steps. The preview and the result both use this, so
+        /// they always match.
         /// </summary>
         private struct Plan
         {
             public bool Valid;
             public int Steps;
             public float Delta;   // degrees per step, signed
-            public float Mid0;    // degrees, middle of the first slot (the selection's own direction)
+            public float A0;      // degrees, the radial line the spin starts on (where the profile lies)
             public float Sweep => Delta * Steps;
-            public float Start => Mid0 - Delta / 2f;   // where the first slot begins
+            public float Start => A0;
         }
 
         private Plan MakePlan(List<Solid> solids, float requested, Vector3 pivot, SpinFrame frame)
         {
             var steps = Math.Max(1, Math.Min(MaxSteps, Steps));
-            var valid = TryGetMidAngle(solids, pivot, frame, out var mid);
-            return new Plan { Valid = valid, Steps = steps, Delta = requested / steps, Mid0 = mid };
-        }
 
-        /// <summary>
-        /// The direction of the selection around the axis: the circular mean of its
-        /// vertex angles, in degrees. Vertices on the axis have no angle and are skipped.
-        /// </summary>
-        private static bool TryGetMidAngle(List<Solid> solids, Vector3 pivot, SpinFrame frame, out float mid)
-        {
-            mid = 0f;
-
-            double sin = 0, cos = 0;
-            var count = 0;
+            var normals = new List<Vector3>();
+            var min = new Vector3(float.MaxValue);
+            var max = new Vector3(float.MinValue);
             foreach (var solid in solids)
             {
                 foreach (var face in solid.Faces)
                 {
-                    foreach (var p in face.Vertices)
+                    normals.Add(face.Plane.Normal);
+                    foreach (var vertex in face.Vertices)
                     {
-                        var diff = p - pivot;
-                        var radial = diff - frame.Axis * Vector3.Dot(diff, frame.Axis);
-                        if (radial.Length() < 0.01f) continue;
-
-                        var radians = AngleAt(p, pivot, frame.U, frame.V) * Math.PI / 180d;
-                        sin += Math.Sin(radians);
-                        cos += Math.Cos(radians);
-                        count++;
+                        min = Vector3.Min(min, vertex);
+                        max = Vector3.Max(max, vertex);
                     }
                 }
             }
 
-            if (count == 0 || (Math.Abs(sin) < 1e-9 && Math.Abs(cos) < 1e-9)) return false;
-            mid = (float) (Math.Atan2(sin, cos) * 180d / Math.PI);
-            return true;
+            var angle = 0f;
+            var valid = normals.Count > 0
+                        && SpinGeometry.TryFindProfileAngle(normals, frame.Axis, frame.U, frame.V, (min + max) / 2f - pivot, out angle);
+            return new Plan { Valid = valid, Steps = steps, Delta = requested / steps, A0 = valid ? angle : 0f };
         }
 
         #endregion
@@ -559,27 +549,6 @@ namespace Sledge.BspEditor.Tools.Spin
         private static float NormalizeDegrees(float degrees)
         {
             return ((degrees % 360f) + 540f) % 360f - 180f;
-        }
-
-        /// <summary>
-        /// A matrix reflecting everything about the plane with the given normal
-        /// running through the given point. Determinant is -1, which
-        /// Texture.TransformUniform supports.
-        /// </summary>
-        private static Matrix4x4 CreateReflection(Vector3 normal, Vector3 point)
-        {
-            var reflection = Matrix4x4.Identity;
-            reflection.M11 -= 2f * normal.X * normal.X;
-            reflection.M12 -= 2f * normal.X * normal.Y;
-            reflection.M13 -= 2f * normal.X * normal.Z;
-            reflection.M21 -= 2f * normal.Y * normal.X;
-            reflection.M22 -= 2f * normal.Y * normal.Y;
-            reflection.M23 -= 2f * normal.Y * normal.Z;
-            reflection.M31 -= 2f * normal.Z * normal.X;
-            reflection.M32 -= 2f * normal.Z * normal.Y;
-            reflection.M33 -= 2f * normal.Z * normal.Z;
-
-            return Matrix4x4.CreateTranslation(-point) * reflection * Matrix4x4.CreateTranslation(point);
         }
 
         #endregion
