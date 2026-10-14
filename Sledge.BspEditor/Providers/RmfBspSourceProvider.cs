@@ -372,10 +372,40 @@ namespace Sledge.BspEditor.Providers
 		{
 			bw.Write((int)(obj.Data.OfType<VisgroupID>().FirstOrDefault()?.ID ?? 0));
 			bw.WriteRGBColour(obj.Data.GetOne<ObjectColor>()?.Color ?? Color.White);
+			if (obj is Entity)
+			{
+				// Hammer only ever puts solids inside an entity. Sledge allows a group inside an entity (tying a group
+				// to an entity keeps the group), but RMF readers that expect solids there fail on a group, so the
+				// contents of any group inside an entity are written in its place
+				var children = FlattenGroups(obj.Hierarchy).ToList();
+				bw.Write(children.Count);
+				foreach (var child in children)
+				{
+					WriteObject(child, bw);
+				}
+				return;
+			}
+
 			bw.Write(obj.Hierarchy.NumChildren);
 			foreach (var child in obj.Hierarchy)
 			{
 				WriteObject(child, bw);
+			}
+		}
+
+		/// <summary>The objects themselves, with every group replaced by what is inside it.</summary>
+		private static IEnumerable<IMapObject> FlattenGroups(IEnumerable<IMapObject> objects)
+		{
+			foreach (var o in objects)
+			{
+				if (o is Group g)
+				{
+					foreach (var inner in FlattenGroups(g.Hierarchy)) yield return inner;
+				}
+				else
+				{
+					yield return o;
+				}
 			}
 		}
 

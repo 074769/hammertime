@@ -39,6 +39,11 @@ namespace Sledge.BspEditor.Tools.Spin
 
         public SpinToolSidebarPanel()
         {
+            // The sidebar host docks this control at the top and uses the control's own height, so the
+            // control has to size itself to its content (the default height is only 150 pixels)
+            AutoSize = true;
+            AutoSizeMode = AutoSizeMode.GrowAndShrink;
+
             var layout = new TableLayoutPanel
             {
                 Dock = DockStyle.Top,
@@ -47,19 +52,21 @@ namespace Sledge.BspEditor.Tools.Spin
                 ColumnCount = 2,
                 Padding = new Padding(6)
             };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
-            _setStart = new Button { Text = "Set start", AutoSize = true };
-            _setEnd = new Button { Text = "Set end", AutoSize = true };
-            _clear = new Button { Text = "Clear start/end", AutoSize = true };
-            _auto = new CheckBox { Text = "Auto steps (start piece thickness)", Checked = true, AutoSize = true };
+            // Two equal columns that follow the sidebar's width, whatever the text says
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+
+            _setStart = new Button { Text = "Set start", Dock = DockStyle.Fill, AutoSize = false, Height = 26 };
+            _setEnd = new Button { Text = "Set end", Dock = DockStyle.Fill, AutoSize = false, Height = 26 };
+            _clear = new Button { Text = "Clear start/end", Dock = DockStyle.Fill, AutoSize = false, Height = 26 };
+            _auto = new CheckBox { Text = "Auto steps (piece thickness)", Checked = true, AutoSize = true };
             _steps = new NumericUpDown { Minimum = 1, Maximum = SpinTool.MaxSteps, Value = 8, Width = 60 };
             _angle = new NumericUpDown { Minimum = -359, Maximum = 359, DecimalPlaces = 1, Increment = 5, Value = 90, Width = 60 };
             _mirror = new CheckBox { Text = "Flip every second piece's UVs", Checked = true, AutoSize = true };
-            _drag = new CheckBox { Text = "Drag to rotate in 2D (manual spin)", Checked = false, AutoSize = true };
-            _info = new Label { AutoSize = true, MaximumSize = new Size(240, 0), Padding = new Padding(0, 4, 0, 4) };
-            _spin = new Button { Text = "Spin", AutoSize = true };
+            _drag = new CheckBox { Text = "Drag to rotate in 2D (manual)", Checked = false, AutoSize = true };
+            _info = new Label { AutoSize = true, MaximumSize = new Size(210, 0), Padding = new Padding(0, 4, 0, 4) };
+            _spin = new Button { Text = "Spin", Dock = DockStyle.Fill, AutoSize = false, Height = 30 };
 
             for (var i = 0; i < 9; i++)
             {
@@ -72,7 +79,7 @@ namespace Sledge.BspEditor.Tools.Spin
             layout.SetColumnSpan(_clear, 2);
             layout.Controls.Add(_auto, 0, 2);
             layout.SetColumnSpan(_auto, 2);
-            layout.Controls.Add(new Label { Text = "Steps (manual / auto off):", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 3);
+            layout.Controls.Add(new Label { Text = "Steps:", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 3);
             layout.Controls.Add(_steps, 1, 3);
             layout.Controls.Add(new Label { Text = "Angle (manual):", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 4);
             layout.Controls.Add(_angle, 1, 4);
@@ -86,6 +93,9 @@ namespace Sledge.BspEditor.Tools.Spin
             layout.SetColumnSpan(_spin, 2);
 
             Controls.Add(layout);
+
+            // The info text wraps to the sidebar's width
+            Resize += (s, e) => _info.MaximumSize = new Size(Math.Max(80, ClientSize.Width - 20), 0);
 
             _setStart.Click += (s, e) => _tool?.SetStartFromSelection();
             _setEnd.Click += (s, e) => _tool?.SetEndFromSelection();

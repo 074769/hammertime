@@ -9,8 +9,10 @@ using System.Windows.Forms;
 using LogicAndTrick.Oy;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Modification;
+using Sledge.BspEditor.Modification.Operations.Selection;
 using Sledge.BspEditor.Modification.Operations.Tree;
 using Sledge.BspEditor.Primitives;
+using Sledge.BspEditor.Primitives.MapData;
 using Sledge.BspEditor.Primitives.MapObjectData;
 using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.BspEditor.Rendering.Viewport;
@@ -38,6 +40,9 @@ namespace Sledge.BspEditor.Tools.Spin
     ///
     /// Manual (no start or end set): the selection is swept around the rotation pivot by Angle, in
     /// the 2D view's axis.
+    ///
+    /// Clicking selects objects (like the Select tool: groups and entities are selected whole, Ctrl
+    /// adds or removes), so the pieces can be picked without leaving this tool.
     ///
     /// Either way every piece keeps the profile exactly: seam vertices lie on the profile's own circles,
     /// the first and last seam are the profile itself (so straight pieces that continue it join exactly),
@@ -195,7 +200,15 @@ namespace Sledge.BspEditor.Tools.Spin
         protected override void MouseDown(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
         {
             _viewType = camera.ViewType;
-            if (!ManualDragActive || e.Button != MouseButtons.Left) return;
+
+            // Unless the manual drag is on, a click selects, so the start and end piece can be picked here
+            if (!ManualDragActive)
+            {
+                if (e.Button == MouseButtons.Left) ClickSelect(document, PickIn2D(document, camera, e));
+                return;
+            }
+
+            if (e.Button != MouseButtons.Left) return;
 
             if (!document.Selection.OfType<Solid>().Any()) return;
 
@@ -284,6 +297,12 @@ namespace Sledge.BspEditor.Tools.Spin
             PerformSpin(document);
         }
 
+        protected override void MouseDown(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
+        {
+            if (e.Button != MouseButtons.Left || ManualDragActive) return;
+            ClickSelect(document, PickIn3D(document, camera, e));
+        }
+
         protected override void KeyDown(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
         {
             HandleKey(document, e);
@@ -306,6 +325,85 @@ namespace Sledge.BspEditor.Tools.Spin
             {
                 PerformSpin(document);
             }
+        }
+
+        #endregion
+
+        #region Selecting (click to select, like the Select tool)
+
+        /// <summary>The object under the cursor in a 2D view: its edges or its centre handle are within a few pixels.</summary>
+        private static IMapObject PickIn2D(MapDocument document, OrthographicCamera camera, ViewportEvent e)
+        {
+            // A box around the click, a few pixels wide on screen and unlimited in depth
+            var unused = camera.GetUnusedCoordinate(new Vector3(100000, 100000, 100000));
+            var tolerance = 4 / camera.Zoom;
+            var used = camera.Expand(new Vector3(tolerance, tolerance, 0));
+            var add = used + unused;
+            var click = camera.ScreenToWorld(e.X, e.Y);
+            var box = new Box(click - add, click + add);
+
+            return document.Map.Root.Collect(
+                x => x is Root || (x.BoundingBox != null && x.BoundingBox.IntersectsWith(box)),
+                x => x.Hierarchy.Parent != null
+                     && !x.Hierarchy.HasChildren
+                     && ((x.BoundingBox != null && box.Vector3IsInside(x.BoundingBox.Center)) || x.GetPolygons().Any(p => p.GetLines().Any(box.IntersectsWith)))
+            ).FirstOrDefault();
+        }
+
+        /// <summary>The nearest object under the cursor in the 3D view.</summary>
+        private static IMapObject PickIn3D(MapDocument document, PerspectiveCamera camera, ViewportEvent e)
+        {
+            var flags = document.Map.Data.GetOne<DisplayFlags>() ?? new DisplayFlags();
+            var ignore = (flags.HideClipTextures ? MapObjectExtensions.IgnoreOptions.IgnoreClip : MapObjectExtensions.IgnoreOptions.None)
+                         | (flags.HideNullTextures ? MapObjectExtensions.IgnoreOptions.IgnoreNull : MapObjectExtensions.IgnoreOptions.None);
+
+            var (start, end) = camera.CastRayFromScreen(new Vector3(e.X, e.Y, 0));
+            return document.Map.Root.GetIntersectionsForVisibleObjects(new Line(start, end), ignore).Select(x => x.Object).FirstOrDefault();
+        }
+
+        /// <summary>
+        /// Select what was clicked (nothing: select nothing). With Ctrl held the object is added, or removed if
+        /// it is already selected, and the rest of the selection stays.
+        /// </summary>
+        private static void ClickSelect(MapDocument document, IMapObject hit)
+        {
+            var ctrl = KeyboardState.Ctrl;
+            var ignoreGrouping = document.Map.Data.GetOne<SelectionOptions>()?.IgnoreGrouping == true;
+
+            var deselect = new List<IMapObject>();
+            var select = new List<IMapObject>();
+            if (hit != null)
+            {
+                if (!ctrl || !hit.IsSelected) select.Add(hit);
+                else deselect.Add(hit);
+            }
+
+            SetSelected(document, deselect, select, !ctrl, ignoreGrouping);
+        }
+
+        /// <summary>A selected entity or group stands for everything in it, unless grouping is ignored.</summary>
+        private static IEnumerable<IMapObject> NormaliseSelection(IEnumerable<IMapObject> objects, bool ignoreGrouping)
+        {
+            return ignoreGrouping
+                ? objects
+                : objects.Select(x => x.FindTopmostParent(y => y is Group || y is Primitives.MapObjects.Entity) ?? x).Distinct().SelectMany(x => x.FindAll());
+        }
+
+        private static void SetSelected(MapDocument document, IEnumerable<IMapObject> toDeselect, IEnumerable<IMapObject> toSelect, bool deselectAll, bool ignoreGrouping)
+        {
+            if (deselectAll) toDeselect = document.Selection.ToList();
+
+            var deselected = NormaliseSelection(toDeselect.Where(x => x != null), ignoreGrouping).ToList();
+            var selected = NormaliseSelection(toSelect.Where(x => x != null), ignoreGrouping).ToList();
+
+            // No need to deselect what is about to be selected
+            deselected = deselected.Where(x => !selected.Contains(x)).ToList();
+
+            // Nothing changes: leave the undo history alone
+            if (deselected.Count == 0 && !selected.Except(document.Selection).Any()) return;
+
+            var transaction = new Transaction(new Select(selected), new Deselect(deselected));
+            ((Action) (async () => await MapDocumentOperation.Perform(document, transaction)))();
         }
 
         #endregion
