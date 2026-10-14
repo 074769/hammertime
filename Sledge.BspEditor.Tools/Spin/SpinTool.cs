@@ -27,22 +27,25 @@ using Sledge.Shell.Input;
 namespace Sledge.BspEditor.Tools.Spin
 {
     /// <summary>
-    /// Spin tool: sweeps the selected solids around an axis through the rotation
-    /// pivot (Selection.RotationPivot, falling back to the selection centre) to
-    /// make an arch, ring or bent pipe.
+    /// Spin tool: builds an arch, ring or bent pipe by sweeping an extruded profile around an axis.
     ///
-    /// The selection is a profile, extruded along one direction (a solid that is
-    /// 64 units long, say). The spin starts on the radial line through the pivot
-    /// where that profile lies and turns by Angle, divided into Steps equal slots.
-    /// Every side face of the profile is kept exactly as it is (same tilt, same
-    /// texture); only the two end caps are replaced, by radial seam planes. Each
-    /// slot gets the side faces turned to its middle direction, so neighbouring
-    /// pieces meet on their shared seam exactly.
+    /// Start and end pieces (the normal way): select the piece the arch starts with and press Set start,
+    /// select the piece it ends with and press Set end, then press Spin. Each piece is an extruded
+    /// profile (a solid or a group of solids that is, say, 72 units thick). The axis is square to both
+    /// pieces, the pivot is where their outer end caps (the caps facing away from each other) meet, and
+    /// the arch runs from the start piece's outer cap to the end piece's outer cap, replacing both
+    /// pieces. The number of pieces follows the start piece's thickness, or is set by hand.
     ///
-    /// Textures: the first piece keeps the mapping of the original faces. Every
-    /// second piece is flipped about its middle plane, which makes the texture
-    /// continuous across every seam (a flipped piece and its neighbour map their
-    /// shared seam to the same texture coordinates).
+    /// Manual (no start or end set): the selection is swept around the rotation pivot by Angle, in
+    /// the 2D view's axis.
+    ///
+    /// Either way every piece keeps the profile exactly: seam vertices lie on the profile's own circles,
+    /// the first and last seam are the profile itself (so straight pieces that continue it join exactly),
+    /// and neighbouring pieces share their seam faces exactly, which is what the map compiler needs.
+    ///
+    /// Textures: the first piece keeps the mapping of the original faces. Every second piece is its
+    /// neighbour's mapping reflected across the seam between them, which makes the texture continuous
+    /// across every seam (and the first piece continue the straight piece before it).
     /// </summary>
     [Export(typeof(ITool))]
     [Export]
@@ -63,16 +66,26 @@ namespace Sledge.BspEditor.Tools.Spin
         /// <summary>Screen-space grab radius for the pivot (gizmo) handle.</summary>
         private const int PivotDragSize = 8;
 
-        /// <summary>Number of equal slots (pieces) the sweep is divided into.</summary>
+        /// <summary>Number of pieces when Auto steps is off.</summary>
         public int Steps { get; set; } = 8;
 
-        /// <summary>Total sweep in degrees. Used by the panel, Enter and the Spin button; set by dragging.</summary>
+        /// <summary>Total sweep in degrees for a manual spin.</summary>
         public float AngleDegrees { get; set; } = 90f;
 
         /// <summary>When true, every second piece gets its texture mapping mirrored so the pattern tiles seamlessly.</summary>
         public bool MirrorUvs { get; set; } = true;
 
-        // Drag state
+        /// <summary>With a start and an end piece: take the number of pieces from the start piece's thickness.</summary>
+        public bool AutoSteps { get; set; } = true;
+
+        /// <summary>Manual mode only: drag in a 2D view to set the angle and move the pivot. Off by default.</summary>
+        public bool DragRotate { get; set; }
+
+        // The objects (as selected: solids, groups or entities) that were set as the start and end piece
+        private List<long> _startIds = new List<long>();
+        private List<long> _endIds = new List<long>();
+
+        // Drag state (manual mode)
         private bool _pressed;
         private bool _dragging;
         private bool _movingPivot;
@@ -88,7 +101,7 @@ namespace Sledge.BspEditor.Tools.Spin
         /// </summary>
         private string _pivotKey;
 
-        // The 2D view the tool was last used in; Enter and the Spin button spin around its axis
+        // The 2D view the tool was last used in; manual spins turn around its axis
         private OrthographicCamera.OrthographicType _viewType = OrthographicCamera.OrthographicType.Top;
 
         public SpinTool()
@@ -120,21 +133,73 @@ namespace Sledge.BspEditor.Tools.Spin
 
                 // The selection changed from outside a spin, so the old pivot no longer applies
                 _pivotKey = key;
-                document.Selection.RotationPivot = null;
+                if (!HasPieces) document.Selection.RotationPivot = null;
             });
         }
 
-        #region Viewport interaction
+        #region Start and end piece
+
+        public bool HasPieces => _startIds.Count > 0 || _endIds.Count > 0;
+
+        /// <summary>The current selection becomes the start piece.</summary>
+        public void SetStartFromSelection()
+        {
+            var ids = SelectionAsPiece();
+            if (ids.Count > 0) _startIds = ids;
+        }
+
+        /// <summary>The current selection becomes the end piece.</summary>
+        public void SetEndFromSelection()
+        {
+            var ids = SelectionAsPiece();
+            if (ids.Count > 0) _endIds = ids;
+        }
+
+        /// <summary>Forget the start and end pieces (back to a manual spin).</summary>
+        public void ClearPieces()
+        {
+            _startIds = new List<long>();
+            _endIds = new List<long>();
+        }
+
+        private List<long> SelectionAsPiece()
+        {
+            var document = GetDocument();
+            if (document == null) return new List<long>();
+
+            // The top-level selected objects, like Delete uses: a selected entity or group counts as one object
+            return document.Selection.GetSelectedParents().Where(x => x.FindAll().OfType<Solid>().Any()).Select(x => x.ID).ToList();
+        }
+
+        private static List<IMapObject> Resolve(MapDocument document, List<long> ids)
+        {
+            return ids.Select(x => document.Map.Root.FindByID(x)).Where(x => x != null && x.Hierarchy.Parent != null).ToList();
+        }
+
+        private static List<Solid> SolidsOf(IEnumerable<IMapObject> objects)
+        {
+            return objects.SelectMany(x => x.FindAll()).OfType<Solid>().Where(x => x.Hierarchy.Parent != null).Distinct().ToList();
+        }
+
+        private static List<SpinGeometry.PieceFace> FacesOf(IEnumerable<Solid> solids)
+        {
+            return solids.SelectMany(s => s.Faces).Select(f => new SpinGeometry.PieceFace(f.Plane.Normal, f.Vertices.ToList())).ToList();
+        }
+
+        #endregion
+
+        #region Viewport interaction (manual mode only)
+
+        private bool ManualDragActive => DragRotate && !HasPieces;
 
         protected override void MouseDown(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
         {
-            if (e.Button != MouseButtons.Left) return;
-
             _viewType = camera.ViewType;
+            if (!ManualDragActive || e.Button != MouseButtons.Left) return;
 
             if (!document.Selection.OfType<Solid>().Any()) return;
 
-            var pivot = GetPivot(document);
+            var pivot = ManualPivot(document);
 
             // Dragging the pivot marker moves the gizmo itself
             var screenPivot = camera.WorldToScreen(pivot);
@@ -164,12 +229,13 @@ namespace Sledge.BspEditor.Tools.Spin
         protected override void MouseMove(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
         {
             _viewType = camera.ViewType;
+            if (!ManualDragActive) return;
 
             if (_movingPivot)
             {
                 // Move the gizmo pivot, keeping its depth (the axis the current
                 // view looks down) and snapping to the grid
-                var point = camera.GetUnusedCoordinate(GetPivot(document)) + SnapIfNeeded(camera.ScreenToWorld(e.X, e.Y));
+                var point = camera.GetUnusedCoordinate(ManualPivot(document)) + SnapIfNeeded(camera.ScreenToWorld(e.X, e.Y));
                 document.Selection.RotationPivot = point;
                 _dragPivot = point;
                 return;
@@ -215,7 +281,7 @@ namespace Sledge.BspEditor.Tools.Spin
             AngleDegrees = sweep;
             Oy.Publish("SpinTool:SetAngle", sweep.ToString("0.#", CultureInfo.InvariantCulture));
 
-            PerformSpin(document, sweep, FrameFromView(camera.ViewType));
+            PerformSpin(document);
         }
 
         protected override void KeyDown(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
@@ -238,7 +304,7 @@ namespace Sledge.BspEditor.Tools.Spin
             }
             else if (e.KeyCode == Keys.Enter)
             {
-                PerformSpin(document, AngleDegrees, FrameFromView(_viewType));
+                PerformSpin(document);
             }
         }
 
@@ -247,43 +313,48 @@ namespace Sledge.BspEditor.Tools.Spin
         #region Spin operation
 
         /// <summary>
-        /// Called by the sidebar panel's Spin button: apply the spin with the panel's angle.
+        /// Called by the sidebar panel's Spin button.
         /// </summary>
         public void ApplySpin()
         {
             var document = GetDocument();
             if (document == null) return;
-            PerformSpin(document, AngleDegrees, FrameFromView(_viewType));
+            PerformSpin(document);
         }
 
         /// <summary>
-        /// Text for the sidebar: the axis in use and what the spin will produce.
+        /// Text for the sidebar: what the spin will produce, or why it can't.
         /// </summary>
         public string GetInfoText()
         {
             var document = GetDocument();
             if (document == null) return "";
 
-            var axis = AxisName(_viewType);
-            var solids = SelectedSolids(document);
-            if (solids.Count == 0) return $"Axis: {axis}. Select solids to spin.";
+            var plan = MakePlan(document);
+            if (!plan.Valid) return plan.Message;
 
-            var plan = MakePlan(solids, AngleDegrees, GetPivot(document), FrameFromView(_viewType));
-            if (!plan.Valid) return $"Axis: {axis}. Move the rotation pivot away from the selection; the solids must be extruded along one direction.";
+            if (plan.Pieces)
+            {
+                var text = $"Start: {plan.SourceSolids.Count} solids, end: {plan.EndObjects.Count} object(s). "
+                           + $"{plan.Steps} pieces of {Math.Abs(plan.Delta):0.##} deg, {Math.Abs(plan.Sweep):0.##} deg in total.";
+                if (AutoSteps) text += $" (A piece of the start piece's thickness covers {plan.PieceAngle:0.##} deg.)";
+                return text;
+            }
 
-            var text = $"Axis: {axis}. {plan.Steps} pieces of {Math.Abs(plan.Delta):0.##} deg, {Math.Abs(plan.Sweep):0.##} deg from the pivot line.";
-            if (Math.Abs(plan.Delta) >= MaxPieceDegrees) text += " Pieces are too wide: use more steps.";
-            return text;
+            return $"Manual spin around the {AxisName(_viewType)} axis. {plan.Steps} pieces of {Math.Abs(plan.Delta):0.##} deg, {Math.Abs(plan.Sweep):0.##} deg from the pivot line.";
         }
 
-        private void PerformSpin(MapDocument document, float requestedSweep, SpinFrame frame)
+        private void PerformSpin(MapDocument document)
         {
-            var solids = SelectedSolids(document);
-            if (solids.Count == 0 || Math.Abs(requestedSweep) < 0.01f) return;
-
-            var pivot = GetPivot(document);
-            var plan = MakePlan(solids, requestedSweep, pivot, frame);
-            if (!plan.Valid) return;
+            var plan = MakePlan(document);
+            if (!plan.Valid)
+            {
+                if (!string.IsNullOrEmpty(plan.Message))
+                {
+                    MessageBox.Show(plan.Message, "Spin Tool", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                return;
+            }
 
             if (Math.Abs(plan.Delta) >= MaxPieceDegrees)
             {
@@ -301,10 +372,10 @@ namespace Sledge.BspEditor.Tools.Spin
             var added = new List<long>();
             var failed = 0;
 
-            foreach (var solid in solids)
+            foreach (var solid in plan.SourceSolids)
             {
                 // Each solid is all or nothing: if any of its pieces can't be made, it stays as it was
-                var result = SpinSolid(solid, plan, pivot, frame, MirrorUvs, generator);
+                var result = SpinSolid(solid, plan, MirrorUvs, generator);
                 if (result == null)
                 {
                     failed++;
@@ -316,6 +387,27 @@ namespace Sledge.BspEditor.Tools.Spin
                 added.AddRange(result.Added);
             }
 
+            // Nothing may change if a start solid couldn't be spun: the arch would have holes
+            if (plan.Pieces && failed > 0)
+            {
+                MessageBox.Show(
+                    $"{failed} solid(s) of the start piece could not be spun, so nothing was changed. "
+                    + "Every solid needs two end caps, and every other face must be parallel to the extrusion direction.",
+                    "Spin Tool",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (plan.Pieces)
+            {
+                // The end piece is replaced by the arch too: remove it together with its container (as Delete does)
+                foreach (var group in plan.EndObjects.GroupBy(x => x.Hierarchy.Parent.ID))
+                {
+                    transaction.Add(new Detatch(group.Key, group));
+                }
+            }
+
             if (!transaction.IsEmpty)
             {
                 // The selection after the spin is everything still selected, minus the
@@ -325,10 +417,12 @@ namespace Sledge.BspEditor.Tools.Spin
                 MapDocumentOperation.Perform(document, transaction);
             }
 
-            if (failed > 0)
+            if (plan.Pieces) ClearPieces();
+
+            if (!plan.Pieces && failed > 0)
             {
                 MessageBox.Show(
-                    $"{failed} solid(s) could not be spun and were left unchanged. Every face of a solid must be parallel or square to the profile's extrusion direction.",
+                    $"{failed} solid(s) could not be spun and were left unchanged. Every solid needs two end caps, and every other face must be parallel to the extrusion direction.",
                     "Spin Tool",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
@@ -343,10 +437,10 @@ namespace Sledge.BspEditor.Tools.Spin
         }
 
         /// <summary>
-        /// Builds the operations that replace one solid by its swept pieces. Returns null
-        /// if the solid can't be swept without changing its shape; nothing is changed then.
+        /// Builds the operations that replace one solid by its swept pieces. Returns null if the solid
+        /// can't be swept without changing its shape; nothing is changed then.
         /// </summary>
-        private static SolidSpin SpinSolid(Solid solid, Plan plan, Vector3 pivot, SpinFrame frame, bool mirror, UniqueNumberGenerator generator)
+        private static SolidSpin SpinSolid(Solid solid, Plan plan, bool mirror, UniqueNumberGenerator generator)
         {
             try
             {
@@ -354,59 +448,53 @@ namespace Sledge.BspEditor.Tools.Spin
                 var faces = solid.Faces.ToList();
                 if (faces.Count == 0) return null;
 
-                var normals = faces.Select(x => x.Plane.Normal).ToList();
-                var points = faces.Select(x => x.Vertices.First()).ToList();
+                var pieceFaces = faces.Select(x => new SpinGeometry.PieceFace(x.Plane.Normal, x.Vertices.ToList())).ToList();
 
-                // The end caps: their texture goes to the seams
-                var tangent = SpinGeometry.Tangent(frame.Axis, frame.U, frame.V, plan.A0);
-                var caps = faces.Where((x, i) => SpinGeometry.Classify(normals[i], tangent) == SpinGeometry.FaceKind.Cap).ToList();
+                // The extrusion direction of this solid: its end caps are square to it
+                var tangent = SpinGeometry.Tangent(plan.Frame.Axis, plan.Frame.U, plan.Frame.V, plan.A0);
+                var caps = faces.Where((x, i) => SpinGeometry.Classify(pieceFaces[i].Normal, tangent) == SpinGeometry.FaceKind.Cap).ToList();
+                if (caps.Count == 0) return null;
+                if (faces.Where((x, i) => SpinGeometry.Classify(pieceFaces[i].Normal, tangent) == SpinGeometry.FaceKind.Other).Any()) return null;
 
-                // The cross-section, from an end cap: pieces built from it share their seam vertices exactly
-                List<(double R, double Z)> profile = null;
-                if (caps.Count > 0) SpinGeometry.TryGetProfile(caps[0].Vertices.ToList(), pivot, frame.Axis, frame.U, frame.V, plan.A0, out profile);
+                // The cross-section, from an end cap, and which original face each of its edges belongs to
+                var capVertices = caps[0].Vertices.ToList();
+                if (!SpinGeometry.TryGetProfile(capVertices, plan.Pivot, plan.Frame.Axis, plan.Frame.U, plan.Frame.V, plan.A0, out var profile)) return null;
+                var edgeFaces = SpinGeometry.FindEdgeFaces(capVertices, pieceFaces, tangent);
+                if (edgeFaces.Any(x => x < 0)) return null;
 
                 // Build every piece first, so a failure leaves the solid untouched
                 var pieces = new List<Solid>();
                 for (var j = 0; j < plan.Steps; j++)
                 {
-                    if (!SpinGeometry.TrySweep(normals, points, pivot, frame.Axis, frame.U, frame.V, plan.A0, plan.Delta, j, out var planes)) return null;
+                    var outlines = SpinGeometry.BuildLoft(profile, plan.Pivot, plan.Frame.Axis, plan.Frame.U, plan.Frame.V, plan.A0, plan.Delta, j);
+                    if (outlines == null) return null;
 
-                    // Explicit shared vertices when there is a cross-section; otherwise the plane-built piece
-                    var outlines = profile != null
-                        ? SpinGeometry.BuildLoft(profile, pivot, frame.Axis, frame.U, frame.V, plan.A0, plan.Delta, j)
-                        : null;
-                    if (outlines == null)
-                    {
-                        var polyhedron = SpinGeometry.BuildPiece(planes);
-                        if (polyhedron == null) return null;
-                        outlines = polyhedron.Polygons.Select(x => x.Vertices.ToList()).ToList();
-                    }
-
-                    // The original side faces are turned into this slot, texture and all
-                    var mid = plan.A0 + plan.Delta * (j + 0.5f);
-                    var rotation = SpinGeometry.Rotation(pivot, frame.Axis, plan.Delta * (j + 0.5f));
-                    var reflection = SpinGeometry.Reflection(SpinGeometry.Tangent(frame.Axis, frame.U, frame.V, mid), pivot);
+                    // The texture mapping of this piece: the first piece keeps the original mapping, and every
+                    // next piece is the previous piece's mapping reflected across the seam between them. That makes
+                    // the texture continuous across every seam, and the even pieces plain rotations of the first.
                     var flip = mirror && j % 2 == 1;
+                    var turns = flip ? j - 1 : j;
+                    var rotation = SpinGeometry.Rotation(plan.Pivot, plan.Frame.Axis, plan.Delta * turns);
+                    var reflection = SpinGeometry.Reflection(SpinGeometry.Tangent(plan.Frame.Axis, plan.Frame.U, plan.Frame.V, plan.A0 + plan.Delta * j), plan.Pivot);
 
                     var piece = new Solid(generator.Next("MapObject")) { IsSelected = true };
-                    foreach (var outline in outlines)
+                    for (var k = 0; k < outlines.Count; k++)
                     {
-                        var index = SpinGeometry.MatchPlane(outline, planes);
-                        if (index < 0) return null;
-
+                        var outline = outlines[k];
                         var face = new Face(generator.Next("Face"));
                         face.Vertices.AddRange(outline);
 
-                        if (planes[index].Source >= 0)
+                        if (k >= 2)
                         {
-                            face.Texture = faces[planes[index].Source].Texture.Clone();
+                            // A side face: the texture of the original face that holds this profile edge
+                            face.Texture = faces[edgeFaces[k - 2]].Texture.Clone();
                             face.Texture.TransformUniform(rotation);
                         }
                         else
                         {
                             // A seam: the texture of the end cap that points the same way, aligned to the seam
                             var normal = SpinGeometry.FaceNormal(outline);
-                            var source = (caps.Count > 0 ? caps : faces)
+                            var source = caps
                                 .OrderByDescending(x => Vector3.Dot(Vector3.TransformNormal(x.Plane.Normal, rotation), normal))
                                 .First();
                             face.Texture = source.Texture.Clone();
@@ -450,24 +538,83 @@ namespace Sledge.BspEditor.Tools.Spin
         #region Plan
 
         /// <summary>
-        /// How a spin is laid out: the angle where the profile lies, how far each step
-        /// turns, and how many steps. The preview and the result both use this, so
-        /// they always match.
+        /// How a spin is laid out. The preview and the result both use this, so they always match.
         /// </summary>
-        private struct Plan
+        private sealed class Plan
         {
             public bool Valid;
+            public string Message = "";
+
+            /// <summary>True when worked out from a start and an end piece, false for a manual spin.</summary>
+            public bool Pieces;
+
+            public Vector3 Pivot;
+            public SpinFrame Frame;
+            public float A0;       // degrees, the radial line the spin starts on (where the profile lies)
             public int Steps;
-            public float Delta;   // degrees per step, signed
-            public float A0;      // degrees, the radial line the spin starts on (where the profile lies)
+            public float Delta;    // degrees per step, signed
+            public float PieceAngle;
+            public float DrawRadius;
+
+            public List<Solid> SourceSolids = new List<Solid>();
+            public List<IMapObject> EndObjects = new List<IMapObject>();
+
             public float Sweep => Delta * Steps;
             public float Start => A0;
         }
 
-        private Plan MakePlan(List<Solid> solids, float requested, Vector3 pivot, SpinFrame frame)
+        private Plan MakePlan(MapDocument document)
         {
-            var steps = Math.Max(1, Math.Min(MaxSteps, Steps));
+            return HasPieces ? MakePiecePlan(document) : MakeManualPlan(document);
+        }
 
+        private Plan MakePiecePlan(MapDocument document)
+        {
+            var plan = new Plan { Pieces = true };
+
+            if (_startIds.Count == 0) { plan.Message = "Select the start piece and press Set start."; return plan; }
+            if (_endIds.Count == 0) { plan.Message = "Select the end piece and press Set end."; return plan; }
+
+            var startObjects = Resolve(document, _startIds);
+            var endObjects = Resolve(document, _endIds);
+            if (startObjects.Count == 0 || endObjects.Count == 0)
+            {
+                plan.Message = "The start or the end piece no longer exists. Set it again.";
+                return plan;
+            }
+
+            var startSolids = SolidsOf(startObjects);
+            var endSolids = SolidsOf(endObjects);
+            if (startSolids.Count == 0 || endSolids.Count == 0) { plan.Message = "The start and end pieces need solids."; return plan; }
+            if (startSolids.Intersect(endSolids).Any()) { plan.Message = "The start and end pieces share solids. Pick two different pieces."; return plan; }
+
+            if (!SpinGeometry.TryDefineArch(FacesOf(startSolids), FacesOf(endSolids), MaxSteps, out var arch, out var error))
+            {
+                plan.Message = error;
+                return plan;
+            }
+
+            plan.Valid = true;
+            plan.Pivot = arch.Pivot;
+            plan.Frame = new SpinFrame { U = arch.U, V = arch.V, Axis = arch.Axis };
+            plan.A0 = 0f;
+            plan.Steps = AutoSteps ? arch.Steps : Math.Max(1, Math.Min(MaxSteps, Steps));
+            plan.Delta = arch.Sweep / plan.Steps;
+            plan.PieceAngle = arch.PieceAngle;
+            plan.SourceSolids = startSolids;
+            plan.EndObjects = endObjects;
+            plan.DrawRadius = DrawRadiusOf(startSolids.Concat(endSolids), arch.Pivot, arch.Axis);
+            return plan;
+        }
+
+        private Plan MakeManualPlan(MapDocument document)
+        {
+            var plan = new Plan { Pieces = false };
+            var frame = FrameFromView(_viewType);
+            var solids = SelectedSolids(document);
+            if (solids.Count == 0) { plan.Message = $"Axis: {AxisName(_viewType)}. Select solids to spin, or set a start and an end piece."; return plan; }
+
+            var pivot = ManualPivot(document);
             var normals = new List<Vector3>();
             var min = new Vector3(float.MaxValue);
             var max = new Vector3(float.MinValue);
@@ -485,9 +632,40 @@ namespace Sledge.BspEditor.Tools.Spin
             }
 
             var angle = 0f;
-            var valid = normals.Count > 0
-                        && SpinGeometry.TryFindProfileAngle(normals, frame.Axis, frame.U, frame.V, (min + max) / 2f - pivot, out angle);
-            return new Plan { Valid = valid, Steps = steps, Delta = requested / steps, A0 = valid ? angle : 0f };
+            if (normals.Count == 0
+                || !SpinGeometry.TryFindProfileAngle(normals, frame.Axis, frame.U, frame.V, (min + max) / 2f - pivot, out angle))
+            {
+                plan.Message = $"Axis: {AxisName(_viewType)}. Move the rotation pivot away from the selection; the solids must be extruded along one direction.";
+                return plan;
+            }
+
+            plan.Valid = true;
+            plan.Pivot = pivot;
+            plan.Frame = frame;
+            plan.A0 = angle;
+            plan.Steps = Math.Max(1, Math.Min(MaxSteps, Steps));
+            plan.Delta = (_dragging ? CurrentDragSweep() : AngleDegrees) / plan.Steps;
+            plan.SourceSolids = solids;
+            plan.DrawRadius = DrawRadiusOf(solids, pivot, frame.Axis);
+            return plan;
+        }
+
+        private static float DrawRadiusOf(IEnumerable<Solid> solids, Vector3 pivot, Vector3 axis)
+        {
+            var radius = 64f;
+            foreach (var solid in solids)
+            {
+                foreach (var face in solid.Faces)
+                {
+                    foreach (var vertex in face.Vertices)
+                    {
+                        var relative = vertex - pivot;
+                        var planar = relative - axis * Vector3.Dot(relative, axis);
+                        radius = Math.Max(radius, planar.Length());
+                    }
+                }
+            }
+            return radius;
         }
 
         #endregion
@@ -545,7 +723,7 @@ namespace Sledge.BspEditor.Tools.Spin
             return KeyboardState.Shift ? (float) Math.Round(_rawSweep / 45f) * 45f : _rawSweep;
         }
 
-        private static Vector3 GetPivot(MapDocument document)
+        private static Vector3 ManualPivot(MapDocument document)
         {
             // The rotation widget's pivot is the authoritative pivot: when a pivot
             // has been placed on the rotation gizmo it overrides the selection centre.
@@ -572,12 +750,12 @@ namespace Sledge.BspEditor.Tools.Spin
         {
             base.Render(document, viewport, camera, worldMin, worldMax, im);
 
-            var solids = SelectedSolids(document);
-            if (solids.Count == 0) return;
+            var plan = MakePlan(document);
+            if (!plan.Valid) return;
 
-            var frame = FrameFromView(camera.ViewType);
-            var pivot = GetPivot(document);
-            var radius = Math.Max(64f, document.Selection.GetSelectionBoundingBox().LargestDimension);
+            var frame = plan.Frame;
+            var pivot = plan.Pivot;
+            var radius = plan.DrawRadius;
 
             // The spin circle
             const int sides = 48;
@@ -593,16 +771,12 @@ namespace Sledge.BspEditor.Tools.Spin
                 previous = point;
             }
 
-            // The pivot (gizmo) marker
+            // The pivot marker
             var cross = radius * 0.04f;
             im.AddLine(camera.WorldToScreen(pivot - frame.U * cross).ToVector2(), camera.WorldToScreen(pivot + frame.U * cross).ToVector2(), Color.Red);
             im.AddLine(camera.WorldToScreen(pivot - frame.V * cross).ToVector2(), camera.WorldToScreen(pivot + frame.V * cross).ToVector2(), Color.Red);
 
-            // The slots a spin would create, from the same plan the spin uses
-            var requested = _dragging ? CurrentDragSweep() : AngleDegrees;
-            if (Math.Abs(requested) < 0.01f) return;
-            var plan = MakePlan(solids, requested, pivot, frame);
-            if (!plan.Valid) return;
+            if (Math.Abs(plan.Sweep) < 0.01f) return;
 
             DrawRadial(im, camera, pivot, frame.U, frame.V, plan.Start, radius, Color.White);
             DrawRadial(im, camera, pivot, frame.U, frame.V, plan.Start + plan.Sweep, radius, Color.Turquoise);
@@ -622,7 +796,7 @@ namespace Sledge.BspEditor.Tools.Spin
                 previous = point;
             }
 
-            // The seams between slots
+            // The seams between pieces
             for (var k = 1; k < plan.Steps; k++)
             {
                 DrawRadial(im, camera, pivot, frame.U, frame.V, plan.Start + plan.Delta * k, radius, Color.LightGray);

@@ -11,9 +11,9 @@ using Sledge.Shell;
 namespace Sledge.BspEditor.Tools.Spin
 {
     /// <summary>
-    /// Sidebar panel for the spin tool: configures the sweep angle, the number
-    /// of pieces and whether UVs are mirrored.
-    /// Shows the axis in use and what the spin will produce.
+    /// Sidebar panel for the spin tool: set the start and end piece, then spin. Also the number of pieces,
+    /// the angle for a manual spin, and whether UVs are mirrored.
+    /// Shows what the spin will produce, or why it can't.
     /// Only shown while the spin tool is the active tool.
     /// </summary>
     [Export(typeof(ISidebarComponent))]
@@ -25,9 +25,14 @@ namespace Sledge.BspEditor.Tools.Spin
         public string Title { get; set; } = "Spin";
         public object Control => this;
 
+        private readonly Button _setStart;
+        private readonly Button _setEnd;
+        private readonly Button _clear;
+        private readonly CheckBox _auto;
         private readonly NumericUpDown _steps;
         private readonly NumericUpDown _angle;
         private readonly CheckBox _mirror;
+        private readonly CheckBox _drag;
         private readonly Label _info;
         private readonly Button _spin;
         private readonly System.Windows.Forms.Timer _timer;
@@ -45,50 +50,54 @@ namespace Sledge.BspEditor.Tools.Spin
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
-            _steps = new NumericUpDown
-            {
-                Minimum = 1,
-                Maximum = SpinTool.MaxSteps,
-                Value = 8,
-                Width = 60
-            };
-            _angle = new NumericUpDown
-            {
-                Minimum = -359,
-                Maximum = 359,
-                DecimalPlaces = 1,
-                Increment = 5,
-                Value = 90,
-                Width = 60
-            };
-            _mirror = new CheckBox { Text = "Mirror UVs (seamless)", Checked = true, AutoSize = true };
+            _setStart = new Button { Text = "Set start", AutoSize = true };
+            _setEnd = new Button { Text = "Set end", AutoSize = true };
+            _clear = new Button { Text = "Clear start/end", AutoSize = true };
+            _auto = new CheckBox { Text = "Auto steps (start piece thickness)", Checked = true, AutoSize = true };
+            _steps = new NumericUpDown { Minimum = 1, Maximum = SpinTool.MaxSteps, Value = 8, Width = 60 };
+            _angle = new NumericUpDown { Minimum = -359, Maximum = 359, DecimalPlaces = 1, Increment = 5, Value = 90, Width = 60 };
+            _mirror = new CheckBox { Text = "Flip every second piece's UVs", Checked = true, AutoSize = true };
+            _drag = new CheckBox { Text = "Drag to rotate in 2D (manual spin)", Checked = false, AutoSize = true };
             _info = new Label { AutoSize = true, MaximumSize = new Size(240, 0), Padding = new Padding(0, 4, 0, 4) };
             _spin = new Button { Text = "Spin", AutoSize = true };
 
-            for (var i = 0; i < 5; i++)
+            for (var i = 0; i < 9; i++)
             {
                 layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             }
 
-            layout.Controls.Add(new Label { Text = "Steps:", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
-            layout.Controls.Add(_steps, 1, 0);
-            layout.Controls.Add(new Label { Text = "Angle:", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 1);
-            layout.Controls.Add(_angle, 1, 1);
-            layout.Controls.Add(_mirror, 0, 2);
+            layout.Controls.Add(_setStart, 0, 0);
+            layout.Controls.Add(_setEnd, 1, 0);
+            layout.Controls.Add(_clear, 0, 1);
+            layout.SetColumnSpan(_clear, 2);
+            layout.Controls.Add(_auto, 0, 2);
+            layout.SetColumnSpan(_auto, 2);
+            layout.Controls.Add(new Label { Text = "Steps (manual / auto off):", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 3);
+            layout.Controls.Add(_steps, 1, 3);
+            layout.Controls.Add(new Label { Text = "Angle (manual):", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 4);
+            layout.Controls.Add(_angle, 1, 4);
+            layout.Controls.Add(_mirror, 0, 5);
             layout.SetColumnSpan(_mirror, 2);
-            layout.Controls.Add(_info, 0, 3);
+            layout.Controls.Add(_drag, 0, 6);
+            layout.SetColumnSpan(_drag, 2);
+            layout.Controls.Add(_info, 0, 7);
             layout.SetColumnSpan(_info, 2);
-            layout.Controls.Add(_spin, 0, 4);
+            layout.Controls.Add(_spin, 0, 8);
             layout.SetColumnSpan(_spin, 2);
 
             Controls.Add(layout);
 
+            _setStart.Click += (s, e) => _tool?.SetStartFromSelection();
+            _setEnd.Click += (s, e) => _tool?.SetEndFromSelection();
+            _clear.Click += (s, e) => _tool?.ClearPieces();
+            _auto.CheckedChanged += (s, e) => { if (_tool != null) _tool.AutoSteps = _auto.Checked; };
             _steps.ValueChanged += (s, e) => { if (_tool != null) _tool.Steps = (int) _steps.Value; };
             _angle.ValueChanged += (s, e) => { if (_tool != null) _tool.AngleDegrees = (float) _angle.Value; };
             _mirror.CheckedChanged += (s, e) => { if (_tool != null) _tool.MirrorUvs = _mirror.Checked; };
+            _drag.CheckedChanged += (s, e) => { if (_tool != null) _tool.DragRotate = _drag.Checked; };
             _spin.Click += (s, e) => _tool?.ApplySpin();
 
-            // When a spin is performed by dragging in a viewport, the tool pushes
+            // When a manual spin is performed by dragging in a viewport, the tool pushes
             // the angle it used so the panel stays in sync
             Oy.Subscribe<string>("SpinTool:SetAngle", v =>
             {
@@ -101,7 +110,7 @@ namespace Sledge.BspEditor.Tools.Spin
                 });
             });
 
-            // The info line follows the selection, the view and the angle
+            // The info line follows the selection, the pieces and the settings
             _timer = new System.Windows.Forms.Timer { Interval = 250 };
             _timer.Tick += (s, e) =>
             {

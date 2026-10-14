@@ -10,12 +10,12 @@ namespace Sledge.BspEditor.Tools.Spin
     /// <summary>
     /// Pure geometry for the spin tool.
     ///
-    /// A spin sweeps a profile around an axis. The profile is a solid that is extruded
-    /// along one direction (the tangent): its side faces are parallel to that direction
-    /// and its two end caps are square to it. Sweeping keeps every side face exactly as
-    /// it is (same tilt, same texture) and replaces the two end caps by radial seam
-    /// planes through the pivot. Each slot gets the side faces turned to the slot's
-    /// middle direction, so neighbouring pieces meet on their shared seam exactly.
+    /// A spin sweeps a profile around an axis. The profile is a solid (or a group of solids) that is
+    /// extruded along one direction, the tangent: its side faces are parallel to that direction and its
+    /// two end caps are square to it. The sweep puts one copy of the profile on every radial seam and
+    /// joins neighbouring copies with one planar quad per profile edge, so the vertices of a seam lie
+    /// exactly on the circles the profile's own points lie on. The first and last seam are exactly the
+    /// profile, so the result joins straight pieces that continue the profile on either side.
     /// </summary>
     public static class SpinGeometry
     {
@@ -27,7 +27,7 @@ namespace Sledge.BspEditor.Tools.Spin
 
         public enum FaceKind
         {
-            /// <summary>Parallel to the extrusion direction: kept as part of the profile.</summary>
+            /// <summary>Parallel to the extrusion direction: part of the profile.</summary>
             Side,
 
             /// <summary>Square to the extrusion direction: replaced by a seam.</summary>
@@ -37,14 +37,43 @@ namespace Sledge.BspEditor.Tools.Spin
             Other
         }
 
-        /// <summary>One plane of a swept piece. <see cref="Source"/> is the index of the original face it came from, or -1 for a seam.</summary>
-        public struct SweepPlane
+        /// <summary>A face reduced to what the geometry needs: its outward normal and its vertices.</summary>
+        public sealed class PieceFace
         {
             public Vector3 Normal;
-            public Vector3 Point;
-            public int Source;
+            public IReadOnlyList<Vector3> Vertices;
 
-            public Plane ToPlane() => new Plane(Normal, Point);
+            public PieceFace(Vector3 normal, IReadOnlyList<Vector3> vertices)
+            {
+                Normal = normal;
+                Vertices = vertices;
+            }
+        }
+
+        /// <summary>An arch worked out from a start piece and an end piece.</summary>
+        public sealed class ArchDefinition
+        {
+            public Vector3 Pivot;
+            public Vector3 Axis;
+
+            /// <summary>Spin plane frame: U points from the pivot at the start piece, (U, V, Axis) is right-handed.</summary>
+            public Vector3 U;
+            public Vector3 V;
+
+            /// <summary>Total sweep in degrees, signed (positive turns counter-clockwise about Axis).</summary>
+            public float Sweep;
+
+            /// <summary>How wide the start piece is, in degrees, seen from the pivot.</summary>
+            public float PieceAngle;
+
+            /// <summary>Number of pieces that matches the start piece's thickness.</summary>
+            public int Steps;
+
+            /// <summary>Distance from the axis to the middle of the start piece.</summary>
+            public float Radius;
+
+            /// <summary>Thickness of the start piece along its extrusion direction.</summary>
+            public float Thickness;
         }
 
         /// <summary>Unit vector in the spin plane at the given angle.</summary>
@@ -68,6 +97,8 @@ namespace Sledge.BspEditor.Tools.Spin
             return FaceKind.Other;
         }
 
+        #region Manual spin: pivot and axis given
+
         /// <summary>
         /// Finds the profile's own direction: the angle (degrees, in the spin plane) of the
         /// radial line from the pivot along which the profile lies. The extrusion direction
@@ -85,15 +116,8 @@ namespace Sledge.BspEditor.Tools.Spin
             if (planar.Length() < 1f) return false;
             var towards = planar.Normalise();
 
-            // A spin leaves many faces with the same few normals, so work on the distinct ones.
-            // (Scoring every face against every candidate gets slow once hundreds of solids are selected.)
-            var distinct = new Dictionary<(int, int, int), (Vector3 Normal, int Count)>();
-            foreach (var n in normals)
-            {
-                var key = ((int) MathF.Round(n.X * 1000f), (int) MathF.Round(n.Y * 1000f), (int) MathF.Round(n.Z * 1000f));
-                distinct[key] = distinct.TryGetValue(key, out var found) ? (found.Normal, found.Count + 1) : (n, 1);
-            }
-            var unique = distinct.Values.ToList();
+            // A spin leaves many faces with the same few normals, so work on the distinct ones
+            var unique = Distinct(normals);
 
             // Candidate extrusion directions come from the faces themselves
             var candidates = new Dictionary<(int, int, int), Vector3>();
@@ -104,7 +128,7 @@ namespace Sledge.BspEditor.Tools.Spin
                 flat = flat.Normalise();
                 foreach (var c in new[] { flat, Vector3.Cross(axis, flat).Normalise() })
                 {
-                    candidates[((int) MathF.Round(c.X * 1000f), (int) MathF.Round(c.Y * 1000f), (int) MathF.Round(c.Z * 1000f))] = c;
+                    candidates[Key(c)] = c;
                 }
             }
             if (candidates.Count == 0) return false;
@@ -114,12 +138,7 @@ namespace Sledge.BspEditor.Tools.Spin
             var best = Vector3.Zero;
             foreach (var t in candidates.Values)
             {
-                var score = 0;
-                foreach (var entry in unique)
-                {
-                    var dot = Math.Abs(Vector3.Dot(entry.Normal, t));
-                    if (dot <= SideTolerance || dot >= CapTolerance) score += entry.Count;
-                }
+                var score = Score(unique, t);
 
                 // The profile direction is square to the extrusion direction
                 var radial = Vector3.Cross(t, axis).Normalise();
@@ -141,99 +160,179 @@ namespace Sledge.BspEditor.Tools.Spin
             return true;
         }
 
-        /// <summary>
-        /// The planes of one piece of the swept solid. Piece <paramref name="piece"/> occupies the slot
-        /// from <c>profileAngle + piece * delta</c> for <c>delta</c> degrees (delta may be negative).
-        /// Returns false when a face is neither parallel nor square to the extrusion direction.
-        /// </summary>
-        /// <param name="normals">Outward face normals of the solid.</param>
-        /// <param name="points">A point on each face.</param>
-        public static bool TrySweep(IReadOnlyList<Vector3> normals, IReadOnlyList<Vector3> points, Vector3 pivot, Vector3 axis, Vector3 u, Vector3 v,
-            float profileAngle, float delta, int piece, out List<SweepPlane> planes)
+        private static (int, int, int) Key(Vector3 n)
         {
-            planes = new List<SweepPlane>();
+            return ((int) MathF.Round(n.X * 1000f), (int) MathF.Round(n.Y * 1000f), (int) MathF.Round(n.Z * 1000f));
+        }
 
-            var tangent = Tangent(axis, u, v, profileAngle);
-            var profileDirection = Direction(u, v, profileAngle);
-
-            var mid = profileAngle + delta * (piece + 0.5f);
-            var slotDirection = Direction(u, v, mid);
-
-            for (var i = 0; i < normals.Count; i++)
+        private static List<(Vector3 Normal, int Count)> Distinct(IEnumerable<Vector3> normals)
+        {
+            var distinct = new Dictionary<(int, int, int), (Vector3 Normal, int Count)>();
+            foreach (var n in normals)
             {
-                var kind = Classify(normals[i], tangent);
-                if (kind == FaceKind.Cap) continue;
-                if (kind == FaceKind.Other) return false;
-
-                // The face in profile coordinates: its normal and one point, measured in the
-                // plane that holds the axis and the profile direction
-                var normal = (normals[i] - tangent * Vector3.Dot(normals[i], tangent)).Normalise();
-                var a = Vector3.Dot(normal, profileDirection);
-                var b = Vector3.Dot(normal, axis);
-
-                var relative = points[i] - pivot;
-                var r = Vector3.Dot(relative, profileDirection);
-                var z = Vector3.Dot(relative, axis);
-
-                // The same face, laid in the plane of this slot's middle direction
-                planes.Add(new SweepPlane
-                {
-                    Normal = slotDirection * a + axis * b,
-                    Point = pivot + slotDirection * r + axis * z,
-                    Source = i
-                });
+                var key = Key(n);
+                distinct[key] = distinct.TryGetValue(key, out var found) ? (found.Normal, found.Count + 1) : (n, 1);
             }
-
-            var half = Math.Abs(delta) / 2f;
-            var lo = mid - half;
-            var hi = mid + half;
-
-            // Outward-facing seams through the pivot
-            planes.Add(new SweepPlane { Normal = -Tangent(axis, u, v, lo), Point = pivot, Source = -1 });
-            planes.Add(new SweepPlane { Normal = Tangent(axis, u, v, hi), Point = pivot, Source = -1 });
-
-            return planes.Count >= 5;
+            return distinct.Values.ToList();
         }
+
+        /// <summary>How many faces are parallel or square to a direction.</summary>
+        private static int Score(List<(Vector3 Normal, int Count)> unique, Vector3 t)
+        {
+            var score = 0;
+            foreach (var entry in unique)
+            {
+                var dot = Math.Abs(Vector3.Dot(entry.Normal, t));
+                if (dot <= SideTolerance || dot >= CapTolerance) score += entry.Count;
+            }
+            return score;
+        }
+
+        #endregion
+
+        #region Start and end piece
 
         /// <summary>
-        /// Builds a piece from its planes. Returns null unless the result is a valid convex solid.
+        /// The extrusion direction of a set of faces: the direction every face is parallel or square to.
+        /// When several fit (a plain box) the one along which the piece is thinnest wins.
         /// </summary>
-        public static Polyhedron BuildPiece(IReadOnlyList<SweepPlane> planes)
+        public static bool TryFindExtrusion(IReadOnlyList<PieceFace> faces, out Vector3 tangent)
         {
-            var piece = new Polyhedron(planes.Select(x => x.ToPlane()));
-            if (piece.Polygons.Count < 4) return null;
-            return piece.IsValid() ? piece : null;
-        }
+            tangent = Vector3.Zero;
+            if (faces.Count == 0) return false;
 
-        /// <summary>The index of the plane a polygon lies on, or -1.</summary>
-        public static int MatchPlane(Polygon polygon, IReadOnlyList<SweepPlane> planes)
-        {
-            return MatchPlane(polygon.Vertices, planes);
-        }
+            var unique = Distinct(faces.Select(x => x.Normal));
+            var vertices = faces.SelectMany(x => x.Vertices).ToList();
 
-        /// <summary>The index of the plane a set of vertices lies on, or -1.</summary>
-        public static int MatchPlane(IReadOnlyList<Vector3> vertices, IReadOnlyList<SweepPlane> planes)
-        {
-            var best = -1;
-            var bestError = 0.05f;
-            for (var i = 0; i < planes.Count; i++)
+            var bestScore = -1;
+            var bestExtent = float.MaxValue;
+            foreach (var entry in unique)
             {
-                var n = planes[i].Normal.Normalise();
-                var error = vertices.Max(x => Math.Abs(Vector3.Dot(x - planes[i].Point, n)));
-                if (error < bestError)
+                var t = entry.Normal.Normalise();
+                var score = Score(unique, t);
+                var projections = vertices.Select(x => Vector3.Dot(x, t)).ToList();
+                var extent = projections.Max() - projections.Min();
+
+                if (score > bestScore || (score == bestScore && extent < bestExtent - 1e-3f))
                 {
-                    bestError = error;
-                    best = i;
+                    bestScore = score;
+                    bestExtent = extent;
+                    tangent = t;
                 }
             }
-            return best;
+
+            if (bestScore < faces.Count) return false;
+
+            // A stable sign, so the same piece always gives the same direction
+            var largest = Math.Abs(tangent.X) >= Math.Abs(tangent.Y) && Math.Abs(tangent.X) >= Math.Abs(tangent.Z) ? tangent.X
+                : Math.Abs(tangent.Y) >= Math.Abs(tangent.Z) ? tangent.Y : tangent.Z;
+            if (largest < 0) tangent = -tangent;
+            return true;
         }
 
-        /// <summary>The outward normal of a face, from its first three vertices (the same plane the map export writes).</summary>
-        public static Vector3 FaceNormal(IReadOnlyList<Vector3> vertices)
+        /// <summary>The positions along the extrusion direction of the piece's two end caps.</summary>
+        private static bool TryGetCaps(IReadOnlyList<PieceFace> faces, Vector3 tangent, out float low, out float high)
         {
-            return new Plane(vertices[0], vertices[1], vertices[2]).Normal;
+            var offsets = faces
+                .Where(x => Classify(x.Normal, tangent) == FaceKind.Cap && x.Vertices.Count > 0)
+                .Select(x => Vector3.Dot(x.Vertices[0], tangent))
+                .ToList();
+
+            low = offsets.Count > 0 ? offsets.Min() : 0f;
+            high = offsets.Count > 0 ? offsets.Max() : 0f;
+            return offsets.Count > 0 && high - low > 0.01f;
         }
+
+        private static Vector3 Middle(IReadOnlyList<PieceFace> faces)
+        {
+            var vertices = faces.SelectMany(x => x.Vertices).ToList();
+            var min = vertices.Aggregate(new Vector3(float.MaxValue), Vector3.Min);
+            var max = vertices.Aggregate(new Vector3(float.MinValue), Vector3.Max);
+            return (min + max) / 2f;
+        }
+
+        /// <summary>
+        /// Works out an arch from a start piece and an end piece. Each piece is an extruded profile; the
+        /// arch's axis is square to both extrusion directions, its pivot is where the two pieces' outer
+        /// end caps (the caps facing away from the other piece) meet, and it runs from the start piece's
+        /// outer cap to the end piece's outer cap, covering both pieces.
+        /// </summary>
+        public static bool TryDefineArch(IReadOnlyList<PieceFace> start, IReadOnlyList<PieceFace> end, int maxSteps, out ArchDefinition arch, out string error)
+        {
+            arch = null;
+            error = null;
+
+            if (!TryFindExtrusion(start, out var tS)) { error = "The start piece isn't an extruded profile: every face must be parallel or square to one direction."; return false; }
+            if (!TryFindExtrusion(end, out var tE)) { error = "The end piece isn't an extruded profile: every face must be parallel or square to one direction."; return false; }
+            if (!TryGetCaps(start, tS, out var lowS, out var highS)) { error = "The start piece has no two end caps."; return false; }
+            if (!TryGetCaps(end, tE, out var lowE, out var highE)) { error = "The end piece has no two end caps."; return false; }
+
+            var axis = Vector3.Cross(tS, tE);
+            if (axis.Length() < 0.1f) { error = "The start and end pieces are extruded along the same direction, so there is nothing to turn between them."; return false; }
+            axis = axis.Normalise();
+
+            var cS = Middle(start);
+            var cE = Middle(end);
+
+            // The outer cap of each piece is the one farther from the other piece
+            var capS = Math.Abs(Vector3.Dot(cE, tS) - lowS) >= Math.Abs(Vector3.Dot(cE, tS) - highS) ? lowS : highS;
+            var capE = Math.Abs(Vector3.Dot(cS, tE) - lowE) >= Math.Abs(Vector3.Dot(cS, tE) - highE) ? lowE : highE;
+
+            // The pivot: on both outer cap planes, at the start piece's mid height
+            var z = Vector3.Dot(cS, axis);
+            var m = new Matrix4x4(tS.X, tS.Y, tS.Z, 0, tE.X, tE.Y, tE.Z, 0, axis.X, axis.Y, axis.Z, 0, 0, 0, 0, 1);
+            if (!Matrix4x4.Invert(m, out var inverse)) { error = "The pivot can't be worked out from these pieces."; return false; }
+            var rhs = new Vector3(capS, capE, z);
+            var pivot = new Vector3(
+                inverse.M11 * rhs.X + inverse.M12 * rhs.Y + inverse.M13 * rhs.Z,
+                inverse.M21 * rhs.X + inverse.M22 * rhs.Y + inverse.M23 * rhs.Z,
+                inverse.M31 * rhs.X + inverse.M32 * rhs.Y + inverse.M33 * rhs.Z);
+
+            // The profile direction of each piece: from the pivot, along its outer cap, towards the piece
+            var dS = Vector3.Cross(tS, axis).Normalise();
+            if (Vector3.Dot(dS, cS - pivot) < 0) dS = -dS;
+            var dE = Vector3.Cross(tE, axis).Normalise();
+            if (Vector3.Dot(dE, cE - pivot) < 0) dE = -dE;
+
+            var radius = Vector3.Dot(cS - pivot, dS);
+            if (radius < 1f || Vector3.Dot(cE - pivot, dE) < 1f) { error = "A piece lies on the axis, so it can't be turned around it."; return false; }
+
+            var u = dS;
+            var v = Vector3.Cross(axis, u).Normalise();
+
+            var thetaE = (float) (Math.Atan2(Vector3.Dot(dE, v), Vector3.Dot(dE, u)) * 180d / Math.PI);
+            if (Math.Abs(thetaE) < 1f) { error = "The start and end pieces are at the same angle around the pivot."; return false; }
+
+            // The arch leaves the start piece's outer cap through the piece's own body
+            var bodyS = (Vector3.Dot(cS, tS) - capS) >= 0 ? tS : -tS;
+            var sign = Vector3.Dot(bodyS, v) >= 0 ? 1f : -1f;
+            var sweep = sign > 0 ? (thetaE > 0 ? thetaE : thetaE + 360f) : (thetaE < 0 ? thetaE : thetaE - 360f);
+
+            // ... and reaches the end piece's outer cap through that piece's body
+            var tauE = Vector3.Cross(axis, dE);
+            var bodyE = (Vector3.Dot(cE, tE) - capE) >= 0 ? tE : -tE;
+            if (Vector3.Dot(bodyE, tauE * sign) > 0)
+            {
+                error = "The end piece faces away from the arch. Its body has to lie on the arch side of its outer end cap.";
+                return false;
+            }
+
+            var thickness = highS - lowS;
+            var pieceAngle = (float) (Math.Atan2(thickness, radius) * 180d / Math.PI);
+            var steps = Math.Max(1, Math.Min(maxSteps, (int) Math.Round(Math.Abs(sweep) / pieceAngle)));
+
+            arch = new ArchDefinition
+            {
+                Pivot = pivot, Axis = axis, U = u, V = v,
+                Sweep = sweep, PieceAngle = pieceAngle, Steps = steps,
+                Radius = radius, Thickness = thickness
+            };
+            return true;
+        }
+
+        #endregion
+
+        #region Building the pieces
 
         /// <summary>
         /// The cross-section of a solid: the vertices of one end cap, as (radial distance, height)
@@ -255,9 +354,46 @@ namespace Sledge.BspEditor.Tools.Spin
         }
 
         /// <summary>
+        /// For each edge of an end cap (vertex i to vertex i + 1), the index of the side face that
+        /// contains it, or -1. The swept piece's side face for that edge takes that face's texture.
+        /// </summary>
+        public static int[] FindEdgeFaces(IReadOnlyList<Vector3> capVertices, IReadOnlyList<PieceFace> faces, Vector3 tangent)
+        {
+            var result = new int[capVertices.Count];
+            for (var i = 0; i < capVertices.Count; i++)
+            {
+                var a = capVertices[i];
+                var b = capVertices[(i + 1) % capVertices.Count];
+                result[i] = -1;
+
+                var bestError = 0.05f;
+                for (var f = 0; f < faces.Count; f++)
+                {
+                    if (faces[f].Vertices.Count == 0 || Classify(faces[f].Normal, tangent) != FaceKind.Side) continue;
+                    var n = faces[f].Normal.Normalise();
+                    var p = faces[f].Vertices[0];
+                    var error = Math.Max(Math.Abs(Vector3.Dot(a - p, n)), Math.Abs(Vector3.Dot(b - p, n)));
+                    if (error < bestError)
+                    {
+                        bestError = error;
+                        result[i] = f;
+                    }
+                }
+            }
+            return result;
+        }
+
+        /// <summary>The outward normal of a face, from its first three vertices (the same plane the map export writes).</summary>
+        public static Vector3 FaceNormal(IReadOnlyList<Vector3> vertices)
+        {
+            return new Plane(vertices[0], vertices[1], vertices[2]).Normal;
+        }
+
+        /// <summary>
         /// One piece built from explicit vertices: the profile at the seam where the slot starts and at the
-        /// seam where it ends, joined by one quad per profile edge. Returns the faces, each wound outward,
-        /// or null if the result isn't a convex solid.
+        /// seam where it ends, joined by one planar quad per profile edge. Returns the faces, each wound
+        /// outward (the first two are the seam faces, then one side face per profile edge), or null if the
+        /// result isn't a convex solid.
         ///
         /// A seam's vertices are computed once, in double precision, from the seam's angle alone, so the two
         /// pieces that meet there get identical vertices. Their seam faces also start with the same three
@@ -270,8 +406,6 @@ namespace Sledge.BspEditor.Tools.Spin
             var count = profile.Count;
             if (count < 3) return null;
 
-            var cosHalf = Math.Cos(Math.Abs((double) delta) / 2d * Math.PI / 180d);
-
             Vector3[] Seam(int k)
             {
                 var theta = ((double) profileAngle + (double) delta * k) * Math.PI / 180d;
@@ -280,12 +414,12 @@ namespace Sledge.BspEditor.Tools.Spin
                 var seam = new Vector3[count];
                 for (var i = 0; i < count; i++)
                 {
-                    var rho = profile[i].R / cosHalf;
+                    var r = profile[i].R;
                     var z = profile[i].Z;
                     seam[i] = new Vector3(
-                        (float) (pivot.X + (u.X * c + v.X * s) * rho + axis.X * z),
-                        (float) (pivot.Y + (u.Y * c + v.Y * s) * rho + axis.Y * z),
-                        (float) (pivot.Z + (u.Z * c + v.Z * s) * rho + axis.Z * z));
+                        (float) (pivot.X + (u.X * c + v.X * s) * r + axis.X * z),
+                        (float) (pivot.Y + (u.Y * c + v.Y * s) * r + axis.Y * z),
+                        (float) (pivot.Z + (u.Z * c + v.Z * s) * r + axis.Z * z));
                 }
                 return seam;
             }
@@ -363,5 +497,7 @@ namespace Sledge.BspEditor.Tools.Spin
 
             return Matrix4x4.CreateTranslation(-pivot) * m * Matrix4x4.CreateTranslation(pivot);
         }
+
+        #endregion
     }
 }
