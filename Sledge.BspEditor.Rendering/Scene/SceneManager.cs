@@ -23,6 +23,7 @@ using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Globalization;
 using System.Linq;
+using System.Threading;
 using System.Numerics;
 using System.Reflection.Metadata;
 using System.Threading.Tasks;
@@ -233,8 +234,39 @@ namespace Sledge.BspEditor.Rendering.Scene
 
 		// Scene handling
 
+		// Scene updates run one at a time, in the order they were asked for. The conversion itself is
+		// asynchronous, so without this two overlapping updates (e.g. several maps being activated while
+		// the editor starts up) write into the scene at the same time and whichever finishes last wins -
+		// which could leave the first map's geometry in the viewports after the last map was activated.
+		private readonly object _queueLock = new object();
+		private Task _sceneQueue = Task.CompletedTask;
+		private int _fullUpdateRequest;
+
 		private Task UpdateScene(MapDocument md, IEnumerable<IMapObject> affected)
 		{
+			// A full rebuild makes any earlier queued update pointless, so remember which one is the newest
+			var request = affected == null ? Interlocked.Increment(ref _fullUpdateRequest) : Volatile.Read(ref _fullUpdateRequest);
+
+			lock (_queueLock)
+			{
+				var result = _sceneQueue
+					.ContinueWith(_ => UpdateSceneNow(md, affected, request), TaskScheduler.Default)
+					.Unwrap();
+
+				// A failed update must not stop the ones queued after it
+				_sceneQueue = result.ContinueWith(_ => { }, TaskScheduler.Default);
+				return result;
+			}
+		}
+
+		private Task UpdateSceneNow(MapDocument md, IEnumerable<IMapObject> affected, int request)
+		{
+			// Superseded by a newer full rebuild
+			if (request != Volatile.Read(ref _fullUpdateRequest)) return Task.CompletedTask;
+
+			// A partial update for a map that is no longer the active one
+			if (md != null && affected != null && !(_activeDocument.TryGetTarget(out var current) && current == md)) return Task.CompletedTask;
+
 			var waitTask = Task.CompletedTask;
 			lock (_lock)
 			{
