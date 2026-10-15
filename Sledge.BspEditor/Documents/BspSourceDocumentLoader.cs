@@ -11,6 +11,7 @@ using Sledge.BspEditor.Components;
 using Sledge.BspEditor.Environment;
 using Sledge.BspEditor.Environment.Controls;
 using Sledge.BspEditor.Environment.Empty;
+using Sledge.BspEditor.Grid;
 using Sledge.BspEditor.Primitives;
 using Sledge.BspEditor.Primitives.MapData;
 using Sledge.BspEditor.Primitives.MapObjects;
@@ -267,6 +268,12 @@ namespace Sledge.BspEditor.Documents
 				await p.AfterLoad(document);
 			}
 
+			// Re-apply the grid size last used for this specific map
+			if (!String.IsNullOrWhiteSpace(document.FileName))
+			{
+				MapGridSettingsManager.GetInstance()?.Apply(document.FileName, document.Map.Data.GetOne<GridData>());
+			}
+
 			// Re-apply the remembered "3D Textured (No Shade)" display mode
 			if (ViewportRenderSettings.GetInstance()?.Unshaded3D == true)
 			{
@@ -320,6 +327,12 @@ namespace Sledge.BspEditor.Documents
 					MapTexturePackageSettingsManager.GetInstance()?.SetDisabledPackages(location, disabled);
 					await Oy.Publish("Settings:Save");
 				}
+			}
+
+			// Remember the grid under the path being saved to (covers new maps and Save As)
+			if (MapGridSettingsManager.GetInstance()?.Set(location, map.Map.Data.GetOne<GridData>()) == true)
+			{
+				await Oy.Publish("Settings:Save");
 			}
 
 			await ProcessBeforeSave(map);
