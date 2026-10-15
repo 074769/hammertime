@@ -164,16 +164,55 @@ namespace Sledge.Shell.Forms
 			Text = Title;
 		}
 
+		// While the previous session's documents are being reopened, the tab strip's own selection events
+		// are ignored: each document is activated explicitly as it opens, and the tab control can raise a
+		// late selection change for the first tab, which would switch the views back to the first file.
+		private volatile bool _restoringSession;
+
+		/// <summary>
+		/// Makes sure the newest document's tab is the selected one, and that it is the active document.
+		/// </summary>
+		private void ReselectLastDocument()
+		{
+			var last = _documentRegister.Value.OpenDocuments.LastOrDefault();
+			if (last == null) return;
+
+			var page = DocumentTabs.TabPages.OfType<TabPage>().FirstOrDefault(x => x.Tag == last);
+			if (page == null) return;
+
+			if (DocumentTabs.SelectedTab != page) DocumentTabs.SelectedTab = page;
+			_documentRegister.Value.ActivateDocument(last);
+		}
+
 		private async Task PostLoad()
 		{
-			if (_openDocuments != null && _openLastFiles)
+			_restoringSession = true;
+			try
 			{
-				foreach (var dp in _openDocuments)
+				if (_openDocuments != null && _openLastFiles)
 				{
-					await _documentRegister.Value.OpenDocument(dp.ToPointer(), dp.Loader);
+					foreach (var dp in _openDocuments)
+					{
+						await _documentRegister.Value.OpenDocument(dp.ToPointer(), dp.Loader);
+					}
 				}
+				await Oy.Publish("Shell:InstanceOpened", Environment.GetCommandLineArgs().ToList());
 			}
-			await Oy.Publish("Shell:InstanceOpened", Environment.GetCommandLineArgs().ToList());
+			finally
+			{
+				// Once the window has settled, go back to the newest document and stop ignoring tab events
+				this.InvokeLater(() =>
+				{
+					EventHandler idle = null;
+					idle = (s, e) =>
+					{
+						Application.Idle -= idle;
+						_restoringSession = false;
+						ReselectLastDocument();
+					};
+					Application.Idle += idle;
+				});
+			}
 		}
 
 		private void PersistCurrentOpenDocumentList()
@@ -421,6 +460,8 @@ namespace Sledge.Shell.Forms
 
 		private void TabChanged(object sender, EventArgs e)
 		{
+			Common.Logging.Log.Debug(nameof(Shell), $"Tab changed to index {DocumentTabs.SelectedIndex} (restoring session: {_restoringSession})");
+			if (_restoringSession) return;
 			_documentRegister.Value.ActivateDocument(DocumentTabs.SelectedTab?.Tag as IDocument);
 		}
 
