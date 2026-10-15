@@ -32,6 +32,8 @@ namespace Sledge.BspEditor.Commands.Clipboard
                 // Deleting an object of a link's origin instance deletes its copies in the other instances too
                 var removing = sel.Concat(LinkedObjects.GetCounterpartsToDelete(document, sel)).ToList();
                 var t = new Transaction(removing.GroupBy(x => x.Hierarchy.Parent.ID).Select(x => new Detatch(x.Key, x)));
+                // Groups that end up with no children (e.g. deleting with ignore groups on) go too
+                t.AddRange(GroupCleanup.DetatchEmptiedGroups(removing));
                 await MapDocumentOperation.Perform(document, t);
             }
         }

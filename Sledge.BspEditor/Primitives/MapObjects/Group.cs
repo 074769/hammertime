@@ -25,7 +25,9 @@ namespace Sledge.BspEditor.Primitives.MapObjects
 
         protected override Box GetBoundingBox()
         {
-            return Hierarchy.NumChildren > 0 ? new Box(Hierarchy.Select(x => x.BoundingBox)) : Box.Empty;
+            // An empty child group reports Box.Empty (a point at the origin), which must not stretch this box
+            var boxes = Hierarchy.Where(x => !(x is Group && !x.Hierarchy.HasChildren)).Select(x => x.BoundingBox).ToList();
+            return boxes.Count > 0 ? new Box(boxes) : Box.Empty;
         }
         
         public override IEnumerable<Polygon> GetPolygons()
