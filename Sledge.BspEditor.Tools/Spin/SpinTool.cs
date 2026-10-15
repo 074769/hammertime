@@ -626,11 +626,11 @@ namespace Sledge.BspEditor.Tools.Spin
                 {
                     foreach (var piece in pieces)
                     {
-                        var faces = piece.Faces.ToList();
-                        var unfolded = UvMath.Unfold(faces);
-                        foreach (var face in faces)
+                        var unfoldFaces = piece.Faces.ToList();
+                        var unfolded = UvMath.Unfold(unfoldFaces);
+                        foreach (var unfoldFace in unfoldFaces)
                         {
-                            if (unfolded.TryGetValue(face.ID, out var texture)) face.Texture.Unclone(texture);
+                            if (unfolded.TryGetValue(unfoldFace.ID, out var unfoldedTexture)) unfoldFace.Texture.Unclone(unfoldedTexture);
                         }
                     }
                 }
