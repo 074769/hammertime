@@ -101,7 +101,7 @@ namespace Sledge.Shell.Registers
 		public async Task<IDocument> NewDocument(IDocumentLoader loader)
 		{
 			var doc = await loader.CreateBlank();
-			if (doc != null) OpenDocument(doc);
+			if (doc != null) await OpenDocument(doc);
 			return doc;
 		}
 
@@ -120,7 +120,7 @@ namespace Sledge.Shell.Registers
 			if (loader == null) return null;
 
 			var doc = await loader.Load(documentPointer);
-			if (doc != null) OpenDocument(doc);
+			if (doc != null) await OpenDocument(doc);
 
 			return doc;
 		}
@@ -142,7 +142,7 @@ namespace Sledge.Shell.Registers
 			if (loader != null)
 			{
 				var doc = await loader.Load(fileName);
-				if (doc != null) OpenDocument(doc);
+				if (doc != null) await OpenDocument(doc);
 				return doc;
 			}
 
