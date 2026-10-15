@@ -32,6 +32,7 @@ namespace Sledge.BspEditor.Tools.Spin
         private readonly NumericUpDown _steps;
         private readonly NumericUpDown _angle;
         private readonly CheckBox _mirror;
+        private readonly CheckBox _unfold;
         private readonly CheckBox _drag;
         private readonly Label _info;
         private readonly Button _spin;
@@ -64,11 +65,12 @@ namespace Sledge.BspEditor.Tools.Spin
             _steps = new NumericUpDown { Minimum = 1, Maximum = SpinTool.MaxSteps, Value = 8, Width = 60 };
             _angle = new NumericUpDown { Minimum = -359, Maximum = 359, DecimalPlaces = 1, Increment = 5, Value = 90, Width = 60 };
             _mirror = new CheckBox { Text = "Flip every second piece's UVs", Checked = true, AutoSize = true };
+            _unfold = new CheckBox { Text = "Unfold UVs of each piece", Checked = false, AutoSize = true };
             _drag = new CheckBox { Text = "Drag to rotate in 2D (manual)", Checked = false, AutoSize = true };
             _info = new Label { AutoSize = true, MaximumSize = new Size(210, 0), Padding = new Padding(0, 4, 0, 4) };
             _spin = new Button { Text = "Spin", Dock = DockStyle.Fill, AutoSize = false, Height = 30 };
 
-            for (var i = 0; i < 9; i++)
+            for (var i = 0; i < 10; i++)
             {
                 layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             }
@@ -85,11 +87,13 @@ namespace Sledge.BspEditor.Tools.Spin
             layout.Controls.Add(_angle, 1, 4);
             layout.Controls.Add(_mirror, 0, 5);
             layout.SetColumnSpan(_mirror, 2);
-            layout.Controls.Add(_drag, 0, 6);
+            layout.Controls.Add(_unfold, 0, 6);
+            layout.SetColumnSpan(_unfold, 2);
+            layout.Controls.Add(_drag, 0, 7);
             layout.SetColumnSpan(_drag, 2);
-            layout.Controls.Add(_info, 0, 7);
+            layout.Controls.Add(_info, 0, 8);
             layout.SetColumnSpan(_info, 2);
-            layout.Controls.Add(_spin, 0, 8);
+            layout.Controls.Add(_spin, 0, 9);
             layout.SetColumnSpan(_spin, 2);
 
             Controls.Add(layout);
@@ -104,6 +108,7 @@ namespace Sledge.BspEditor.Tools.Spin
             _steps.ValueChanged += (s, e) => { if (_tool != null) _tool.Steps = (int) _steps.Value; };
             _angle.ValueChanged += (s, e) => { if (_tool != null) _tool.AngleDegrees = (float) _angle.Value; };
             _mirror.CheckedChanged += (s, e) => { if (_tool != null) _tool.MirrorUvs = _mirror.Checked; };
+            _unfold.CheckedChanged += (s, e) => { if (_tool != null) _tool.UnfoldUvs = _unfold.Checked; };
             _drag.CheckedChanged += (s, e) => { if (_tool != null) _tool.DragRotate = _drag.Checked; };
             _spin.Click += (s, e) => _tool?.ApplySpin();
 

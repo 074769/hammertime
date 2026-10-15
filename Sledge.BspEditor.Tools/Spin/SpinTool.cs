@@ -80,6 +80,12 @@ namespace Sledge.BspEditor.Tools.Spin
         /// <summary>When true, every second piece gets its texture mapping mirrored so the pattern tiles seamlessly.</summary>
         public bool MirrorUvs { get; set; } = true;
 
+        /// <summary>
+        /// When true, the faces of each piece are unfolded into one continuous, undistorted layout (as the UV tool's
+        /// Unfold does). Independent of <see cref="MirrorUvs"/>: the mirroring of every second piece stays.
+        /// </summary>
+        public bool UnfoldUvs { get; set; }
+
         /// <summary>With a start and an end piece: take the number of pieces from the start piece's thickness.</summary>
         public bool AutoSteps { get; set; } = true;
 
@@ -473,7 +479,7 @@ namespace Sledge.BspEditor.Tools.Spin
             foreach (var solid in plan.SourceSolids)
             {
                 // Each solid is all or nothing: if any of its pieces can't be made, it stays as it was
-                var result = SpinSolid(solid, plan, MirrorUvs, generator);
+                var result = SpinSolid(solid, plan, MirrorUvs, UnfoldUvs, generator);
                 if (result == null)
                 {
                     failed++;
@@ -538,7 +544,7 @@ namespace Sledge.BspEditor.Tools.Spin
         /// Builds the operations that replace one solid by its swept pieces. Returns null if the solid
         /// can't be swept without changing its shape; nothing is changed then.
         /// </summary>
-        private static SolidSpin SpinSolid(Solid solid, Plan plan, bool mirror, UniqueNumberGenerator generator)
+        private static SolidSpin SpinSolid(Solid solid, Plan plan, bool mirror, bool unfold, UniqueNumberGenerator generator)
         {
             try
             {
@@ -612,6 +618,21 @@ namespace Sledge.BspEditor.Tools.Spin
                     }
 
                     pieces.Add(piece);
+                }
+
+                // Unfold: the faces of each piece become one continuous layout. The mirroring above is kept, because
+                // the unfold keeps the handedness of the face it starts from.
+                if (unfold)
+                {
+                    foreach (var piece in pieces)
+                    {
+                        var faces = piece.Faces.ToList();
+                        var unfolded = UvMath.Unfold(faces);
+                        foreach (var face in faces)
+                        {
+                            if (unfolded.TryGetValue(face.ID, out var texture)) face.Texture.Unclone(texture);
+                        }
+                    }
                 }
 
                 var result = new SolidSpin();
