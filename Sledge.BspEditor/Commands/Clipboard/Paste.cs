@@ -157,14 +157,12 @@ namespace Sledge.BspEditor.Commands.Clipboard
 
 				await MapDocumentOperation.Perform(_document, transaction);
 
-				// Center all views on the pasted objects so they are immediately visible
+				// Center the 2D views on the pasted objects so they are immediately visible.
+				// The 3D camera stays where it is: pasting is placed relative to it, so it shouldn't jump.
 				if (!_document.Selection.IsEmpty)
 				{
 					var selectionBox = _document.Selection.GetSelectionBoundingBox();
-					await Task.WhenAll(
-						Oy.Publish("MapDocument:Viewport:Focus3D", selectionBox),
-						Oy.Publish("MapDocument:Viewport:Focus2D", selectionBox)
-					);
+					await Oy.Publish("MapDocument:Viewport:Focus2D", selectionBox);
 				}
 			}
 		}
@@ -179,6 +177,12 @@ namespace Sledge.BspEditor.Commands.Clipboard
 		{
 			var boxes = content.Select(x => x.BoundingBox).Where(x => x != null).ToList();
 			Box contentBox = boxes.Count > 0 ? new Box(boxes) : null;
+
+			// Pasting from the 3D view: rest the objects on a surface instead
+			if (contentBox != null && _cursorRay?.CameraPosition != null && (moveLock == null || moveLock == "3D"))
+			{
+				return GetPasteOffset3D(contentBox, grid);
+			}
 
 			Vector3 offset;
 			var dropPoint = _cursorRay != null && contentBox != null
@@ -203,6 +207,69 @@ namespace Sledge.BspEditor.Commands.Clipboard
 			else if (moveLock == "Z") offset.Z = 0;
 
 			return offset;
+		}
+
+		/// <summary>
+		/// Pasting in the 3D view works like putting a teacup on a table:
+		/// - If the cursor is over a brush, the objects rest on the face under the cursor, snapped to the grid along that face.
+		/// - Otherwise, if a brush is selected, they rest on the face of the selected brush that the camera sees.
+		/// - Otherwise they drop under the cursor at their original distance from the camera.
+		/// Either way they are lifted out of any other brush they would end up inside.
+		/// </summary>
+		private Vector3 GetPasteOffset3D(Box contentBox, GridData grid)
+		{
+			const float rayLength = 100000f;
+
+			var ray = _cursorRay;
+			var camera = ray.CameraPosition.Value;
+			var center = contentBox.Center;
+			var snap = grid?.Grid != null && grid.SnapToGrid;
+
+			var solids = _document.Map.Root.Find(x => x is Solid).OfType<Solid>().ToList();
+
+			// 1. The brush under the cursor
+			var hit = PasteSurface.Raycast(solids.Where(x => !x.IsHidden()), ray.Origin, ray.Direction, rayLength);
+
+			// 2. The selected brush, as the camera sees it
+			if (hit == null)
+			{
+				var selected = _document.Selection.SelectMany(x => x.FindAll()).OfType<Solid>()
+					.Where(x => x.BoundingBox != null)
+					.Distinct()
+					.OrderBy(x => (x.BoundingBox.Center - camera).LengthSquared())
+					.ToList();
+
+				foreach (var solid in selected)
+				{
+					var toSolid = solid.BoundingBox.Center - camera;
+					if (toSolid.LengthSquared() < 0.001f) continue;
+
+					var length = toSolid.Length() + (solid.BoundingBox.End - solid.BoundingBox.Start).Length();
+					hit = PasteSurface.Raycast(new[] { solid }, camera, Vector3.Normalize(toSolid), length);
+					if (hit != null) break;
+				}
+			}
+
+			Vector3 target;
+			Vector3 up;
+			Solid resting = null;
+
+			if (hit != null)
+			{
+				var point = snap ? PasteSurface.SnapOnPlane(hit.Point, hit.Normal, grid.Grid.Snap) : hit.Point;
+				target = point + hit.Normal * PasteSurface.RestingDistance(contentBox, hit.Normal);
+				up = hit.Normal;
+				resting = hit.Solid;
+			}
+			else
+			{
+				// Nothing to rest on: under the cursor, at the original distance from the camera
+				target = ray.ClosestPoint(center);
+				if (snap) target = grid.Grid.Snap(target);
+				up = Vector3.UnitZ;
+			}
+
+			return PasteSurface.LiftClear(contentBox, target - center, up, solids, resting);
 		}
 
 		private IMapObject Copy(MapDocument document, IMapObject o)

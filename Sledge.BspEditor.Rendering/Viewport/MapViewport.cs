@@ -216,7 +216,7 @@ namespace Sledge.BspEditor.Rendering.Viewport
 			else if (Viewport.Camera is PerspectiveCamera perspective)
 			{
 				var (near, far) = perspective.CastRayFromScreen(new Vector3(x, y, 0));
-				ray = new ViewportCursorRay(near, far - near);
+				ray = new ViewportCursorRay(near, far - near, perspective.Position);
 			}
 
 			if (ray != null) Oy.Publish("MapDocument:ViewportCursorRay:UpdateValue", ray);

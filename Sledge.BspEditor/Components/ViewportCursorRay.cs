@@ -21,10 +21,16 @@ namespace Sledge.BspEditor.Components
 		/// </summary>
 		public Vector3 Direction { get; }
 
-		public ViewportCursorRay(Vector3 origin, Vector3 direction)
+		/// <summary>
+		/// Where the camera is, if this ray comes from a perspective (3D) viewport. Null for 2D viewports.
+		/// </summary>
+		public Vector3? CameraPosition { get; }
+
+		public ViewportCursorRay(Vector3 origin, Vector3 direction, Vector3? cameraPosition = null)
 		{
 			Origin = origin;
 			Direction = direction.LengthSquared() < 0.000001f ? Vector3.UnitZ : Vector3.Normalize(direction);
+			CameraPosition = cameraPosition;
 		}
 
 		/// <summary>
