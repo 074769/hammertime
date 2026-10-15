@@ -42,8 +42,7 @@ namespace Sledge.BspEditor.Tools.Clip
             Drawing,
             Drawn,
             MovingPoint1,
-            MovingPoint2,
-            MovingPoint3
+            MovingPoint2
         }
 
         public enum ClipSide
@@ -57,6 +56,7 @@ namespace Sledge.BspEditor.Tools.Clip
         private Vector3? _clipPlanePoint2;
         private Vector3? _clipPlanePoint3;
         private Vector3? _drawingPoint;
+        private Vector3 _planeDir = new Vector3(0, 0, 128); // third plane point is always point 1 + this (not a handle)
         private ClipState _prevState;
         private ClipState _state;
         private ClipSide _side;
@@ -84,6 +84,12 @@ namespace Sledge.BspEditor.Tools.Clip
         {
             yield return Oy.Subscribe<ClipTool>("Tool:Activated", t => CycleClipSide());
             yield return Oy.Subscribe<string>("ClipTool:SetClipSide", v => SetClipSide(v));
+            yield return Oy.Subscribe<RightClickMenuBuilder>("MapViewport:RightClick", b =>
+            {
+                // Right click switches the clip mode instead of opening the context menu
+                b.Intercepted = true;
+                CycleClipSide();
+            });
         }
 
         private void SetClipSide(string visiblePoints)
@@ -103,24 +109,24 @@ namespace Sledge.BspEditor.Tools.Clip
 
         private ClipState GetStateAtPoint(int x, int y, OrthographicCamera camera)
         {
-            if (_clipPlanePoint1 == null || _clipPlanePoint2 == null || _clipPlanePoint3 == null) return ClipState.None;
+            if (_clipPlanePoint1 == null || _clipPlanePoint2 == null) return ClipState.None;
 
             var p = camera.Flatten(camera.ScreenToWorld(new Vector3(x, y, 0)));
             var p1 = camera.Flatten(_clipPlanePoint1.Value);
             var p2 = camera.Flatten(_clipPlanePoint2.Value);
-            var p3 = camera.Flatten(_clipPlanePoint3.Value);
 
             var d = 5 / camera.Zoom;
 
             if (p.X >= p1.X - d && p.X <= p1.X + d && p.Y >= p1.Y - d && p.Y <= p1.Y + d) return ClipState.MovingPoint1;
             if (p.X >= p2.X - d && p.X <= p2.X + d && p.Y >= p2.Y - d && p.Y <= p2.Y + d) return ClipState.MovingPoint2;
-            if (p.X >= p3.X - d && p.X <= p3.X + d && p.Y >= p3.Y - d && p.Y <= p3.Y + d) return ClipState.MovingPoint3;
 
             return ClipState.None;
         }
 
         protected override void MouseDown(MapDocument document, MapViewport vp, OrthographicCamera camera, ViewportEvent e)
         {
+            if (e.Button != MouseButtons.Left) return;
+
             _prevState = _state;
 
             var point = SnapIfNeeded(camera.ScreenToWorld(e.X, e.Y));
@@ -129,6 +135,7 @@ namespace Sledge.BspEditor.Tools.Clip
             {
                 _state = ClipState.Drawing;
                 _drawingPoint = point;
+                _planeDir = camera.GetUnusedCoordinate(new Vector3(128, 128, 128));
             }
             else if (_state == ClipState.Drawn)
             {
@@ -138,6 +145,8 @@ namespace Sledge.BspEditor.Tools.Clip
 
         protected override void MouseUp(MapDocument document, MapViewport vp, OrthographicCamera camera, ViewportEvent e)
         {
+            if (e.Button != MouseButtons.Left) return;
+
             _state = _state == ClipState.Drawing ? _prevState : ClipState.Drawn;
         }
 
@@ -152,7 +161,7 @@ namespace Sledge.BspEditor.Tools.Clip
                 _state = ClipState.MovingPoint2;
                 _clipPlanePoint1 = _drawingPoint;
                 _clipPlanePoint2 = point;
-                _clipPlanePoint3 = _clipPlanePoint1 + SnapIfNeeded(camera.GetUnusedCoordinate(new Vector3(128, 128, 128)));
+                UpdatePoint3();
             }
             else if (_state == ClipState.MovingPoint1)
             {
@@ -162,9 +171,9 @@ namespace Sledge.BspEditor.Tools.Clip
                 {
                     var diff = _clipPlanePoint1 - cp1;
                     _clipPlanePoint2 -= diff;
-                    _clipPlanePoint3 -= diff;
                 }
                 _clipPlanePoint1 = cp1;
+                UpdatePoint3();
             }
             else if (_state == ClipState.MovingPoint2)
             {
@@ -174,21 +183,9 @@ namespace Sledge.BspEditor.Tools.Clip
                 {
                     var diff = _clipPlanePoint2 - cp2;
                     _clipPlanePoint1 -= diff;
-                    _clipPlanePoint3 -= diff;
                 }
                 _clipPlanePoint2 = cp2;
-            }
-            else if (_state == ClipState.MovingPoint3)
-            {
-                // Move point 3
-                var cp3 = camera.GetUnusedCoordinate(_clipPlanePoint3.Value) + point;
-                if (KeyboardState.Ctrl)
-                {
-                    var diff = _clipPlanePoint3 - cp3;
-                    _clipPlanePoint1 -= diff;
-                    _clipPlanePoint2 -= diff;
-                }
-                _clipPlanePoint3 = cp3;
+                UpdatePoint3();
             }
 
             if (st != ClipState.None || _state != ClipState.None && _state != ClipState.Drawn)
@@ -199,6 +196,80 @@ namespace Sledge.BspEditor.Tools.Clip
             {
                 viewport.Control.Cursor = Cursors.Default;
             }
+        }
+
+        private void UpdatePoint3()
+        {
+            if (_clipPlanePoint1 != null) _clipPlanePoint3 = _clipPlanePoint1.Value + _planeDir;
+        }
+
+        private bool TryGetClipPlane(out Plane plane)
+        {
+            plane = null;
+            if (_clipPlanePoint1 == null || _clipPlanePoint2 == null || _clipPlanePoint3 == null) return false;
+            var p1 = _clipPlanePoint1.Value;
+            var p2 = _clipPlanePoint2.Value;
+            var p3 = _clipPlanePoint3.Value;
+            // Points too close together or in a line: no usable plane
+            if (Vector3.Cross(p2 - p1, p3 - p1).LengthSquared() < 0.01f) return false;
+            plane = new Plane(p1, p2, p3);
+            return true;
+        }
+
+        private string GetSideDescription()
+        {
+            switch (_side)
+            {
+                case ClipSide.Front: return "Clip: keep front (right click to change)";
+                case ClipSide.Back: return "Clip: keep back (right click to change)";
+                default: return "Clip: keep both (right click to change)";
+            }
+        }
+
+        // Preview of the result: which polygons stay and which get cut away. Cached because 2D views ask every frame.
+        private List<Polygon> _keptPolys = new List<Polygon>();
+        private List<Polygon> _removedPolys = new List<Polygon>();
+        private string _previewKey;
+
+        private void GetPreview(MapDocument document, out List<Polygon> kept, out List<Polygon> removed)
+        {
+            kept = _keptPolys;
+            removed = _removedPolys;
+
+            if (!TryGetClipPlane(out var plane) || document.Selection.IsEmpty)
+            {
+                _keptPolys = kept = new List<Polygon>();
+                _removedPolys = removed = new List<Polygon>();
+                _previewKey = null;
+                return;
+            }
+
+            var solids = document.Selection.OfType<Solid>().ToList();
+            var key = new System.Text.StringBuilder();
+            key.Append(plane.Normal).Append(plane.DistanceFromOrigin).Append(_side);
+            foreach (var solid in solids)
+            {
+                var bb = solid.BoundingBox;
+                key.Append('|').Append(solid.ID).Append(bb.Start).Append(bb.End);
+            }
+            var k = key.ToString();
+            if (k == _previewKey) return;
+            _previewKey = k;
+
+            var keptList = new List<Polygon>();
+            var removedList = new List<Polygon>();
+            var pp = plane.ToPrecisionPlane();
+            foreach (var solid in solids)
+            {
+                var s = solid.ToPolyhedron().ToPrecisionPolyhedron();
+                s.Split(pp, out var back, out var front);
+
+                // Mirrors PerformClip: Front keeps only the front part, Back keeps only the back part
+                if (back != null) (_side != ClipSide.Front ? keptList : removedList).AddRange(back.Polygons.Select(x => x.ToStandardPolygon()));
+                if (front != null) (_side != ClipSide.Back ? keptList : removedList).AddRange(front.Polygons.Select(x => x.ToStandardPolygon()));
+            }
+            _keptPolys = kept = keptList;
+            _removedPolys = removed = removedList;
         }
 
         protected override void KeyDown(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
@@ -217,9 +288,7 @@ namespace Sledge.BspEditor.Tools.Clip
         {
             if (e.KeyCode == Keys.Enter && _state != ClipState.None)
             {
-                if (!_clipPlanePoint1.Value.EquivalentTo(_clipPlanePoint2.Value)
-                    && !_clipPlanePoint2.Value.EquivalentTo(_clipPlanePoint3.Value)
-                    && !_clipPlanePoint1.Value.EquivalentTo(_clipPlanePoint3.Value)) // Don't clip if the points are too close together
+                if (TryGetClipPlane(out _)) // Don't clip if the points are too close together
                 {
                     PerformClip(document);
                 }
@@ -236,7 +305,7 @@ namespace Sledge.BspEditor.Tools.Clip
             var objects = document.Selection.OfType<Solid>().ToList();
             if (!objects.Any()) return;
 
-            var plane = new Plane(_clipPlanePoint1.Value, _clipPlanePoint2.Value, _clipPlanePoint3.Value);
+            if (!TryGetClipPlane(out var plane)) return;
             var clip = new Transaction();
             var found = false;
             foreach (var solid in objects)
@@ -265,113 +334,112 @@ namespace Sledge.BspEditor.Tools.Clip
             }
         }
 
+        private static void AppendWireframe(BufferBuilder builder, List<Polygon> polygons, Vector4 colour)
+        {
+            var verts = new List<VertexStandard>();
+            var indices = new List<int>();
+
+            foreach (var polygon in polygons)
+            {
+                var c = verts.Count;
+                verts.AddRange(polygon.Vertices.Select(x => new VertexStandard { Position = x, Colour = colour, Tint = Vector4.One }));
+                for (var i = 0; i < polygon.Vertices.Count; i++)
+                {
+                    indices.Add(c + i);
+                    indices.Add(c + (i + 1) % polygon.Vertices.Count);
+                }
+            }
+
+            if (indices.Count == 0) return;
+            builder.Append(
+                verts, indices.Select(x => (uint) x),
+                new[] { new BufferGroup(PipelineType.Wireframe, CameraType.Perspective, 0, (uint) indices.Count) }
+            );
+        }
+
         protected override void Render(MapDocument document, BufferBuilder builder, ResourceCollector resourceCollector)
         {
             base.Render(document, builder, resourceCollector);
 
-            if (_state != ClipState.None && _clipPlanePoint1 != null && _clipPlanePoint2 != null && _clipPlanePoint3 != null)
-            {
-                // Draw the lines
-                var p1 = _clipPlanePoint1.Value;
-                var p2 = _clipPlanePoint2.Value;
-                var p3 = _clipPlanePoint3.Value;
+            if (_state == ClipState.None || _clipPlanePoint1 == null || _clipPlanePoint2 == null) return;
 
-                builder.Append(
-                    new []
-                    {
-                        new VertexStandard { Position = p1, Colour = Vector4.One, Tint = Vector4.One },
-                        new VertexStandard { Position = p2, Colour = Vector4.One, Tint = Vector4.One },
-                        new VertexStandard { Position = p3, Colour = Vector4.One, Tint = Vector4.One },
-                    },
-                    new uint [] { 0, 1, 1, 2, 2, 0 },
-                    new []
-                    {
-                        new BufferGroup(PipelineType.Wireframe, CameraType.Both, 0, 6)
-                    }
-                );
+            var p1 = _clipPlanePoint1.Value;
+            var p2 = _clipPlanePoint2.Value;
 
-                if (!p1.EquivalentTo(p2)
-                    && !p2.EquivalentTo(p3)
-                    && !p1.EquivalentTo(p3)
-                    && !document.Selection.IsEmpty)
+            // Draw the clip line
+            builder.Append(
+                new[]
                 {
-                    var plane = new Plane(p1, p2, p3);
-                    var pp = plane.ToPrecisionPlane();
+                    new VertexStandard { Position = p1, Colour = Vector4.One, Tint = Vector4.One },
+                    new VertexStandard { Position = p2, Colour = Vector4.One, Tint = Vector4.One },
+                },
+                new uint[] { 0, 1 },
+                new[] { new BufferGroup(PipelineType.Wireframe, CameraType.Both, 0, 2) }
+            );
 
-                    // Draw the clipped solids
-                    var faces = new List<Polygon>();
-                    foreach (var solid in document.Selection.OfType<Solid>().ToList())
-                    {
-                        var s = solid.ToPolyhedron().ToPrecisionPolyhedron();
-                        s.Split(pp, out var back, out var front);
+            if (!TryGetClipPlane(out var plane) || document.Selection.IsEmpty) return;
+            var pp = plane.ToPrecisionPlane();
 
-                        if (_side != ClipSide.Front && back != null) faces.AddRange(back.Polygons.Select(x => x.ToStandardPolygon()));
-                        if (_side != ClipSide.Back && front != null) faces.AddRange(front.Polygons.Select(x => x.ToStandardPolygon()));
-                    }
+            // Draw the result: red = gets cut away, white = stays
+            GetPreview(document, out var kept, out var removed);
+            AppendWireframe(builder, removed, new Vector4(1, 0, 0, 1));
+            AppendWireframe(builder, kept, Vector4.One);
 
-                    var verts = new List<VertexStandard>();
-                    var indices = new List<int>();
+            // Draw the clipping plane
+            var poly = new DataStructures.Geometric.Precision.Polygon(pp);
+            var bbox = document.Selection.GetSelectionBoundingBox();
+            var point = bbox.Center;
+            foreach (var boxPlane in bbox.GetBoxPlanes())
+            {
+                var proj = boxPlane.Project(point);
+                var dist = (point - proj).Length() * 0.1f;
+                var pln = new Plane(boxPlane.Normal, proj + boxPlane.Normal * Math.Max(dist, 100)).ToPrecisionPlane();
+                if (poly.Split(pln, out var b, out _)) poly = b;
+            }
 
-                    foreach (var polygon in faces)
-                    {
-                        var c = verts.Count;
-                        verts.AddRange(polygon.Vertices.Select(x => new VertexStandard { Position = x, Colour = Vector4.One, Tint = Vector4.One }));
-                        for (var i = 0; i < polygon.Vertices.Count; i++)
-                        {
-                            indices.Add(c + i);
-                            indices.Add(c + (i + 1) % polygon.Vertices.Count);
-                        }
-                    }
+            var verts = new List<VertexStandard>();
+            var indices = new List<int>();
 
-                    builder.Append(
-                        verts, indices.Select(x => (uint) x),
-                        new[] { new BufferGroup(PipelineType.Wireframe, CameraType.Both, 0, (uint) indices.Count) }
-                    );
+            var clipPoly = poly.ToStandardPolygon();
+            var colour = Color.FromArgb(64, Color.Turquoise).ToVector4();
 
-                    // Draw the clipping plane
-                    
-                    var poly = new DataStructures.Geometric.Precision.Polygon(pp);
-                    var bbox = document.Selection.GetSelectionBoundingBox();
-                    var point = bbox.Center;
-                    foreach (var boxPlane in bbox.GetBoxPlanes())
-                    {
-                        var proj = boxPlane.Project(point);
-                        var dist = (point - proj).Length() * 0.1f;
-                        var pln = new Plane(boxPlane.Normal, proj + boxPlane.Normal * Math.Max(dist, 100)).ToPrecisionPlane();
-                        if (poly.Split(pln, out var b, out _)) poly = b;
-                    }
+            // Add the face in both directions so it renders on both sides
+            var polies = new[] { clipPoly.Vertices.ToList(), clipPoly.Vertices.Reverse().ToList() };
+            foreach (var p in polies)
+            {
+                var offs = verts.Count;
+                verts.AddRange(p.Select(x => new VertexStandard
+                {
+                    Position = x,
+                    Colour = Vector4.One,
+                    Tint = colour,
+                    Flags = VertexFlags.FlatColour
+                }));
 
-                    verts.Clear();
-                    indices.Clear();
+                for (var i = 2; i < clipPoly.Vertices.Count; i++)
+                {
+                    indices.Add(offs);
+                    indices.Add(offs + i - 1);
+                    indices.Add(offs + i);
+                }
+            }
 
-                    var clipPoly = poly.ToStandardPolygon();
-                    var colour = Color.FromArgb(64, Color.Turquoise).ToVector4();
+            builder.Append(
+                verts, indices.Select(x => (uint)x),
+                new[] { new BufferGroup(PipelineType.TexturedAlpha, CameraType.Perspective, p1, 0, (uint)indices.Count) }
+            );
+        }
 
-                    // Add the face in both directions so it renders on both sides
-                    var polies = new[] { clipPoly.Vertices.ToList(), clipPoly.Vertices.Reverse().ToList() };
-                    foreach (var p in polies)
-                    {
-                        var offs = verts.Count;
-                        verts.AddRange(p.Select(x => new VertexStandard
-                        {
-                            Position = x,
-                            Colour = Vector4.One,
-                            Tint = colour,
-                            Flags = VertexFlags.FlatColour
-                        }));
-
-                        for (var i = 2; i < clipPoly.Vertices.Count; i++)
-                        {
-                            indices.Add(offs);
-                            indices.Add(offs + i - 1);
-                            indices.Add(offs + i);
-                        }
-                    }
-
-                    builder.Append(
-                        verts, indices.Select(x => (uint)x),
-                        new[] { new BufferGroup(PipelineType.TexturedAlpha, CameraType.Perspective, p1, 0, (uint)indices.Count) }
-                    );
+        private static void DrawPolygons2D(OrthographicCamera camera, I2DRenderer im, List<Polygon> polygons, Color colour, float width)
+        {
+            foreach (var polygon in polygons)
+            {
+                var count = polygon.Vertices.Count;
+                for (var i = 0; i < count; i++)
+                {
+                    var a = camera.WorldToScreen(polygon.Vertices[i]);
+                    var b = camera.WorldToScreen(polygon.Vertices[(i + 1) % count]);
+                    im.AddLine(new Vector2(a.X, a.Y), new Vector2(b.X, b.Y), colour, width, false);
                 }
             }
         }
@@ -380,18 +448,33 @@ namespace Sledge.BspEditor.Tools.Clip
         {
             base.Render(document, viewport, camera, worldMin, worldMax, im);
 
-            if (_state != ClipState.None && _clipPlanePoint1 != null && _clipPlanePoint2 != null && _clipPlanePoint3 != null)
+            // Always show which mode is active
+            im.AddText(new Vector2(8, 26), Color.White, FontType.Bold, GetSideDescription());
+
+            if (_state != ClipState.None && _clipPlanePoint1 != null && _clipPlanePoint2 != null)
             {
                 var p1 = _clipPlanePoint1.Value;
                 var p2 = _clipPlanePoint2.Value;
-                var p3 = _clipPlanePoint3.Value;
-                var points = new[] {p1, p2, p3};
 
-                foreach (var p in points)
+                // Result preview: red = gets cut away, white = stays (drawn on top of the selection wireframe)
+                if (TryGetClipPlane(out _) && !document.Selection.IsEmpty)
+                {
+                    GetPreview(document, out var kept, out var removed);
+                    DrawPolygons2D(camera, im, removed, Color.Red, 1.5f);
+                    DrawPolygons2D(camera, im, kept, Color.White, 1.5f);
+                }
+
+                // Clip line
+                var s1 = camera.WorldToScreen(p1);
+                var s2 = camera.WorldToScreen(p2);
+                im.AddLine(new Vector2(s1.X, s1.Y), new Vector2(s2.X, s2.Y), Color.Yellow, 1, false);
+
+                // Only two handles: the plane's third point is derived, not draggable
+                foreach (var p in new[] { p1, p2 })
                 {
                     const int size = 4;
                     var spos = camera.WorldToScreen(p);
-                    
+
                     im.AddRectOutlineOpaque(new Vector2(spos.X - size, spos.Y - size), new Vector2(spos.X + size, spos.Y + size), Color.Black, Color.White);
                 }
             }
