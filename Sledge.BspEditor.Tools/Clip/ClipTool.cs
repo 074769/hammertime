@@ -6,6 +6,7 @@ using System.Linq;
 using System.Numerics;
 using System.Windows.Forms;
 using LogicAndTrick.Oy;
+using Sledge.BspEditor.Commands.Clipboard;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Modification;
 using Sledge.BspEditor.Modification.Operations.Tree;
@@ -308,6 +309,7 @@ namespace Sledge.BspEditor.Tools.Clip
             if (!TryGetClipPlane(out var plane)) return;
             var clip = new Transaction();
             var found = false;
+            var removedOnly = new List<IMapObject>(); // solids that vanish without a replacement
             foreach (var solid in objects)
             {
                 solid.Split(document.Map.NumberGenerator, plane, out var backSolid, out var frontSolid);
@@ -315,6 +317,10 @@ namespace Sledge.BspEditor.Tools.Clip
                 
                 // Remove the clipped solid
                 clip.Add(new Detatch(solid.Hierarchy.Parent.ID, solid));
+
+                var keepsFront = _side != ClipSide.Back && frontSolid != null;
+                var keepsBack = _side != ClipSide.Front && backSolid != null;
+                if (!keepsFront && !keepsBack) removedOnly.Add(solid);
                 
                 if (_side != ClipSide.Back && frontSolid != null)
                 {
@@ -330,6 +336,8 @@ namespace Sledge.BspEditor.Tools.Clip
             }
             if (found)
             {
+                // Groups left with no children (everything in them was clipped away) go too
+                clip.AddRange(GroupCleanup.DetatchEmptiedGroups(removedOnly));
                 MapDocumentOperation.Perform(document, clip);
             }
         }

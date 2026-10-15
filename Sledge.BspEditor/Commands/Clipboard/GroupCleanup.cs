@@ -6,7 +6,7 @@ using Sledge.BspEditor.Primitives.MapObjects;
 
 namespace Sledge.BspEditor.Commands.Clipboard
 {
-    internal static class GroupCleanup
+    public static class GroupCleanup
     {
         /// <summary>
         /// Finds the groups that will have no children left once the given objects are removed
