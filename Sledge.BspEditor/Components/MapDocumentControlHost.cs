@@ -39,6 +39,125 @@ namespace Sledge.BspEditor.Components
 		private MapDocumentContainer MainWindow { get; set; }
 		private List<ViewportWindow> Windows { get; set; }
 		private MapDocument _activeDocument { get; set; }
+		private readonly Dictionary<MapDocument, List<ViewCameraEntry>> _documentCameras = new Dictionary<MapDocument, List<ViewCameraEntry>>();
+
+		// Per-map viewport cameras
+
+		/// <summary>
+		/// Reads the camera of every viewport as it is right now.
+		/// </summary>
+		private List<ViewCameraEntry> CaptureCameras()
+		{
+			var list = new List<ViewCameraEntry>();
+			foreach (var con in GetContainers())
+			{
+				foreach (var mdc in con.MapDocumentControls)
+				{
+					var serialised = mdc.Control.GetSerialisedSettings();
+					if (string.IsNullOrEmpty(serialised)) continue;
+					list.Add(new ViewCameraEntry
+					{
+						WindowID = con.WindowID,
+						Row = mdc.Row,
+						Column = mdc.Column,
+						Type = mdc.Control.Type,
+						Serialised = serialised
+					});
+				}
+			}
+			return list;
+		}
+
+		// Camera settings start with the camera kind (and the view type for 2D), e.g. "OrthographicCamera/Top/..."
+		private static string CameraKind(string serialised)
+		{
+			var tags = (serialised ?? "").Split('/', ',');
+			return tags.Length > 1 && tags[0].StartsWith("Orthographic", StringComparison.OrdinalIgnoreCase)
+				? tags[0] + "/" + tags[1]
+				: tags[0];
+		}
+
+		/// <summary>
+		/// Puts the viewports back where this map had them, either from this session or from the last save.
+		/// </summary>
+		private void RestoreCameras(MapDocument document)
+		{
+			if (!_documentCameras.TryGetValue(document, out var cameras))
+			{
+				cameras = MapViewCameraSettingsManager.GetInstance()?.Get(document.FileName);
+			}
+			if (cameras == null || cameras.Count == 0)
+			{
+				// A map with no remembered cameras (a new tab) starts at the origin
+				ResetCameras();
+				return;
+			}
+
+			foreach (var con in GetContainers())
+			{
+				foreach (var mdc in con.MapDocumentControls)
+				{
+					var entry = cameras.FirstOrDefault(x => x.WindowID == con.WindowID && x.Row == mdc.Row && x.Column == mdc.Column && x.Type == mdc.Control.Type);
+					if (entry == null) continue;
+
+					// If the layout has changed since, don't force a different kind of view into the slot
+					if (CameraKind(entry.Serialised) != CameraKind(mdc.Control.GetSerialisedSettings())) continue;
+
+					mdc.Control.SetSerialisedSettings(entry.Serialised);
+				}
+			}
+		}
+
+		/// <summary>
+		/// Moves every viewport back to the origin. Zoom, field of view and clip distance are left as they are.
+		/// </summary>
+		private void ResetCameras()
+		{
+			var defaultAngles = "0," + (Math.PI / 2).ToString(System.Globalization.CultureInfo.InvariantCulture) + ",0";
+
+			foreach (var con in GetContainers())
+			{
+				foreach (var mdc in con.MapDocumentControls)
+				{
+					var tags = (mdc.Control.GetSerialisedSettings() ?? "").Split('/');
+
+					// PerspectiveCamera/position/angles/fov/clip
+					if (tags.Length >= 3 && tags[0] == "PerspectiveCamera")
+					{
+						tags[1] = "0,0,0";
+						tags[2] = defaultAngles;
+					}
+					// OrthographicCamera/view/position/zoom
+					else if (tags.Length >= 3 && tags[0] == "OrthographicCamera")
+					{
+						tags[2] = "0,0,0";
+					}
+					else continue;
+
+					mdc.Control.SetSerialisedSettings(string.Join("/", tags));
+				}
+			}
+		}
+
+		/// <summary>
+		/// Remembers the viewport cameras for the map under its file name.
+		/// </summary>
+		private void SaveCameras(MapDocument document)
+		{
+			List<ViewCameraEntry> cameras = null;
+
+			_shell.InvokeSync(() =>
+			{
+				if (document == _activeDocument) _documentCameras[document] = CaptureCameras();
+				_documentCameras.TryGetValue(document, out cameras);
+			});
+
+			var manager = MapViewCameraSettingsManager.GetInstance();
+			if (manager == null || cameras == null || string.IsNullOrWhiteSpace(document.FileName)) return;
+
+			manager.Set(document.FileName, cameras);
+			Oy.Publish("Settings:Save");
+		}
 
 		// Be careful to ensure this is created on the UI thread
 
@@ -67,7 +186,40 @@ namespace Sledge.BspEditor.Components
 
 			Oy.Subscribe<IDocument>("Document:Activated", document =>
 			{
-				if (document is MapDocument mapDocument) _activeDocument = mapDocument;
+				if (!(document is MapDocument mapDocument)) return;
+
+				_shell.InvokeSync(() =>
+				{
+					// The viewports are shared between maps, so keep each map's cameras when switching away from it
+					if (_activeDocument != null && _activeDocument != mapDocument)
+					{
+						_documentCameras[_activeDocument] = CaptureCameras();
+					}
+
+					_activeDocument = mapDocument;
+					RestoreCameras(mapDocument);
+				});
+			});
+
+			Oy.Subscribe<IDocument>("Document:BeforeSave", document =>
+			{
+				if (document is MapDocument mapDocument) SaveCameras(mapDocument);
+			});
+
+			// Only published when the file name changes (new maps, Save As)
+			Oy.Subscribe<IDocument>("Document:Saved", document =>
+			{
+				if (document is MapDocument mapDocument) SaveCameras(mapDocument);
+			});
+
+			Oy.Subscribe<IDocument>("Document:Closed", document =>
+			{
+				if (!(document is MapDocument mapDocument)) return;
+				_shell.InvokeSync(() =>
+				{
+					_documentCameras.Remove(mapDocument);
+					if (_activeDocument == mapDocument) _activeDocument = null;
+				});
 			});
 		}
 
