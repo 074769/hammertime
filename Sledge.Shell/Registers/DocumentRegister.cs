@@ -151,6 +151,10 @@ namespace Sledge.Shell.Registers
 
 		public async Task ActivateDocument(IDocument document)
 		{
+			// Diagnostic: who is activating which document, and when
+			var frames = string.Join(" <- ", new System.Diagnostics.StackTrace(1, false).GetFrames()?.Take(8).Select(f => f.GetMethod()?.DeclaringType?.Name + "." + f.GetMethod()?.Name) ?? Enumerable.Empty<string>());
+			Sledge.Common.Logging.Log.Debug(nameof(DocumentRegister), $"Activate [{DateTime.Now:HH:mm:ss.fff}] {document?.Name ?? "(none)"} from {frames}");
+
 			if (document == null)
 			{
 				await Oy.Publish<IDocument>("Document:Activated", new NoDocument());
