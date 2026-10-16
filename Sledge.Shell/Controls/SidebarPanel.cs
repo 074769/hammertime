@@ -2,6 +2,7 @@
 using System.Drawing;
 using System.Windows.Forms;
 using Sledge.Common;
+using Sledge.Common.Shell.Theming;
 
 namespace Sledge.Shell.Controls
 {
@@ -91,8 +92,8 @@ namespace Sledge.Shell.Controls
 
             protected override void OnPaint(PaintEventArgs e)
             {
-                e.Graphics.DrawLine(SystemPens.ControlDark, 0, 0, Width, 0);
-                e.Graphics.DrawLine(SystemPens.ControlLightLight, 0, 1, Width, 1);
+                using (var dim = new Pen(Theme.Border)) e.Graphics.DrawLine(dim, 0, 0, Width, 0);
+                using (var lit = new Pen(Theme.BorderLight)) e.Graphics.DrawLine(lit, 0, 1, Width, 1);
                 if (_mouseIn)
                 {
                     using (var brush = new SolidBrush(BackColor.Darken()))

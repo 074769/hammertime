@@ -9,6 +9,7 @@ using LogicAndTrick.Oy;
 using Sledge.BspEditor.Compile;
 using Sledge.Common.Shell.Components;
 using Sledge.Common.Shell.Context;
+using Sledge.Common.Shell.Theming;
 using Sledge.Common.Translations;
 using Sledge.Shell;
 
@@ -44,7 +45,8 @@ namespace Sledge.BspEditor.Editing.Components.Compile
                 Dock = DockStyle.Fill,
                 Multiline = true,
                 Font = new Font(FontFamily.GenericMonospace, 8),
-                BackColor = Color.White,
+                // A system colour, so the theme (not this control) decides how it looks
+                BackColor = SystemColors.Window,
                 ScrollBars = RichTextBoxScrollBars.Both,
                 WordWrap = false,
                 ReadOnly = true
@@ -66,7 +68,7 @@ namespace Sledge.BspEditor.Editing.Components.Compile
                 await Oy.Publish("?", this);
             });
 
-            Oy.Subscribe<string>("Compile:Output", async data => Append(Color.Black, data));
+            Oy.Subscribe<string>("Compile:Output", async data => Append(Theme.Text, data));
             Oy.Subscribe<string>("Compile:Error", async data => Append(Color.Red, data));
             Oy.Subscribe<string>("Compile:Information", async data => Append(Color.DodgerBlue, data));
             Oy.Subscribe<string>("Compile:Success", async data => Append(Color.Green, data));

@@ -2,6 +2,7 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
+using Sledge.Common.Shell.Theming;
 
 namespace Sledge.Shell.Controls
 {
@@ -47,6 +48,19 @@ namespace Sledge.Shell.Controls
         {
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
             Cursor = Cursors.Hand;
+            Theme.Changed += ThemeChanged;
+        }
+
+        private void ThemeChanged(object sender, EventArgs e)
+        {
+            if (IsDisposed || !IsHandleCreated) return;
+            BeginInvoke(new Action(Invalidate));
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) Theme.Changed -= ThemeChanged;
+            base.Dispose(disposing);
         }
 
         protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
@@ -70,12 +84,11 @@ namespace Sledge.Shell.Controls
         {
             var g = e.Graphics;
             var src = Source;
-            var back = src != null ? src.TabBackColor : BackColor;
-            var fore = src != null ? src.TabForeColor : ForeColor;
+            // Same palette entries the tabs use, read at paint time so the "+" always matches them
+            var back = Theme.Tab;
+            var fore = Theme.Text;
 
-            // Strip colour behind the tab shape (src.BackColor is the un-themed control colour, which showed up as white above the button)
-            var strip = src != null ? src.StripColor : BackColor;
-            using (var b = new SolidBrush(strip)) g.FillRectangle(b, ClientRectangle);
+            using (var b = new SolidBrush(Theme.TabStrip)) g.FillRectangle(b, ClientRectangle);
 
             var tab = src != null ? src.FirstTabRect : new Rectangle(0, 2, 0, 22);
             var rect = new Rectangle(0, tab.Top, Width - 1, tab.Height);
@@ -100,7 +113,7 @@ namespace Sledge.Shell.Controls
             using (var b = new SolidBrush(fill)) g.FillPolygon(b, points);
 
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.DrawPolygon(SystemPens.ControlDark, points);
+            using (var border = new Pen(Theme.Border)) g.DrawPolygon(border, points);
 
             using (var pen = new Pen(fore))
             {

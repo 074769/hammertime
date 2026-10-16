@@ -2,6 +2,7 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
+using Sledge.Common.Shell.Theming;
 
 namespace Sledge.Shell.Controls
 {
@@ -31,13 +32,19 @@ namespace Sledge.Shell.Controls
             TabPages.Add(new TabPage("Tab 1") { ImageKey = "Dirty" });
             TabPages.Add("Tab 2");
             TabPages.Add("Tab 3");
-			LogicAndTrick.Oy.Oy.Subscribe<bool>("Theme:Changed", (useDark) => UseDarkMode(useDark));
+			Theme.Changed += ThemeChanged;
 		}
-		private void UseDarkMode(bool darkTheme)
-        {
-			_backColor = darkTheme ? Color.FromArgb(50, 50, 50) : BackColor;
-			_foreColor = darkTheme ? ForeColor : Color.Black;
-			_backTabColor = darkTheme ? SystemColors.ControlDarkDark : BackColor;
+
+		private void ThemeChanged(object sender, System.EventArgs e)
+		{
+			if (IsDisposed || !IsHandleCreated) return;
+			BeginInvoke(new System.Action(Invalidate));
+		}
+
+		protected override void Dispose(bool disposing)
+		{
+			if (disposing) Theme.Changed -= ThemeChanged;
+			base.Dispose(disposing);
 		}
         protected override void OnPaint(PaintEventArgs e)
         {
@@ -67,15 +74,6 @@ namespace Sledge.Shell.Controls
         private const int WM_NULL = 0x0;
         private const int WM_MBUTTONDOWN = 0x0207;
         private const int WM_LBUTTONDOWN = 0x0201;
-		private Color _backColor;
-		private Color _foreColor;
-		private Color _backTabColor;
-
-		internal Color TabBackColor => _backTabColor;
-		/// <summary>Colour of the strip behind/between the tabs (the dark theme background, not the control's own BackColor)</summary>
-		internal Color StripColor => _backColor.IsEmpty ? BackColor : _backColor;
-		internal Color TabForeColor => _foreColor;
-
 		/// <summary>Right edge of the last tab (0 if there are no tabs)</summary>
 		internal int TabsRight => TabPages.Count == 0 ? 0 : GetTabRect(TabPages.Count - 1).Right;
 		/// <summary>Top/height of the tab row, used so the new-tab button lines up with the tabs</summary>
@@ -109,7 +107,7 @@ namespace Sledge.Shell.Controls
         {
             if (!Visible) return;
 
-            using (var b = new SolidBrush(_backColor))
+            using (var b = new SolidBrush(Theme.TabStrip))
             {
                 g.FillRectangle(b, ClientRectangle);
             }
@@ -119,7 +117,7 @@ namespace Sledge.Shell.Controls
 
             var border = SystemInformation.Border3DSize.Width;
             display.Inflate(border, border);
-            g.DrawLine(SystemPens.ControlDark, display.X, display.Y, display.X + display.Width, display.Y);
+            using (var line = new Pen(Theme.Border)) g.DrawLine(line, display.X, display.Y, display.X + display.Width, display.Y);
 
             var clip = g.Clip;
             g.SetClip(new Rectangle(display.Left, ClientRectangle.Top, display.Width, ClientRectangle.Height));
@@ -151,10 +149,7 @@ namespace Sledge.Shell.Controls
             var p = PointToClient(MousePosition);
             var hoverClose = closeRect.Contains(p);
             var hover = rect.Contains(p);
-            var backColour = _backTabColor;
-
-            if (selected) backColour = ControlPaint.Light(backColour, 1);
-            else if (hover) backColour = ControlPaint.Light(backColour, 0.8f);
+            var backColour = selected ? Theme.TabSelected : hover ? Theme.TabHover : Theme.Tab;
 
             using (var b = new SolidBrush(backColour))
             {
@@ -163,10 +158,11 @@ namespace Sledge.Shell.Controls
 
             // Border
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.DrawPolygon(SystemPens.ControlDark, points);
+            using (var border = new Pen(Theme.Border)) g.DrawPolygon(border, points);
             if (selected)
             {
-                using (var pen = new Pen(_backTabColor))
+                // Hide the border under the selected tab so it joins the page below it
+                using (var pen = new Pen(Theme.TabSelected))
                 {
                     g.DrawLine(pen, rect.Left, rect.Bottom, rect.Right, rect.Bottom);
                 }
@@ -184,13 +180,13 @@ namespace Sledge.Shell.Controls
             var textLeft = rect.X + 14;
             var textRight = rect.Right - 26;
             var textRect = new Rectangle(textLeft + (textRight - textLeft - textWidth) / 2, rect.Y + 4, rect.Width - 26, rect.Height - 5);
-            using (var b = new SolidBrush(_foreColor))
+            using (var b = new SolidBrush(Theme.Text))
             {
                 g.DrawString(tab.Text, Font, b, textRect, sf);
             }
 
             // Close icon
-            using (var pen = new Pen(_foreColor))
+            using (var pen = new Pen(Theme.Text))
             {
                 if (hoverClose)
                 {

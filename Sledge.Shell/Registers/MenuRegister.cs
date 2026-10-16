@@ -11,6 +11,8 @@ using Sledge.Common.Shell;
 using Sledge.Common.Shell.Context;
 using Sledge.Common.Shell.Hooks;
 using Sledge.Common.Shell.Menu;
+using Sledge.Common.Shell.Theming;
+using Sledge.Shell.Theming;
 using Sledge.Shell.Components;
 using Sledge.Shell.Settings;
 
@@ -215,25 +217,10 @@ namespace Sledge.Shell.Registers
 
 					ApplyToolbarTheme();
 
-					if (value)
-					{
-						MenuStrip.Renderer =
-							new CustomToolStripRenderer(
-								SystemColors.ControlDarkDark,
-								_backColor);
-
-						return;
-					}
-
-					MenuStrip.Renderer = null;
+					// Light and dark share one renderer, it reads the palette itself
+					MenuStrip.Renderer = new ThemeToolStripRenderer();
 				}
 			}
-
-			private Color _systemDarkBackColor =
-				Color.FromArgb(50, 50, 50);
-
-			private Color _backColor =
-				Color.FromArgb(70, 70, 70);
 
 			private ToolStripContainer ToolbarContainer
 			{
@@ -1092,15 +1079,8 @@ namespace Sledge.Shell.Registers
 
 				var dark = UseDarkTheme;
 
-				var back =
-					dark
-						? _systemDarkBackColor
-						: SystemColors.Control;
-
-				var fore =
-					dark
-						? Color.White
-						: SystemColors.ControlText;
+				var back = Theme.Control;
+				var fore = Theme.Text;
 
 				foreach (var strip in _joinedStrips)
 				{
@@ -1801,58 +1781,11 @@ namespace Sledge.Shell.Registers
 			{
 				RoundedEdges = false;
 
-				if (dark)
-				{
-					_checked =
-						Color.FromArgb(
-							105,
-							105,
-							105);
-
-					_checkedBorder =
-						Color.FromArgb(
-							140,
-							140,
-							140);
-
-					_hover =
-						Color.FromArgb(
-							80,
-							80,
-							80);
-
-					_pressed =
-						Color.FromArgb(
-							125,
-							125,
-							125);
-				}
-				else
-				{
-					_checked =
-						Color.FromArgb(
-							200,
-							200,
-							200);
-
-					_checkedBorder =
-						Color.FromArgb(
-							140,
-							140,
-							140);
-
-					_hover =
-						Color.FromArgb(
-							225,
-							225,
-							225);
-
-					_pressed =
-						Color.FromArgb(
-							180,
-							180,
-							180);
-				}
+				// The renderer is rebuilt on every theme change, so it can snapshot the palette
+				_checked = Theme.Checked;
+				_checkedBorder = Theme.BorderStrong;
+				_hover = Theme.Hover;
+				_pressed = Theme.Pressed;
 			}
 
 			protected override void OnRenderToolStripBackground(
@@ -1936,247 +1869,6 @@ namespace Sledge.Shell.Registers
 							pen,
 							rect);
 					}
-				}
-			}
-		}
-
-		public class CustomToolStripRenderer :
-			ToolStripProfessionalRenderer
-		{
-			private readonly Color _pressedBackColor;
-			private readonly Color _backColor;
-
-			private readonly Brush _dropDownEnabledColor =
-				new SolidBrush(Color.Black);
-
-			private readonly Brush _dropDownDisabledColor =
-				new SolidBrush(Color.Gray);
-
-			public CustomToolStripRenderer(
-				Color pressedBackColor,
-				Color backColor)
-			{
-				_pressedBackColor =
-					pressedBackColor;
-
-				_backColor =
-					backColor;
-			}
-
-			protected override void OnRenderItemBackground(
-				ToolStripItemRenderEventArgs e)
-			{
-				using (var brush =
-					new SolidBrush(Color.Black))
-				{
-					e.Graphics.FillRectangle(
-						brush,
-						e.Item.ContentRectangle);
-				}
-			}
-
-			protected override void OnRenderToolStripPanelBackground(
-				ToolStripPanelRenderEventArgs e)
-			{
-				base.OnRenderToolStripPanelBackground(e);
-			}
-
-			protected override void OnRenderToolStripBorder(
-				ToolStripRenderEventArgs e)
-			{
-				if (e.ToolStrip is ToolStripDropDown)
-				{
-					using (var pen =
-						new Pen(
-							ControlPaint.Dark(
-								_backColor),
-							1))
-					{
-						e.Graphics.DrawRectangle(
-							pen,
-							new Rectangle(
-								Point.Empty,
-								e.ToolStrip.ClientSize -
-								new Size(1, 1)));
-					}
-				}
-				else
-				{
-					base.OnRenderToolStripBorder(e);
-				}
-			}
-
-			protected override void OnRenderImageMargin(
-				ToolStripRenderEventArgs e)
-			{
-				return;
-			}
-
-			protected override void OnRenderItemImage(
-				ToolStripItemImageRenderEventArgs e)
-			{
-				base.OnRenderItemImage(e);
-			}
-
-			protected override void OnRenderSeparator(
-				ToolStripSeparatorRenderEventArgs e)
-			{
-				using (var pen =
-					new Pen(
-						ControlPaint.Dark(
-							_backColor),
-						1))
-				{
-					int y =
-						e.Item.ContentRectangle.Top +
-						e.Item.ContentRectangle.Height / 2;
-
-					e.Graphics.DrawLine(
-						pen,
-						e.Item.ContentRectangle.Left,
-						y,
-						e.Item.ContentRectangle.Right,
-						y);
-				}
-			}
-
-			protected override void OnRenderToolStripBackground(
-				ToolStripRenderEventArgs e)
-			{
-				if (e.ToolStrip is ToolStripDropDown)
-				{
-					e.ToolStrip.BackColor =
-						_backColor;
-
-					using (var brush =
-						new SolidBrush(_backColor))
-					{
-						e.Graphics.FillRectangle(
-							brush,
-							e.ToolStrip.DisplayRectangle);
-
-						e.Graphics.DrawRectangle(
-							SystemPens.ControlDarkDark,
-							e.ToolStrip.ClientRectangle);
-					}
-				}
-				else
-				{
-					base.OnRenderToolStripBackground(e);
-				}
-			}
-
-			protected override void OnRenderItemText(
-				ToolStripItemTextRenderEventArgs e)
-			{
-				if (e.Item.Owner is ToolStripDropDown)
-				{
-					if (e.Item is ToolStripMenuItem menuItem)
-					{
-						if (!e.Item.Enabled)
-						{
-							e.Graphics.DrawString(
-								menuItem.Text,
-								e.TextFont,
-								_dropDownDisabledColor,
-								e.TextRectangle);
-						}
-						else
-						{
-							e.Graphics.DrawString(
-								menuItem.Text,
-								e.TextFont,
-								_dropDownEnabledColor,
-								e.TextRectangle);
-						}
-
-						if (!string.IsNullOrEmpty(
-							menuItem.ShortcutKeyDisplayString))
-						{
-							SizeF shortcutTextSize =
-								e.Graphics.MeasureString(
-									menuItem.ShortcutKeyDisplayString,
-									e.TextFont);
-
-							float shortcutX =
-								e.Item.ContentRectangle.Right -
-								shortcutTextSize.Width -
-								10;
-
-							RectangleF shortcutRect =
-								new RectangleF(
-									shortcutX,
-									e.Item.ContentRectangle.Top,
-									shortcutTextSize.Width,
-									shortcutTextSize.Height);
-
-							if (e.Item.Enabled)
-							{
-								e.Graphics.DrawString(
-									menuItem.ShortcutKeyDisplayString,
-									e.TextFont,
-									_dropDownEnabledColor,
-									shortcutRect);
-
-								return;
-							}
-
-							e.Graphics.DrawString(
-								menuItem.ShortcutKeyDisplayString,
-								e.TextFont,
-								_dropDownDisabledColor,
-								shortcutRect);
-
-							return;
-						}
-					}
-				}
-				else if (e.Item.Owner is MenuStrip)
-				{
-					using (Brush textBrush =
-						new SolidBrush(Color.White))
-					{
-						e.Graphics.DrawString(
-							e.Text,
-							e.TextFont,
-							textBrush,
-							e.TextRectangle);
-					}
-				}
-				else
-				{
-					base.OnRenderItemText(e);
-				}
-			}
-
-			protected override void OnRenderMenuItemBackground(
-				ToolStripItemRenderEventArgs e)
-			{
-				if (e.Item.Pressed)
-				{
-					using (var brush =
-						new SolidBrush(
-							_pressedBackColor))
-					{
-						e.Graphics.FillRectangle(
-							brush,
-							e.Item.ContentRectangle);
-					}
-				}
-				else if (e.Item.Selected)
-				{
-					using (var brush =
-						new SolidBrush(
-							Color.DimGray))
-					{
-						e.Graphics.FillRectangle(
-							brush,
-							e.Item.ContentRectangle);
-					}
-				}
-				else
-				{
-					base.OnRenderMenuItemBackground(e);
 				}
 			}
 		}

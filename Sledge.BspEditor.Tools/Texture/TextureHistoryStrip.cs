@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Windows.Forms;
+using Sledge.Common.Shell.Theming;
 
 namespace Sledge.BspEditor.Tools.Texture
 {
@@ -262,9 +263,9 @@ namespace Sledge.BspEditor.Tools.Texture
 
             var slots = Math.Max(_names.Count, VisibleCells);
 
-            using (var border = new Pen(ControlPaint.Dark(BackColor, 0.1f)))
-            using (var hover = new Pen(SystemColors.HotTrack))
-            using (var selected = new Pen(SystemColors.Highlight, 2))
+            using (var border = new Pen(Theme.Border))
+            using (var hover = new Pen(Theme.Accent))
+            using (var selected = new Pen(Theme.Accent, 2))
             {
                 for (var i = 0; i < slots; i++)
                 {

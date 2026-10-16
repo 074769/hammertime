@@ -6,9 +6,11 @@ using System.Windows.Forms;
 using LogicAndTrick.Oy;
 using Sledge.Common.Shell.Hotkeys;
 using Sledge.Common.Shell.Settings;
+using Sledge.Common.Shell.Theming;
 using Sledge.Shell.Forms;
 using Sledge.Shell.Input;
 using Sledge.Shell.Registers;
+using Sledge.Shell.Theming;
 using Sledge.Shell.Settings;
 
 namespace Sledge.Shell.Settings.Editors
@@ -20,7 +22,6 @@ namespace Sledge.Shell.Settings.Editors
 		string ISettingEditor.Label { get; set; }
 
 		private HotkeyRegister.HotkeyBindings _bindings;
-		private static bool _useDarkMode;
 
 		public object Value
 		{
@@ -283,11 +284,8 @@ namespace Sledge.Shell.Settings.Editors
 		}
 		public void UseDarkTheme(bool dark)
 		{
-			_useDarkMode = dark;
-
-			HotkeyList.ForeColor = Color.Black;
-
-			DialogRegister.ColorControlsRecursively(this, dark);
+			Themer.Apply(this);
+			HotkeyList.Invalidate();
 		}
 
 		private bool _fittingColumns;
@@ -339,13 +337,19 @@ namespace Sledge.Shell.Settings.Editors
 
 		private void HotkeyList_DrawColumnHeader(object sender, DrawListViewColumnHeaderEventArgs e)
 		{
-			e.Graphics.DrawRectangle(Pens.LightGray, new Rectangle(new Point(e.Bounds.Location.X - 1, e.Bounds.Location.Y - 1), e.Bounds.Size));
-
-			if (_useDarkMode)
+			if (Theme.IsDark)
 			{
-				e.Graphics.FillRectangle(Brushes.DarkGray, e.Bounds);
-				e.Graphics.DrawRectangle(Pens.DimGray, e.Bounds);
+				using (var back = new SolidBrush(Theme.ControlAlt))
+				using (var border = new Pen(Theme.Border))
+				{
+					e.Graphics.FillRectangle(back, e.Bounds);
+					e.Graphics.DrawRectangle(border, new Rectangle(e.Bounds.X, e.Bounds.Y, e.Bounds.Width - 1, e.Bounds.Height - 1));
+				}
+				DrawCellText(e.Graphics, e.Header.Text, e.Bounds, e.Header.TextAlign, Theme.Text);
+				return;
 			}
+
+			e.Graphics.DrawRectangle(Pens.LightGray, new Rectangle(new Point(e.Bounds.Location.X - 1, e.Bounds.Location.Y - 1), e.Bounds.Size));
 			e.DrawText();
 		}
 
@@ -356,25 +360,34 @@ namespace Sledge.Shell.Settings.Editors
 
 		private void HotkeyList_DrawSubItem(object sender, DrawListViewSubItemEventArgs e)
 		{
-			HotkeyList.ForeColor = Color.Black;
-
-			if (_useDarkMode)
+			if (Theme.IsDark)
 			{
-				e.Graphics.FillRectangle(Brushes.Gray, e.Bounds);
-				e.Graphics.DrawRectangle(Pens.DarkGray, e.Bounds);
+				var selected = e.Item.Selected;
+				using (var back = new SolidBrush(selected ? Theme.Selection : Theme.Input))
+				using (var border = new Pen(Theme.ControlAlt))
+				{
+					e.Graphics.FillRectangle(back, e.Bounds);
+					e.Graphics.DrawRectangle(border, new Rectangle(e.Bounds.X, e.Bounds.Y, e.Bounds.Width - 1, e.Bounds.Height - 1));
+				}
+				var align = e.Header != null ? e.Header.TextAlign : HorizontalAlignment.Left;
+				DrawCellText(e.Graphics, e.SubItem.Text, e.Bounds, align, selected ? Theme.SelectionText : Theme.Text);
+				return;
 			}
+
 			if (e.Item.Selected)
 			{
-				if (_useDarkMode)
-				{
-					e.Graphics.FillRectangle(Brushes.DimGray, e.Bounds);
-				}
-				else
-				{
-					e.Graphics.FillRectangle(Brushes.DarkGray, e.Bounds);
-				}
+				e.Graphics.FillRectangle(Brushes.DarkGray, e.Bounds);
 			}
 			e.DrawText();
+		}
+
+		private void DrawCellText(Graphics g, string text, Rectangle bounds, HorizontalAlignment align, Color colour)
+		{
+			var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.LeftAndRightPadding;
+			if (align == HorizontalAlignment.Center) flags |= TextFormatFlags.HorizontalCenter;
+			else if (align == HorizontalAlignment.Right) flags |= TextFormatFlags.Right;
+			else flags |= TextFormatFlags.Left;
+			TextRenderer.DrawText(g, text, HotkeyList.Font, bounds, colour, flags);
 		}
 	}
 }
