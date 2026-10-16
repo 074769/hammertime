@@ -20,15 +20,6 @@ namespace Sledge.Shell.Theming
             base.OnRenderItemText(e);
         }
 
-        protected override void OnRenderItemImage(ToolStripItemImageRenderEventArgs e)
-        {
-            if (Theme.IsDark && e.Image != null)
-            {
-                e = new ToolStripItemImageRenderEventArgs(e.Graphics, e.Item, ThemeIcons.ForDark(e.Image), e.ImageRectangle);
-            }
-            base.OnRenderItemImage(e);
-        }
-
         protected override void OnRenderArrow(ToolStripArrowRenderEventArgs e)
         {
             if (Theme.IsDark) e.ArrowColor = e.Item != null && e.Item.Enabled ? Theme.Text : Theme.TextDisabled;

@@ -1788,23 +1788,6 @@ namespace Sledge.Shell.Registers
 				_pressed = Theme.Pressed;
 			}
 
-			protected override void OnRenderItemImage(
-				ToolStripItemImageRenderEventArgs e)
-			{
-				// Black icons would vanish on the dark toolbar: draw a light version of them
-				if (Theme.IsDark && e.Image != null)
-				{
-					e =
-						new ToolStripItemImageRenderEventArgs(
-							e.Graphics,
-							e.Item,
-							ThemeIcons.ForDark(e.Image),
-							e.ImageRectangle);
-				}
-
-				base.OnRenderItemImage(e);
-			}
-
 			protected override void OnRenderToolStripBackground(
 				ToolStripRenderEventArgs e)
 			{
