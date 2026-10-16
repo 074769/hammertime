@@ -214,6 +214,57 @@ namespace Sledge.BspEditor.Primitives
             return TryPreserveMapping(tex, oldVertices, moved);
         }
 
+        /// <summary>The mean (s, t) of the given vertices, a point that follows the layout through any affine edit of the (s, t) plane.</summary>
+        public static Vector2 GetCentre(Texture tex, IEnumerable<Vector3> vertices)
+        {
+            var sum = Vector2.Zero;
+            var count = 0;
+            foreach (var v in vertices)
+            {
+                var st = GetST(tex, v);
+                if (!float.IsFinite(st.X) || !float.IsFinite(st.Y)) continue;
+                sum += st;
+                count++;
+            }
+            return count == 0 ? Vector2.Zero : sum / count;
+        }
+
+        /// <summary>
+        /// Applies a linear edit to the texel plane around a pivot: (s', t') = pivot + M * ((s, t) - pivot) with
+        /// M = [[m11, m12], [m21, m22]]. Used to rotate or scale a whole group of faces as one piece: the same edit
+        /// on every face keeps the shared edges of a continuous layout together. The texture is only modified
+        /// when this returns true.
+        /// </summary>
+        public static bool TransformUv(Texture tex, Vector2 pivot, float m11, float m12, float m21, float m22)
+        {
+            if (tex == null || Math.Abs(tex.XScale) < 1e-6f || Math.Abs(tex.YScale) < 1e-6f) return false;
+
+            // Texels per world unit along each axis
+            var gs = tex.UAxis / tex.XScale;
+            var gt = tex.VAxis / tex.YScale;
+            var ngs = gs * m11 + gt * m12;
+            var ngt = gs * m21 + gt * m22;
+            var ls = ngs.Length();
+            var lt = ngt.Length();
+            if (!(ls > 1e-6f) || !(lt > 1e-6f) || !float.IsFinite(ls) || !float.IsFinite(lt)) return false;
+
+            var ds = tex.XShift - pivot.X;
+            var dt = tex.YShift - pivot.Y;
+            var shiftS = pivot.X + m11 * ds + m12 * dt;
+            var shiftT = pivot.Y + m21 * ds + m22 * dt;
+
+            // Keep the sign convention of the scales (a mirrored texture stays mirrored through the scale sign)
+            var sx = tex.XScale < 0 ? -1f : 1f;
+            var sy = tex.YScale < 0 ? -1f : 1f;
+            tex.UAxis = ngs * sx;
+            tex.VAxis = ngt * sy;
+            tex.XScale = sx / ls;
+            tex.YScale = sy / lt;
+            tex.XShift = shiftS;
+            tex.YShift = shiftT;
+            return true;
+        }
+
         /// <summary>
         /// Unfolds a group of connected faces into one continuous, undistorted layout.
         /// The least distorted face keeps its mapping; the others are reached across shared edges, each one rotated about

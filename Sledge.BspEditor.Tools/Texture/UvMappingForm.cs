@@ -70,6 +70,22 @@ namespace Sledge.BspEditor.Tools.Texture
         private bool _diffScaleY;
         private bool _diffRotation;
 
+        // The first selected face's values as loaded: Treat as one edits are relative to these
+        private float _baseShiftX;
+        private float _baseShiftY;
+        private float _baseScaleX = 1;
+        private float _baseScaleY = 1;
+        private float _baseRotation;
+
+        // Interactive rotate (R) / scale (S) in the preview
+        private enum Xform { None, Rotate, Scale }
+        private Xform _xform;
+        private bool _xformStarting;
+        private Vector2 _xformStartSt;   // mouse position in texel space when the transform began
+        private Vector2 _xformRef;       // reference point (texel space) the mouse angle / distance is measured from
+        private float _xformAmount;      // Rotate: radians in texel space, Scale: factor
+        private char _xformAxis;         // Scale only: 'X' (U only), 'Y' (V only) or '\0' (both)
+
         // 1 while a debounced field edit is waiting to be committed to the undo history
         private int _pendingCommit;
         private readonly Timer _commitTimer;
@@ -416,6 +432,12 @@ namespace Sledge.BspEditor.Tools.Texture
                     num++;
                 }
 
+                _baseShiftX = _shiftX;
+                _baseShiftY = _shiftY;
+                _baseScaleX = _scaleX;
+                _baseScaleY = _scaleY;
+                _baseRotation = _rotation;
+
                 // Same trick as the texture application form: when the faces disagree the box is
                 // blank, and a value the box doesn't actually hold must still trigger a change.
                 if (_diffScaleX) _scaleX = 1.000001f;
@@ -467,8 +489,56 @@ namespace Sledge.BspEditor.Tools.Texture
         /// Fields the user didn't touch are skipped (their "different" flag is still set), so
         /// every face keeps its own value for those.
         /// </summary>
-        private Action<Face> BuildValueEdits()
+        /// <summary>
+        /// With Treat as one on and more than one face selected: the shared pivot (the mean texel position of all
+        /// the selected faces' vertices) that rotate / scale / shift edits are made around, so the layout stays one piece.
+        /// Null when faces should be edited on their own.
+        /// </summary>
+        private Vector2? GroupPivot(IReadOnlyList<KeyValuePair<IMapObject, Face>> faces)
         {
+            if (!TreatAsOneCheckBox.Checked || faces.Count < 2) return null;
+
+            var sum = Vector2.Zero;
+            var count = 0;
+            foreach (var kv in faces)
+            {
+                foreach (var v in kv.Value.Vertices)
+                {
+                    var st = UvMath.GetST(kv.Value.Texture, v);
+                    if (!float.IsFinite(st.X) || !float.IsFinite(st.Y)) continue;
+                    sum += st;
+                    count++;
+                }
+            }
+            return count == 0 ? (Vector2?)null : sum / count;
+        }
+
+        private Vector2? CurrentGroupPivot() => GroupPivot(GetSelectedFaces());
+
+        private static float WrapRotation(float degrees)
+        {
+            while (degrees > 360) degrees -= 360;
+            while (degrees < -360) degrees += 360;
+            return degrees;
+        }
+
+        /// <summary>Rotates the layout around a pivot by the same amount the Rotation field would add (clockwise on screen when positive).</summary>
+        private static void RotateAround(Texture t, Vector2 pivot, float uiDegrees)
+        {
+            var phi = -uiDegrees * MathF.PI / 180f;
+            var c = MathF.Cos(phi);
+            var s = MathF.Sin(phi);
+            if (UvMath.TransformUv(t, pivot, c, -s, s, c)) t.Rotation = WrapRotation(t.Rotation + uiDegrees);
+        }
+
+        private Action<Face> BuildValueEdits(Vector2? groupPivot)
+        {
+            var baseShiftX = _baseShiftX;
+            var baseShiftY = _baseShiftY;
+            var baseScaleX = _baseScaleX;
+            var baseScaleY = _baseScaleY;
+            var baseRotation = _baseRotation;
+
             var shiftX = _shiftX;
             var shiftY = _shiftY;
             var scaleX = _scaleX;
@@ -483,6 +553,32 @@ namespace Sledge.BspEditor.Tools.Texture
             return face =>
             {
                 var t = face.Texture;
+
+                if (groupPivot != null)
+                {
+                    // Treat as one: every edit is a change to the whole layout around one shared pivot
+                    // (relative to the first face's values), so connected faces stay connected.
+                    var pivot = groupPivot.Value;
+                    var dRotation = diffRotation ? 0 : rotation - baseRotation;
+                    var dShiftX = diffShiftX ? 0 : shiftX - baseShiftX;
+                    var dShiftY = diffShiftY ? 0 : shiftY - baseShiftY;
+                    var ratioX = diffScaleX || Math.Abs(baseScaleX) < 1e-6f ? 1 : scaleX / baseScaleX;
+                    var ratioY = diffScaleY || Math.Abs(baseScaleY) < 1e-6f ? 1 : scaleY / baseScaleY;
+
+                    if (Math.Abs(dRotation) > 1e-4f) RotateAround(t, pivot, dRotation);
+
+                    // A bigger scale value is a bigger texture, so the layout covers fewer texels
+                    if (Math.Abs(ratioX - 1) > 1e-6f || Math.Abs(ratioY - 1) > 1e-6f)
+                    {
+                        var kx = Math.Abs(ratioX) > 1e-4f ? 1 / ratioX : 1;
+                        var ky = Math.Abs(ratioY) > 1e-4f ? 1 / ratioY : 1;
+                        UvMath.TransformUv(t, pivot, kx, 0, 0, ky);
+                    }
+
+                    t.XShift += dShiftX;
+                    t.YShift += dShiftY;
+                    return;
+                }
 
                 var shiftXBefore = t.XShift;
                 var shiftYBefore = t.YShift;
@@ -570,7 +666,7 @@ namespace Sledge.BspEditor.Tools.Texture
                 if (Interlocked.Exchange(ref _pendingCommit, 0) == 1)
                 {
                     _commitTimer.Stop();
-                    var edits = BuildValueEdits();
+                    var edits = BuildValueEdits(CurrentGroupPivot());
                     await ApplyCore(doc, (mo, f) => { edits(f); return Task.FromResult(true); });
                 }
 
@@ -611,9 +707,11 @@ namespace Sledge.BspEditor.Tools.Texture
             if (_freeze) return;
             if (!(sender is Button button) || !(button.Tag is float delta)) return;
 
+            var pivot = CurrentGroupPivot();
             await ApplyChanges((mo, f) =>
             {
-                f.Texture.SetRotation(f.Texture.Rotation + delta);
+                if (pivot != null) RotateAround(f.Texture, pivot.Value, delta);
+                else f.Texture.SetRotation(f.Texture.Rotation + delta);
                 return Task.FromResult(true);
             });
         }
@@ -854,14 +952,15 @@ namespace Sledge.BspEditor.Tools.Texture
         /// The screen position of each vertex of the face's UV layout, with the current field
         /// edits and any active drag applied, so the preview matches what will be committed.
         /// </summary>
-        private bool TryGetFaceUv(Face face, out PointF[] uvs)
+        private bool TryGetFaceUv(Face face, Vector2? groupPivot, out PointF[] uvs)
         {
             uvs = null;
             if (_textureWidth <= 0 || _textureHeight <= 0 || face.Vertices.Count == 0) return false;
 
             var edited = (Face)face.Clone();
-            BuildValueEdits()(edited);
+            BuildValueEdits(groupPivot)(edited);
             var t = edited.Texture;
+            if (_xform != Xform.None) ApplyXform(t, face, groupPivot);
             if (_dragging)
             {
                 t.XShift += _dragShiftX;
@@ -943,6 +1042,7 @@ namespace Sledge.BspEditor.Tools.Texture
             }
 
             var faces = GetSelectedFaces();
+            var groupPivot = GroupPivot(faces);
 
             // The UV layout of every selected face
             using (var polyPen = new Pen(Color.FromArgb(0, 255, 0)) { LineJoin = LineJoin.Round })
@@ -950,13 +1050,22 @@ namespace Sledge.BspEditor.Tools.Texture
             {
                 foreach (var kv in faces)
                 {
-                    if (!TryGetFaceUv(kv.Value, out var points)) continue;
+                    if (!TryGetFaceUv(kv.Value, groupPivot, out var points)) continue;
                     g.DrawPolygon(polyPen, points);
                     foreach (var p in points)
                     {
                         g.FillRectangle(vertexBrush, p.X - 2.5f, p.Y - 2.5f, 5f, 5f);
                     }
                 }
+            }
+
+            if (_xform != Xform.None)
+            {
+                var text = _xform == Xform.Rotate
+                    ? string.Format("Rotate {0:0.##}\u00B0    click / Enter = apply, Esc / right click = cancel", -_xformAmount * 180f / MathF.PI)
+                    : string.Format("Scale {0:0.###}{1}    click / Enter = apply, Esc / right click = cancel, X / Y = one axis",
+                        _xformAmount, _xformAxis == 'X' ? " (U only)" : _xformAxis == 'Y' ? " (V only)" : "");
+                g.DrawString(text, Font, Brushes.Yellow, 6, 6);
             }
 
             if (faces.Count == 0)
@@ -969,6 +1078,14 @@ namespace Sledge.BspEditor.Tools.Texture
 
         private async void PreviewMouseDown(object sender, MouseEventArgs e)
         {
+            // A rotate / scale in progress: left click applies it, right click cancels it
+            if (_xform != Xform.None && (e.Button == MouseButtons.Left || e.Button == MouseButtons.Right))
+            {
+                if (e.Button == MouseButtons.Left) await CommitXform();
+                else CancelXform();
+                return;
+            }
+
             // Middle or right drag pans the view
             if (e.Button == MouseButtons.Middle || e.Button == MouseButtons.Right)
             {
@@ -1001,6 +1118,12 @@ namespace Sledge.BspEditor.Tools.Texture
 
         private void PreviewMouseMove(object sender, MouseEventArgs e)
         {
+            if (_xform != Xform.None)
+            {
+                UpdateXform(e.Location);
+                return;
+            }
+
             if (_panning)
             {
                 _viewOffset = new PointF(_panStartOffset.X + (e.X - _panStart.X), _panStartOffset.Y + (e.Y - _panStart.Y));
@@ -1200,8 +1323,165 @@ namespace Sledge.BspEditor.Tools.Texture
         {
             // A change still inside the debounce window is committed first, so undo/redo sees it
             if (IsUndoRedoKey(keyData)) CommitPendingNow();
+
+            if (_xform != Xform.None || _xformStarting)
+            {
+                if (keyData == Keys.Escape) { CancelXform(); return true; }
+                if (keyData == Keys.Enter) { _ = CommitXform(); return true; }
+                if (_xform == Xform.Scale && (keyData == Keys.X || keyData == Keys.Y))
+                {
+                    var axis = keyData == Keys.X ? 'X' : 'Y';
+                    _xformAxis = _xformAxis == axis ? '\0' : axis;
+                    UpdateXform(PreviewPanel.PointToClient(Cursor.Position));
+                    return true;
+                }
+                if (keyData == Keys.R || keyData == Keys.S) return true; // key repeat
+            }
+            else if ((keyData == Keys.R || keyData == Keys.S) && PreviewPanel.Focused && Document != null && !_dragging && !_panning)
+            {
+                _ = BeginXform(keyData == Keys.R ? Xform.Rotate : Xform.Scale);
+                return true;
+            }
+
             return base.ProcessCmdKey(ref msg, keyData);
         }
+
+        #region Rotate (R) and scale (S) in the preview
+
+        private Vector2 ScreenToSt(Point p)
+        {
+            return new Vector2(
+                ((p.X - _viewOffset.X) / _viewScale + _anchorU) * _textureWidth,
+                ((p.Y - _viewOffset.Y) / _viewScale + _anchorV) * _textureHeight);
+        }
+
+        private async Task BeginXform(Xform mode)
+        {
+            if (_textureWidth <= 0 || _textureHeight <= 0) return;
+
+            _xformStarting = true;
+            try
+            {
+                // Apply anything typed but not committed yet, so the transform starts from the committed state
+                if (Volatile.Read(ref _pendingCommit) == 1) await ApplyChanges((mo, f) => Task.FromResult(false));
+
+                var faces = GetSelectedFaces();
+                if (faces.Count == 0) return;
+
+                // Angles and distances are measured from the pivot (or the middle of the pivots when faces are edited on their own)
+                var pivot = GroupPivot(faces);
+                if (pivot != null) _xformRef = pivot.Value;
+                else
+                {
+                    var sum = Vector2.Zero;
+                    foreach (var kv in faces) sum += UvMath.GetCentre(kv.Value.Texture, kv.Value.Vertices);
+                    _xformRef = sum / faces.Count;
+                }
+
+                _xformStartSt = ScreenToSt(PreviewPanel.PointToClient(Cursor.Position));
+                _xformAmount = mode == Xform.Rotate ? 0 : 1;
+                _xformAxis = '\0';
+                _xform = mode;
+                PreviewPanel.Capture = true;
+                PreviewPanel.Invalidate();
+            }
+            finally
+            {
+                _xformStarting = false;
+            }
+        }
+
+        private static float SafeDivide(float a, float b)
+        {
+            // Never divide by (nearly) nothing when the mouse starts on top of the pivot
+            if (Math.Abs(b) < 4f) b = b < 0 ? -4f : 4f;
+            return a / b;
+        }
+
+        private void UpdateXform(Point mouse)
+        {
+            if (_xform == Xform.None) return;
+
+            var v0 = _xformStartSt - _xformRef;
+            var v1 = ScreenToSt(mouse) - _xformRef;
+
+            if (_xform == Xform.Rotate)
+            {
+                if (v1.LengthSquared() > 1e-4f && v0.LengthSquared() > 1e-4f)
+                {
+                    _xformAmount = MathF.Atan2(v1.Y, v1.X) - MathF.Atan2(v0.Y, v0.X);
+                }
+            }
+            else if (_xformAxis == 'X') _xformAmount = SafeDivide(v1.X, v0.X);
+            else if (_xformAxis == 'Y') _xformAmount = SafeDivide(v1.Y, v0.Y);
+            else _xformAmount = SafeDivide(v1.Length(), Math.Max(v0.Length(), 4f));
+
+            PreviewPanel.Invalidate();
+        }
+
+        /// <summary>
+        /// Applies the running rotate / scale to one texture. The pivot is the shared group pivot, or the face's own
+        /// centre when faces are edited on their own. <paramref name="face"/> is the face before any edit.
+        /// </summary>
+        private void ApplyXform(Texture t, Face face, Vector2? groupPivot)
+        {
+            var pivot = groupPivot ?? UvMath.GetCentre(face.Texture, face.Vertices);
+
+            if (_xform == Xform.Rotate)
+            {
+                RotateAround(t, pivot, -_xformAmount * 180f / MathF.PI);
+            }
+            else if (_xform == Xform.Scale && Math.Abs(_xformAmount) > 1e-4f)
+            {
+                var kx = _xformAxis == 'Y' ? 1 : _xformAmount;
+                var ky = _xformAxis == 'X' ? 1 : _xformAmount;
+                UvMath.TransformUv(t, pivot, kx, 0, 0, ky);
+            }
+        }
+
+        private void EndXform()
+        {
+            _xform = Xform.None;
+            _xformAmount = 0;
+            PreviewPanel.Capture = false;
+            PreviewPanel.Invalidate();
+        }
+
+        private void CancelXform()
+        {
+            _xformStarting = false;
+            if (_xform != Xform.None) EndXform();
+        }
+
+        private async Task CommitXform()
+        {
+            if (_xform == Xform.None) return;
+
+            var mode = _xform;
+            var amount = _xformAmount;
+            var axis = _xformAxis;
+            var pivot = CurrentGroupPivot();
+            EndXform();
+
+            if (mode == Xform.Rotate && Math.Abs(amount) < 1e-5f) return;
+            if (mode == Xform.Scale && Math.Abs(amount - 1) < 1e-5f) return;
+
+            await ApplyChanges((mo, f) =>
+            {
+                var p = pivot ?? UvMath.GetCentre(f.Texture, f.Vertices);
+                if (mode == Xform.Rotate)
+                {
+                    RotateAround(f.Texture, p, -amount * 180f / MathF.PI);
+                    return Task.FromResult(true);
+                }
+
+                var kx = axis == 'Y' ? 1 : amount;
+                var ky = axis == 'X' ? 1 : amount;
+                return Task.FromResult(Math.Abs(amount) > 1e-4f && UvMath.TransformUv(f.Texture, p, kx, 0, 0, ky));
+            });
+        }
+
+        #endregion
 
         protected override bool CheckIgnoreHotkey(Control source, Keys keyData)
         {
