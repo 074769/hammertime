@@ -7,10 +7,12 @@ using System.Numerics;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using LogicAndTrick.Oy;
+using Sledge.BspEditor.Commands.Clipboard;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Modification;
 using Sledge.BspEditor.Modification.Operations.Selection;
 using Sledge.BspEditor.Modification.Operations.Tree;
+using Sledge.BspEditor.Primitives.MapData;
 using Sledge.BspEditor.Primitives.MapObjectData;
 using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.BspEditor.Rendering.Resources;
@@ -30,6 +32,7 @@ using Sledge.Rendering.Cameras;
 using Sledge.Rendering.Pipelines;
 using Sledge.Rendering.Primitives;
 using Sledge.Rendering.Resources;
+using Sledge.Shell.Input;
 
 namespace Sledge.BspEditor.Tools.Entity
 {
@@ -181,7 +184,68 @@ namespace Sledge.BspEditor.Tools.Entity
 
 			if (hit == null) return; // Nothing was clicked
 
-			CreateEntity(document, hit.Intersection);
+			_ = CreateEntityOnSurface(document, rs, re, hit);
+		}
+
+		/// <summary>
+		/// Creates the entity where the click landed. When the click hit a brush, the entity is rested on the
+		/// surface (its box touching the face, like a teacup on a table) and never left inside another brush.
+		/// </summary>
+		private async Task CreateEntityOnSurface(MapDocument document, Vector3 rayStart, Vector3 rayEnd, MapObjectExtensions.MapObjectIntersection first)
+		{
+			var direction = rayEnd - rayStart;
+			var length = direction.Length();
+			var name = _activeEntity;
+
+			if (name == null || !(first.Object is Solid) || length <= 0)
+			{
+				await CreateEntity(document, first.Intersection);
+				return;
+			}
+
+			var solids = document.Map.Root.Find(x => x is Solid).OfType<Solid>().ToList();
+			var surface = PasteSurface.Raycast(solids.Where(x => !x.IsHidden()), rayStart, direction / length, length);
+			if (surface == null)
+			{
+				await CreateEntity(document, first.Intersection);
+				return;
+			}
+
+			// The box the entity will have, relative to its origin
+			var min = new Vector3(-8, -8, -8);
+			var max = new Vector3(8, 8, 8);
+			var data = await document.Environment.GetGameData();
+			var cls = data?.Classes.FirstOrDefault(x => x.ClassType == ClassType.Point && String.Equals(x.Name, name, StringComparison.InvariantCultureIgnoreCase));
+			if (cls != null)
+			{
+				var size = cls.Behaviours.FirstOrDefault(x => x.Name == "size");
+				if (size != null && size.Values.Count >= 6)
+				{
+					min = size.GetVector3(0) ?? Vector3.Zero;
+					max = size.GetVector3(1) ?? Vector3.Zero;
+				}
+				else if (cls.Name == "infodecal")
+				{
+					min = Vector3.One * -4;
+					max = Vector3.One * 4;
+				}
+			}
+
+			// Snap along the surface (not off it) when snap to grid is on
+			var point = surface.Point;
+			var gridData = document.Map.Data.GetOne<GridData>();
+			if (!KeyboardState.Alt && gridData?.SnapToGrid == true && gridData.Grid != null)
+			{
+				point = PasteSurface.SnapOnPlane(point, surface.Normal, gridData.Grid.Snap);
+			}
+
+			var origin = point + surface.Normal * PasteSurface.RestingDistance(min, max, surface.Normal);
+
+			// Lift it clear if it still ends up inside another brush
+			var box = new Box(origin + min, origin + max);
+			origin += PasteSurface.LiftClear(box, Vector3.Zero, surface.Normal, solids.Where(x => !x.IsHidden()), surface.Solid);
+
+			await CreateEntity(document, origin);
 		}
 
 		// 2D interaction

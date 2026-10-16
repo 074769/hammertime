@@ -12,7 +12,7 @@ namespace Sledge.BspEditor.Commands.Clipboard
     /// find the face under a ray, snap onto it, rest the pasted objects against it, and make sure
     /// they don't end up inside another brush.
     /// </summary>
-    internal static class PasteSurface
+    public static class PasteSurface
     {
         public class SurfaceHit
         {
@@ -105,6 +105,19 @@ namespace Sledge.BspEditor.Commands.Clipboard
         {
             var half = (box.End - box.Start) / 2f;
             return Math.Abs(normal.X) * half.X + Math.Abs(normal.Y) * half.Y + Math.Abs(normal.Z) * half.Z;
+        }
+
+        /// <summary>
+        /// How far an origin has to be above a surface for a box around it (min and max relative to the
+        /// origin, not necessarily centred) to sit on the surface instead of sinking into it.
+        /// </summary>
+        public static float RestingDistance(Vector3 min, Vector3 max, Vector3 normal)
+        {
+            var d = 0f;
+            d += normal.X > 0 ? -normal.X * min.X : -normal.X * max.X;
+            d += normal.Y > 0 ? -normal.Y * min.Y : -normal.Y * max.Y;
+            d += normal.Z > 0 ? -normal.Z * min.Z : -normal.Z * max.Z;
+            return Math.Max(d, 0);
         }
 
         /// <summary>
