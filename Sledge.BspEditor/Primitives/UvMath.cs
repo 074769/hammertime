@@ -336,6 +336,123 @@ namespace Sledge.BspEditor.Primitives
         }
 
         /// <summary>
+        /// Straightens a selection: every face loses its skew and stretch (U and V become perpendicular with the same
+        /// scale on the face), connected faces are joined into one continuous layout like Unfold, and the layout is
+        /// turned so the longest edge of its biggest face lies along U or V. Faces that aren't connected to that layout
+        /// are straightened on their own. Returns the new texture for every face, by face ID.
+        /// </summary>
+        public static Dictionary<long, Texture> Straighten(IReadOnlyList<Face> faces)
+        {
+            var result = new Dictionary<long, Texture>();
+            if (faces == null || faces.Count == 0) return result;
+
+            // 1. Per face: remove skew and stretch (on copies, the real faces are not touched)
+            var work = new List<Face>();
+            foreach (var face in faces)
+            {
+                var copy = (Face) face.Clone();
+                RemoveSkew(copy);
+                work.Add(copy);
+                result[copy.ID] = copy.Texture.Clone();
+            }
+
+            // 2. Join the connected faces into one continuous layout
+            var unfolded = work.Count > 1 ? Unfold(work) : new Dictionary<long, Texture>();
+            foreach (var kv in unfolded) result[kv.Key] = kv.Value;
+
+            // 3. Turn the joined layout as one piece, and every other face on its own
+            var island = work.Where(f => unfolded.ContainsKey(f.ID)).ToList();
+            if (island.Count > 0) SnapToAxis(island, result);
+            foreach (var face in work.Where(f => !unfolded.ContainsKey(f.ID)))
+            {
+                SnapToAxis(new List<Face> { face }, result);
+            }
+
+            return result;
+        }
+
+        /// <summary>Makes U and V perpendicular with equal scale on the face, keeping the U direction and the middle of the layout.</summary>
+        private static bool RemoveSkew(Face face)
+        {
+            var t = face.Texture;
+            if (Distortion(face) <= 1.001f) return false;
+            if (Math.Abs(t.XScale) < 1e-6f || Math.Abs(t.YScale) < 1e-6f) return false;
+
+            var n = face.Plane.Normal;
+            var gs = t.UAxis / t.XScale;
+            var gt = t.VAxis / t.YScale;
+            gs -= n * gs.Dot(n);
+            gt -= n * gt.Dot(n);
+
+            var ls = gs.Length();
+            var lt = gt.Length();
+            if (!(ls > 1e-6f) || !(lt > 1e-6f)) return false;
+
+            var length = (ls + lt) / 2f;
+            var e1 = gs / ls;
+            var e2 = n.Cross(e1);
+            var handed = n.Dot(gs.Cross(gt)) < 0 ? -1f : 1f; // a mirrored mapping stays mirrored
+
+            var before = GetCentre(t, face.Vertices);
+            var sx = t.XScale < 0 ? -1f : 1f;
+            var sy = t.YScale < 0 ? -1f : 1f;
+            t.UAxis = e1 * sx;
+            t.VAxis = e2 * handed * sy;
+            t.XScale = sx / length;
+            t.YScale = sy / length;
+
+            var after = GetCentre(t, face.Vertices);
+            t.XShift += before.X - after.X;
+            t.YShift += before.Y - after.Y;
+            return true;
+        }
+
+        /// <summary>Turns a group of faces (one continuous layout) around its middle so the longest edge of its biggest face lies along U or V.</summary>
+        private static void SnapToAxis(IReadOnlyList<Face> group, Dictionary<long, Texture> textures)
+        {
+            var reference = group.OrderByDescending(f => Area(f.Vertices)).First();
+            var vertices = reference.Vertices;
+            if (vertices.Count < 3) return;
+
+            var longest = 0;
+            var longestLength = -1f;
+            for (var i = 0; i < vertices.Count; i++)
+            {
+                var length = (vertices[(i + 1) % vertices.Count] - vertices[i]).Length();
+                if (length > longestLength)
+                {
+                    longestLength = length;
+                    longest = i;
+                }
+            }
+
+            var tex = textures[reference.ID];
+            var d = GetST(tex, vertices[(longest + 1) % vertices.Count]) - GetST(tex, vertices[longest]);
+            if (!float.IsFinite(d.X) || !float.IsFinite(d.Y) || d.LengthSquared() < 1e-8f) return;
+
+            var angle = MathF.Atan2(d.Y, d.X);
+            var quarter = MathF.PI / 2f;
+            var delta = angle - MathF.Round(angle / quarter) * quarter;
+            if (Math.Abs(delta) < 1e-4f) return;
+
+            var pivot = Vector2.Zero;
+            var count = 0;
+            foreach (var face in group)
+            {
+                foreach (var v in face.Vertices)
+                {
+                    pivot += GetST(textures[face.ID], v);
+                    count++;
+                }
+            }
+            pivot /= count;
+
+            var c = MathF.Cos(-delta);
+            var s = MathF.Sin(-delta);
+            foreach (var face in group) TransformUv(textures[face.ID], pivot, c, -s, s, c);
+        }
+
+        /// <summary>
         /// How stretched or sheared a face's mapping is: 1 means the texture keeps its shape on the face
         /// (equal scale, right angle between the axes as seen on the face), larger is worse.
         /// </summary>

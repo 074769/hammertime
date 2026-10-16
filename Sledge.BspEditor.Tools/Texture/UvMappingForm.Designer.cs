@@ -57,6 +57,7 @@ namespace Sledge.BspEditor.Tools.Texture
             FitViewButton = new System.Windows.Forms.Button();
             TreatAsOneCheckBox = new System.Windows.Forms.CheckBox();
             UnfoldButton = new System.Windows.Forms.Button();
+            StraightenButton = new System.Windows.Forms.Button();
             HintLabel = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)ShiftXValue).BeginInit();
             ((System.ComponentModel.ISupportInitialize)ShiftYValue).BeginInit();
@@ -340,19 +341,28 @@ namespace Sledge.BspEditor.Tools.Texture
             UnfoldButton.Text = "Unfold";
             UnfoldButton.UseVisualStyleBackColor = true;
             // 
+            // StraightenButton
+            // 
+            StraightenButton.Location = new System.Drawing.Point(236, 542);
+            StraightenButton.Name = "StraightenButton";
+            StraightenButton.Size = new System.Drawing.Size(100, 25);
+            StraightenButton.TabIndex = 11;
+            StraightenButton.Text = "Straighten";
+            StraightenButton.UseVisualStyleBackColor = true;
+            // 
             // HintLabel
             // 
             HintLabel.Location = new System.Drawing.Point(12, 572);
             HintLabel.Name = "HintLabel";
-            HintLabel.Size = new System.Drawing.Size(446, 54);
+            HintLabel.Size = new System.Drawing.Size(446, 70);
             HintLabel.TabIndex = 8;
-            HintLabel.Text = "Drag in the view to move the UV layout over the texture.\r\nUse the mouse wheel to zoom.";
+            HintLabel.Text = "Drag in the view to move the UV layout over the texture.\r\nR rotates and S scales the layout (mouse over the view).\r\nUse the mouse wheel to zoom.";
             // 
             // UvMappingForm
             // 
             AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            ClientSize = new System.Drawing.Size(470, 632);
+            ClientSize = new System.Drawing.Size(470, 648);
             Controls.Add(PreviewPanel);
             Controls.Add(StatusLabel);
             Controls.Add(ValuesGroup);
@@ -363,6 +373,7 @@ namespace Sledge.BspEditor.Tools.Texture
             Controls.Add(FitViewButton);
             Controls.Add(TreatAsOneCheckBox);
             Controls.Add(UnfoldButton);
+            Controls.Add(StraightenButton);
             Controls.Add(HintLabel);
             FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedToolWindow;
             Name = "UvMappingForm";
@@ -411,6 +422,7 @@ namespace Sledge.BspEditor.Tools.Texture
         private System.Windows.Forms.Button FitViewButton;
         private System.Windows.Forms.CheckBox TreatAsOneCheckBox;
         private System.Windows.Forms.Button UnfoldButton;
+        private System.Windows.Forms.Button StraightenButton;
         private System.Windows.Forms.Label HintLabel;
     }
 }

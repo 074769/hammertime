@@ -159,6 +159,7 @@ namespace Sledge.BspEditor.Tools.Texture
             AlignWorldButton.Click += AlignToWorldClicked;
             FitTextureButton.Click += FitTextureClicked;
             UnfoldButton.Click += UnfoldClicked;
+            StraightenButton.Click += StraightenClicked;
             FitViewButton.Click += (s, e) => FitView(GetSelectedFaces().Select(x => x.Value).ToList());
 
             PreviewPanel.Paint += DrawPreview;
@@ -240,6 +241,7 @@ namespace Sledge.BspEditor.Tools.Texture
                 FitViewButton.Text = strings.GetString(prefix, "FitView");
                 TreatAsOneCheckBox.Text = strings.GetString(prefix, "TreatAsOne") ?? TreatAsOneCheckBox.Text;
                 UnfoldButton.Text = strings.GetString(prefix, "Unfold") ?? UnfoldButton.Text;
+                StraightenButton.Text = strings.GetString(prefix, "Straighten") ?? StraightenButton.Text;
                 HintLabel.Text = strings.GetString(prefix, "Hint");
                 _statusNoSelection = strings.GetString(prefix, "NoSelection") ?? _statusNoSelection;
                 _statusFormat = strings.GetString(prefix, "Status") ?? _statusFormat;
@@ -523,7 +525,7 @@ namespace Sledge.BspEditor.Tools.Texture
         }
 
         /// <summary>Rotates the layout around a pivot by the same amount the Rotation field would add (clockwise on screen when positive).</summary>
-        private static void RotateAround(Texture t, Vector2 pivot, float uiDegrees)
+        private static void RotateAround(Sledge.BspEditor.Primitives.Texture t, Vector2 pivot, float uiDegrees)
         {
             var phi = -uiDegrees * MathF.PI / 180f;
             var c = MathF.Cos(phi);
@@ -768,6 +770,37 @@ namespace Sledge.BspEditor.Tools.Texture
                 message += overLimit + " face(s) now span more than " + limits.MaxLuxelSpan + " lightmap luxels, which the compiler rejects (\"Bad surface extents\"). Use a larger scale or split those faces.";
             }
             MessageBox.Show(this, message.Trim(), Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        /// <summary>
+        /// Straighten: removes skew and stretch from every face, joins connected faces into one continuous layout
+        /// (like Unfold) and turns it so the biggest face's longest edge lies along U or V.
+        /// </summary>
+        private async void StraightenClicked(object sender, EventArgs e)
+        {
+            var faces = GetSelectedFaces().Select(x => x.Value).ToList();
+            if (faces.Count == 0) return;
+
+            var straightened = UvMath.Straighten(faces);
+            var limits = UvLimits.GoldSrc;
+            var overLimit = 0;
+
+            await ApplyChanges((mo, f) =>
+            {
+                if (!straightened.TryGetValue(f.ID, out var texture)) return Task.FromResult(false);
+
+                var before = UvMath.GetExtents(f.Texture, f.Vertices, limits);
+                var after = UvMath.GetExtents(texture, f.Vertices, limits);
+                if (after.Exceeds(limits) && !before.Exceeds(limits)) overLimit++;
+
+                f.Texture.Unclone(texture);
+                return Task.FromResult(true);
+            });
+
+            if (overLimit == 0) return;
+            MessageBox.Show(this,
+                overLimit + " face(s) now span more than " + limits.MaxLuxelSpan + " lightmap luxels, which the compiler rejects (\"Bad surface extents\"). Use a larger scale or split those faces.",
+                Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private async void FitTextureClicked(object sender, EventArgs e)
@@ -1423,7 +1456,7 @@ namespace Sledge.BspEditor.Tools.Texture
         /// Applies the running rotate / scale to one texture. The pivot is the shared group pivot, or the face's own
         /// centre when faces are edited on their own. <paramref name="face"/> is the face before any edit.
         /// </summary>
-        private void ApplyXform(Texture t, Face face, Vector2? groupPivot)
+        private void ApplyXform(Sledge.BspEditor.Primitives.Texture t, Face face, Vector2? groupPivot)
         {
             var pivot = groupPivot ?? UvMath.GetCentre(face.Texture, face.Vertices);
 

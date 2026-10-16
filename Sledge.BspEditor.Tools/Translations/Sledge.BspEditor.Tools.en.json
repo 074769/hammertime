@@ -292,7 +292,8 @@
             "FitView": "Fit view",
             "TreatAsOne": "Treat as one",
             "Unfold": "Unfold",
-            "Hint": "Drag in the view to move the UV layout over the texture.\r\nMiddle or right mouse drag pans the view.\r\nUse the mouse wheel to zoom.",
+            "Straighten": "Straighten",
+            "Hint": "Drag in the view to move the UV layout over the texture.\r\nR rotates and S scales the layout (mouse over the view).\r\nMiddle or right mouse drag pans the view.\r\nUse the mouse wheel to zoom.",
             "NoSelection": "No faces selected",
             "Status": "{0} ({1} x {2}) - {3} faces"
         }
