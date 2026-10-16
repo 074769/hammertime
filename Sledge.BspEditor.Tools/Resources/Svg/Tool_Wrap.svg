@@ -17,7 +17,7 @@
    id="defs1" /><sodipodi:namedview
    id="namedview1"
    pagecolor="#ffffff"
-   bordercolor="#7c7c7c"
+   bordercolor="#000000"
    borderopacity="0.25"
    inkscape:showpageshadow="2"
    inkscape:pageopacity="0.0"
@@ -35,14 +35,14 @@
 <style
    type="text/css"
    id="style1">
-	.sharpcorners_een{fill:#5a857f;}
+	.sharpcorners_een{fill:#111918;}
 </style>
 <path
    d="M 7,11 H 5 V 31 H 27 V 11 h -1 v 6 c 0,1.103 -0.897,2 -2,2 -1.103,0 -2,-0.897 -2,-2 v -6 h -7 v 9 c 0,1.105 -0.895,2 -2,2 -1.105,0 -2,-0.895 -2,-2 v -3 c 0,-0.552 -0.448,-1 -1,-1 -0.552,0 -1,0.448 -1,1 v 2 C 9,19.552 8.552,20 8,20 7.448,20 7,19.552 7,19 Z"
-   style="fill:#5a857f"
+   style="fill:#111918"
    id="path3" /><path
    d="M 16,1 C 11.037,1 7,5.037 7,10 v 1 h 2 v -1 c 0,-3.859 3.141,-7 7,-7 3.859,0 7,3.141 7,7 v 7 c 0,0.552 0.448,1 1,1 0.552,0 1,-0.448 1,-1 V 10 C 25,5.037 20.963,1 16,1 Z"
-   style="fill:#5a857f"
+   style="fill:#111918"
    id="path2" />
 <path
    style="fill:#ff0000;fill-opacity:0.925703;stroke-width:0.04"
