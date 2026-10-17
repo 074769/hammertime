@@ -729,9 +729,8 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 			if (_thumbBusy || IsDisposed || _list.View != View.LargeIcon || _list.Items.Count == 0) return;
 
 			ListViewItem target = null;
-			var top = _list.TopItem;
 			var height = _list.ClientSize.Height;
-			for (var i = top != null ? top.Index : 0; i < _list.Items.Count; i++)
+			for (var i = FirstVisibleIndex(); i < _list.Items.Count; i++)
 			{
 				var item = _list.Items[i];
 				if (item.Bounds.Top > height) break;
@@ -802,6 +801,20 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 					}
 				}
 			}
+		}
+
+		/// <summary>
+		/// ListView.TopItem throws in the icon views, so probe along the top edge of the list for the first visible item.
+		/// </summary>
+		private int FirstVisibleIndex()
+		{
+			var first = int.MaxValue;
+			for (var x = 8; x < _list.ClientSize.Width; x += 24)
+			{
+				var item = _list.GetItemAt(x, 8);
+				if (item != null && item.Index < first) first = item.Index;
+			}
+			return first == int.MaxValue ? 0 : first;
 		}
 
 		private void ResetThumbs()
