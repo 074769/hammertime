@@ -27,6 +27,9 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 		// Remembered between openings of the dialog
 		private static bool s_grid;
 		private static int s_shading;
+		private static bool s_cull;
+		private static bool s_additive = true;
+		private static bool s_zfix = true;
 
 		public IFile SelectedFile { get; private set; }
 
@@ -47,6 +50,9 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 		private readonly NumericUpDown _skin;
 		private readonly ComboBox _sequence;
 		private readonly CheckBox _play;
+		private readonly CheckBox _cull;
+		private readonly CheckBox _additive;
+		private readonly CheckBox _zfix;
 		private readonly TrackBar _frame;
 		private readonly Label _frameLabel;
 		private readonly FlowLayoutPanel _bodyPanel;
@@ -204,6 +210,27 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 				_play.Text = _play.Checked ? "Pause" : "Play";
 				if (!_suppressControls) _viewer.Playing = _play.Checked;
 			};
+			_cull = new CheckBox { Text = "Backface culling", AutoSize = true, Checked = s_cull, Margin = new Padding(8, 5, 0, 0) };
+			_cull.CheckedChanged += (s, e) =>
+			{
+				s_cull = _cull.Checked;
+				_viewer.BackfaceCulling = s_cull;
+			};
+			_additive = new CheckBox { Text = "Additive", AutoSize = true, Checked = s_additive, Margin = new Padding(8, 5, 0, 0) };
+			_additive.CheckedChanged += (s, e) =>
+			{
+				s_additive = _additive.Checked;
+				_viewer.Additive = s_additive;
+			};
+			_zfix = new CheckBox { Text = "Z-fight fix", AutoSize = true, Checked = s_zfix, Margin = new Padding(8, 5, 0, 0) };
+			_zfix.CheckedChanged += (s, e) =>
+			{
+				s_zfix = _zfix.Checked;
+				_viewer.ZFightFix = s_zfix;
+			};
+			_viewer.BackfaceCulling = s_cull;
+			_viewer.Additive = s_additive;
+			_viewer.ZFightFix = s_zfix;
 			var reset = new Button { Text = "Reset view", AutoSize = true };
 			reset.Click += (s, e) => _viewer.ResetView();
 			_expand = new Button { Text = "Expand viewer", AutoSize = true };
@@ -216,6 +243,9 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 			bar.Controls.Add(MakeLabel("Sequence:"));
 			bar.Controls.Add(_sequence);
 			bar.Controls.Add(_play);
+			bar.Controls.Add(_cull);
+			bar.Controls.Add(_additive);
+			bar.Controls.Add(_zfix);
 			bar.Controls.Add(reset);
 			bar.Controls.Add(_expand);
 

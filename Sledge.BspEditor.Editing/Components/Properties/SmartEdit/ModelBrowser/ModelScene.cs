@@ -53,6 +53,18 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 
 		/// <summary>Model index to show per bodypart (null = the first model of each).</summary>
 		public int[] Body;
+
+		/// <summary>Skip triangles facing away from the camera (GoldSource culls model back faces in game).</summary>
+		public bool BackfaceCulling;
+
+		/// <summary>Draw textures flagged additive with additive blending (after the opaque faces, no depth write).</summary>
+		public bool Additive = true;
+
+		/// <summary>
+		/// Depth tolerance in model units. Faces closer together than this are treated as coplanar and the one drawn
+		/// last wins (like the engine's LEQUAL depth test), which stops overlapping faces flickering. 0 = strict test.
+		/// </summary>
+		public float DepthEpsilon = 0.05f;
 	}
 
 	/// <summary>
@@ -78,6 +90,7 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 			public int[] Argb;
 			public bool Flat; // chrome etc: use a flat colour instead of sampling
 			public bool Fullbright;
+			public bool Additive;
 		}
 
 		private class Fit
@@ -91,6 +104,7 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 		private readonly Dictionary<long, Fit> _fitCache = new Dictionary<long, Fit>();
 		private int[] _colour;
 		private float[] _depth;
+		private float _windingSign; // +1 / -1 once detected, 0 = unknown
 
 		public ModelScene(MdlFile mdl)
 		{
@@ -304,6 +318,37 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 		#region Rendering
 
 		/// <summary>
+		/// Which triangle winding is the front face. Instead of assuming a convention, compare each triangle's winding
+		/// normal with its vertex normals (which point outwards) and take the majority.
+		/// </summary>
+		private float DetectWinding(List<Tri> tris)
+		{
+			if (_windingSign != 0f) return _windingSign;
+
+			var votes = 0;
+			var evidence = 0;
+			foreach (var t in tris)
+			{
+				var fn = Vector3.Cross(t.P1 - t.P0, t.P2 - t.P0);
+				var avg = t.N0 + t.N1 + t.N2;
+				if (fn.LengthSquared() < 1e-9f || avg.LengthSquared() < 1e-6f) continue;
+				votes += Vector3.Dot(fn, avg) > 0f ? 1 : -1;
+				evidence++;
+			}
+
+			var sign = votes >= 0 ? 1f : -1f;
+			if (evidence >= 3) _windingSign = sign; // keep it stable once there is enough evidence
+			return sign;
+		}
+
+		private static bool IsBackFacing(Tri t, Vector3 dir, float windingSign)
+		{
+			var fn = Vector3.Cross(t.P1 - t.P0, t.P2 - t.P0);
+			if (fn.LengthSquared() < 1e-12f) return true; // degenerate
+			return Vector3.Dot(fn, dir) * windingSign > 0f;
+		}
+
+		/// <summary>
 		/// Render the model. Returns null if the model has no geometry.
 		/// </summary>
 		public Bitmap Render(ModelRenderOptions o)
@@ -353,7 +398,8 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 				offY = ph / 2f + o.Pan.Y * ss + Vector3.Dot(fit.Center, up) * scale;
 			}
 
-			if (wire) return RenderWireframe(tris, o, pw, ph, right, up, scale, offX, offY);
+			var windingSign = o.BackfaceCulling ? DetectWinding(tris) : 1f;
+			if (wire) return RenderWireframe(tris, o, pw, ph, right, up, scale, offX, offY, dir, windingSign);
 
 			var count = pw * ph;
 			if (_colour == null || _colour.Length != count)
@@ -367,38 +413,48 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 			var textures = Textures;
 			var solid = o.Shading == ModelShading.Solid;
 
-			foreach (var t in tris)
+			// Pass 0: opaque faces (depth written). Pass 1: additive faces, blended on top without writing depth.
+			for (var pass = 0; pass < 2; pass++)
 			{
-				var tex = !solid && t.Texture >= 0 && t.Texture < textures.Count ? textures[t.Texture] : null;
+				if (pass == 1 && !o.Additive) break;
 
-				float s0 = 1f, s1 = 1f, s2 = 1f;
-				var fullbright = o.Shading == ModelShading.Unlit || (tex != null && tex.Fullbright);
-				if (!fullbright)
+				foreach (var t in tris)
 				{
-					var fn = Vector3.Cross(t.P1 - t.P0, t.P2 - t.P0);
-					var hasFn = fn.LengthSquared() > 1e-9f;
-					if (hasFn) fn = Vector3.Normalize(fn);
+					var tex = !solid && t.Texture >= 0 && t.Texture < textures.Count ? textures[t.Texture] : null;
+					var additive = o.Additive && tex != null && tex.Additive;
+					if (additive != (pass == 1)) continue;
 
-					if (o.Shading == ModelShading.Flat)
+					if (o.BackfaceCulling && IsBackFacing(t, dir, windingSign)) continue;
+
+					float s0 = 1f, s1 = 1f, s2 = 1f;
+					var fullbright = o.Shading == ModelShading.Unlit || (tex != null && tex.Fullbright);
+					if (!fullbright)
 					{
-						s0 = s1 = s2 = hasFn ? Lit(fn, light) : 1f;
+						var fn = Vector3.Cross(t.P1 - t.P0, t.P2 - t.P0);
+						var hasFn = fn.LengthSquared() > 1e-9f;
+						if (hasFn) fn = Vector3.Normalize(fn);
+
+						if (o.Shading == ModelShading.Flat)
+						{
+							s0 = s1 = s2 = hasFn ? Lit(fn, light) : 1f;
+						}
+						else
+						{
+							s0 = Lit(t.N0, fn, hasFn, light);
+							s1 = Lit(t.N1, fn, hasFn, light);
+							s2 = Lit(t.N2, fn, hasFn, light);
+						}
 					}
-					else
-					{
-						s0 = Lit(t.N0, fn, hasFn, light);
-						s1 = Lit(t.N1, fn, hasFn, light);
-						s2 = Lit(t.N2, fn, hasFn, light);
-					}
+
+					var a = Project(t.P0, right, up, scale, offX, offY);
+					var b = Project(t.P1, right, up, scale, offX, offY);
+					var c = Project(t.P2, right, up, scale, offX, offY);
+					var za = Vector3.Dot(t.P0, dir);
+					var zb = Vector3.Dot(t.P1, dir);
+					var zc = Vector3.Dot(t.P2, dir);
+
+					Rasterise(_colour, _depth, pw, ph, a, b, c, za, zb, zc, t.T0, t.T1, t.T2, tex, s0, s1, s2, additive, Math.Max(0f, o.DepthEpsilon));
 				}
-
-				var a = Project(t.P0, right, up, scale, offX, offY);
-				var b = Project(t.P1, right, up, scale, offX, offY);
-				var c = Project(t.P2, right, up, scale, offX, offY);
-				var za = Vector3.Dot(t.P0, dir);
-				var zb = Vector3.Dot(t.P1, dir);
-				var zc = Vector3.Dot(t.P2, dir);
-
-				Rasterise(_colour, _depth, pw, ph, a, b, c, za, zb, zc, t.T0, t.T1, t.T2, tex, s0, s1, s2);
 			}
 
 			var result = new Bitmap(o.Width, o.Height, PixelFormat.Format32bppArgb);
@@ -427,7 +483,7 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 			return result;
 		}
 
-		private static Bitmap RenderWireframe(List<Tri> tris, ModelRenderOptions o, int pw, int ph, Vector3 right, Vector3 up, float scale, float offX, float offY)
+		private static Bitmap RenderWireframe(List<Tri> tris, ModelRenderOptions o, int pw, int ph, Vector3 right, Vector3 up, float scale, float offX, float offY, Vector3 dir, float windingSign)
 		{
 			var bmp = new Bitmap(pw, ph, PixelFormat.Format32bppArgb);
 			using (var g = Graphics.FromImage(bmp))
@@ -439,6 +495,8 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 				var pts = new PointF[4];
 				foreach (var t in tris)
 				{
+					if (o.BackfaceCulling && IsBackFacing(t, dir, windingSign)) continue;
+
 					var a = Project(t.P0, right, up, scale, offX, offY);
 					var b = Project(t.P1, right, up, scale, offX, offY);
 					var c = Project(t.P2, right, up, scale, offX, offY);
@@ -490,7 +548,7 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 		}
 
 		private static void Rasterise(int[] colour, float[] depth, int pw, int ph, Vector2 a, Vector2 b, Vector2 c,
-			float za, float zb, float zc, Vector2 ta, Vector2 tb, Vector2 tc, TextureBitmap tex, float sa, float sb, float sc)
+			float za, float zb, float zc, Vector2 ta, Vector2 tb, Vector2 tc, TextureBitmap tex, float sa, float sb, float sc, bool additive, float depthEps)
 		{
 			if (!Sane(a) || !Sane(b) || !Sane(c)) return;
 
@@ -518,7 +576,8 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 
 					var z = w0 * za + w1 * zb + w2 * zc;
 					var idx = y * pw + x;
-					if (z >= depth[idx]) continue;
+					// "Less or equal" with a small tolerance: coplanar / overlapping faces resolve to the one drawn last
+					if (z > depth[idx] + depthEps) continue;
 
 					int argb;
 					if (tex == null)
@@ -543,7 +602,18 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 					var r = (int) (((argb >> 16) & 0xFF) * shade);
 					var g = (int) (((argb >> 8) & 0xFF) * shade);
 					var bl = (int) ((argb & 0xFF) * shade);
-					depth[idx] = z;
+
+					if (additive)
+					{
+						var dst = colour[idx];
+						r += (dst >> 16) & 0xFF;
+						g += (dst >> 8) & 0xFF;
+						bl += dst & 0xFF;
+						colour[idx] = unchecked((int) 0xFF000000) | (Clamp(r) << 16) | (Clamp(g) << 8) | Clamp(bl);
+						continue; // additive faces never write depth
+					}
+
+					depth[idx] = Math.Min(z, depth[idx]);
 					colour[idx] = unchecked((int) 0xFF000000) | (Clamp(r) << 16) | (Clamp(g) << 8) | Clamp(bl);
 				}
 			}
@@ -573,7 +643,8 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 					Width = Math.Max(1, t.Header.Width),
 					Height = Math.Max(1, t.Header.Height),
 					Flat = t.Header.Flags.HasFlag(TextureFlags.Chrome),
-					Fullbright = t.Header.Flags.HasFlag(TextureFlags.Fullbright)
+					Fullbright = t.Header.Flags.HasFlag(TextureFlags.Fullbright),
+					Additive = t.Header.Flags.HasFlag(TextureFlags.Additive)
 				};
 				tb.Argb = new int[tb.Width * tb.Height];
 

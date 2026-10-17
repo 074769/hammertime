@@ -30,6 +30,9 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 		private float _zoom = 1f;
 		private PointF _pan;
 		private ModelShading _shading = ModelShading.Smooth;
+		private bool _backfaceCulling;
+		private bool _additive = true;
+		private bool _zFightFix = true;
 		private int _skin;
 		private int[] _body = new int[0];
 
@@ -87,6 +90,37 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 			set
 			{
 				_shading = value;
+				Request(true);
+			}
+		}
+
+		public bool BackfaceCulling
+		{
+			get { return _backfaceCulling; }
+			set
+			{
+				_backfaceCulling = value;
+				Request(true);
+			}
+		}
+
+		public bool Additive
+		{
+			get { return _additive; }
+			set
+			{
+				_additive = value;
+				Request(true);
+			}
+		}
+
+		/// <summary>Resolve overlapping / coplanar faces to the one drawn last instead of flickering.</summary>
+		public bool ZFightFix
+		{
+			get { return _zFightFix; }
+			set
+			{
+				_zFightFix = value;
 				Request(true);
 			}
 		}
@@ -307,6 +341,9 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 						Zoom = _zoom,
 						Pan = _pan,
 						Shading = _shading,
+						BackfaceCulling = _backfaceCulling,
+						Additive = _additive,
+						DepthEpsilon = _zFightFix ? 0.05f : 0f,
 						SuperSample = _final && !_playing ? 2 : 1,
 						Sequence = _sequence,
 						Frame = _frame,
