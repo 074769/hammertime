@@ -13,13 +13,20 @@ using Sledge.Providers.Model.Mdl10.Format;
 namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 {
 	/// <summary>
-	/// A browser for .mdl models: folder tree, search across all folders, a file list,
-	/// and a static preview (software rendered thumbnail + model information).
+	/// A browser for .mdl models: folder tree, search across all folders, a list or thumbnail grid, and an
+	/// interactive preview (orbit / zoom / pan, shading modes, sequences, skins and bodygroups) with model information.
 	/// </summary>
 	public class ModelBrowserDialog : Form
 	{
-		private const int PreviewSize = 320;
 		private const int SearchLimit = 5000;
+		private const int ThumbSize = 112;
+		private const int MaxThumbs = 1500;
+		private const string PlaceholderKey = "__placeholder";
+		private static readonly Color ThumbBackground = Color.FromArgb(64, 66, 72);
+
+		// Remembered between openings of the dialog
+		private static bool s_grid;
+		private static int s_shading;
 
 		public IFile SelectedFile { get; private set; }
 
@@ -29,29 +36,41 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 
 		private readonly TextBox _search;
 		private readonly Label _count;
+		private readonly Button _gridToggle;
+		private readonly SplitContainer _outer;
+		private readonly SplitContainer _inner;
 		private readonly TreeView _tree;
 		private readonly ListView _list;
-		private readonly PictureBox _picture;
-		private readonly Label _pictureMessage;
-		private readonly Button _rotateLeft;
-		private readonly Button _rotateRight;
+		private readonly ImageList _thumbs;
+		private readonly ModelViewerControl _viewer;
+		private readonly ComboBox _shading;
 		private readonly NumericUpDown _skin;
-		private readonly Label _skinLabel;
+		private readonly ComboBox _sequence;
+		private readonly CheckBox _play;
+		private readonly TrackBar _frame;
+		private readonly Label _frameLabel;
+		private readonly FlowLayoutPanel _bodyPanel;
+		private readonly Button _expand;
 		private readonly TextBox _info;
 		private readonly TextBox _pathBox;
 		private readonly Button _ok;
 		private readonly Button _cancel;
 		private readonly Timer _previewTimer;
+		private readonly Timer _thumbTimer;
+		private readonly WheelFilter _wheelFilter;
 
 		private List<(IFile File, string Path)> _index;
 		private bool _suppressSearchEvent;
 		private bool _suppressTreeEvent;
+		private bool _suppressControls;
 
-		private MdlFile _mdl;
-		private float _azimuth = 35f;
 		private int _loadVersion;
-		private int _renderVersion;
 		private IFile _pendingPreview;
+
+		private readonly HashSet<string> _thumbHave = new HashSet<string>();
+		private readonly HashSet<string> _thumbFailed = new HashSet<string>();
+		private readonly Bitmap _placeholder;
+		private bool _thumbBusy;
 
 		public ModelBrowserDialog(IFile root, string currentValue)
 		{
@@ -67,8 +86,8 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 			ShowInTaskbar = false;
 			MinimizeBox = false;
 			MaximizeBox = true;
-			Size = new Size(1040, 660);
-			MinimumSize = new Size(820, 480);
+			Size = new Size(1320, 800);
+			MinimumSize = new Size(900, 540);
 
 			// Bottom bar
 			var bottom = new Panel { Dock = DockStyle.Bottom, Height = 40 };
@@ -91,20 +110,28 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 			{
 				if (!_suppressSearchEvent) RefreshList(null);
 			};
-			_count = new Label { AutoSize = true, Left = 376, Top = 9, Text = "" };
+			_gridToggle = new Button { Left = 372, Top = 5, Width = 86, Height = 24 };
+			_gridToggle.Click += (s, e) => SetGrid(!s_grid);
+			_count = new Label { AutoSize = true, Left = 470, Top = 9, Text = "" };
 			top.Controls.Add(searchLabel);
 			top.Controls.Add(_search);
+			top.Controls.Add(_gridToggle);
 			top.Controls.Add(_count);
 
 			// Tree | (list | preview)
-			var outer = new SplitContainer { Dock = DockStyle.Fill, FixedPanel = FixedPanel.Panel1 };
-			var inner = new SplitContainer { Dock = DockStyle.Fill, FixedPanel = FixedPanel.Panel2 };
-			outer.Panel2.Controls.Add(inner);
+			_outer = new SplitContainer { Dock = DockStyle.Fill, FixedPanel = FixedPanel.Panel1 };
+			_inner = new SplitContainer { Dock = DockStyle.Fill, FixedPanel = FixedPanel.Panel2 };
+			_outer.Panel2.Controls.Add(_inner);
 
 			_tree = new TreeView { Dock = DockStyle.Fill, HideSelection = false, ShowLines = true, PathSeparator = "/" };
 			_tree.BeforeExpand += TreeBeforeExpand;
 			_tree.AfterSelect += TreeAfterSelect;
-			outer.Panel1.Controls.Add(_tree);
+			_outer.Panel1.Controls.Add(_tree);
+
+			// Thumbnails for the grid view
+			_placeholder = MakePlaceholder();
+			_thumbs = new ImageList { ImageSize = new Size(ThumbSize, ThumbSize), ColorDepth = ColorDepth.Depth32Bit };
+			_thumbs.Images.Add(PlaceholderKey, _placeholder);
 
 			_list = new ListView
 			{
@@ -113,7 +140,9 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 				FullRowSelect = true,
 				MultiSelect = false,
 				HideSelection = false,
-				GridLines = false
+				GridLines = false,
+				ShowItemToolTips = true,
+				LargeImageList = _thumbs
 			};
 			_list.Columns.Add("Name", 190);
 			_list.Columns.Add("Folder", 150);
@@ -121,10 +150,81 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 			_list.SelectedIndexChanged += ListSelectionChanged;
 			_list.DoubleClick += (s, e) => { if (_list.SelectedItems.Count == 1) Confirm(); };
 			_list.ColumnClick += ListColumnClick;
-			inner.Panel1.Controls.Add(_list);
+			_inner.Panel1.Controls.Add(_list);
 
-			// Preview panel
+			// Preview panel: controls on top, viewer in the middle, frame bar below it, details at the bottom
 			var preview = new Panel { Dock = DockStyle.Fill, Padding = new Padding(6) };
+			var previewSplit = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, FixedPanel = FixedPanel.Panel2 };
+
+			_viewer = new ModelViewerControl { Dock = DockStyle.Fill };
+			_viewer.FrameChanged += (s, f) => SetFrameControl(f);
+
+			var frameBar = new Panel { Dock = DockStyle.Bottom, Height = 30 };
+			_frame = new TrackBar { Dock = DockStyle.Fill, TickStyle = TickStyle.None, Minimum = 0, Maximum = 0, Enabled = false, AutoSize = false };
+			_frame.ValueChanged += (s, e) =>
+			{
+				if (_suppressControls) return;
+				_suppressControls = true;
+				_play.Checked = false;
+				_suppressControls = false;
+				_viewer.SetFrame(_frame.Value);
+				UpdateFrameLabel();
+			};
+			_frameLabel = new Label { Dock = DockStyle.Right, Width = 90, TextAlign = ContentAlignment.MiddleRight, Text = "" };
+			frameBar.Controls.Add(_frame);
+			frameBar.Controls.Add(_frameLabel);
+
+			_bodyPanel = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true, Visible = false };
+
+			var bar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true };
+			_shading = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
+			_shading.Items.AddRange(new object[] { "Smooth", "Flat", "Unlit (fullbright)", "Solid (no textures)", "Wireframe" });
+			_shading.SelectedIndex = Math.Max(0, Math.Min(s_shading, _shading.Items.Count - 1));
+			_viewer.Shading = (ModelShading) _shading.SelectedIndex;
+			_shading.SelectedIndexChanged += (s, e) =>
+			{
+				s_shading = _shading.SelectedIndex;
+				_viewer.Shading = (ModelShading) _shading.SelectedIndex;
+			};
+			_skin = new NumericUpDown { Width = 52, Minimum = 0, Maximum = 0, Enabled = false };
+			_skin.ValueChanged += (s, e) =>
+			{
+				if (!_suppressControls) _viewer.Skin = (int) _skin.Value;
+			};
+			_sequence = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 230, Enabled = false };
+			_sequence.SelectedIndexChanged += (s, e) =>
+			{
+				if (_suppressControls || _sequence.SelectedIndex < 0) return;
+				_viewer.SetSequence(_sequence.SelectedIndex);
+				UpdateFrameControls();
+			};
+			_play = new CheckBox { Text = "Play", Appearance = Appearance.Button, AutoSize = true, Enabled = false, TextAlign = ContentAlignment.MiddleCenter };
+			_play.CheckedChanged += (s, e) =>
+			{
+				_play.Text = _play.Checked ? "Pause" : "Play";
+				if (!_suppressControls) _viewer.Playing = _play.Checked;
+			};
+			var reset = new Button { Text = "Reset view", AutoSize = true };
+			reset.Click += (s, e) => _viewer.ResetView();
+			_expand = new Button { Text = "Expand viewer", AutoSize = true };
+			_expand.Click += (s, e) => ToggleExpand();
+
+			bar.Controls.Add(MakeLabel("Shading:"));
+			bar.Controls.Add(_shading);
+			bar.Controls.Add(MakeLabel("Skin:"));
+			bar.Controls.Add(_skin);
+			bar.Controls.Add(MakeLabel("Sequence:"));
+			bar.Controls.Add(_sequence);
+			bar.Controls.Add(_play);
+			bar.Controls.Add(reset);
+			bar.Controls.Add(_expand);
+
+			// Dock order: the last added control is laid out first
+			previewSplit.Panel1.Controls.Add(_viewer);
+			previewSplit.Panel1.Controls.Add(frameBar);
+			previewSplit.Panel1.Controls.Add(_bodyPanel);
+			previewSplit.Panel1.Controls.Add(bar);
+
 			_info = new TextBox
 			{
 				Dock = DockStyle.Fill,
@@ -135,45 +235,12 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 				Font = new Font(FontFamily.GenericMonospace, 8.25f),
 				BackColor = SystemColors.Window
 			};
-			var controls = new Panel { Dock = DockStyle.Top, Height = 32 };
-			_rotateLeft = new Button { Text = "\u25C0", Width = 32, Left = 0, Top = 3, Enabled = false };
-			_rotateRight = new Button { Text = "\u25B6", Width = 32, Left = 36, Top = 3, Enabled = false };
-			_rotateLeft.Click += (s, e) => Rotate(-45f);
-			_rotateRight.Click += (s, e) => Rotate(45f);
-			_skinLabel = new Label { Text = "Skin:", AutoSize = true, Left = 90, Top = 9 };
-			_skin = new NumericUpDown { Left = 126, Top = 5, Width = 56, Minimum = 0, Maximum = 0, Enabled = false };
-			_skin.ValueChanged += (s, e) => RenderCurrent();
-			controls.Controls.Add(_rotateLeft);
-			controls.Controls.Add(_rotateRight);
-			controls.Controls.Add(_skinLabel);
-			controls.Controls.Add(_skin);
+			previewSplit.Panel2.Controls.Add(_info);
 
-			var picturePanel = new Panel { Dock = DockStyle.Top, Height = PreviewSize + 2 };
-			_picture = new PictureBox
-			{
-				Dock = DockStyle.Fill,
-				SizeMode = PictureBoxSizeMode.Zoom,
-				BackColor = Color.FromArgb(64, 66, 72),
-				BorderStyle = BorderStyle.FixedSingle
-			};
-			_pictureMessage = new Label
-			{
-				Dock = DockStyle.Fill,
-				TextAlign = ContentAlignment.MiddleCenter,
-				ForeColor = Color.Gainsboro,
-				BackColor = Color.Transparent,
-				Text = "Select a model to preview"
-			};
-			picturePanel.Controls.Add(_picture);
-			_picture.Controls.Add(_pictureMessage); // draw the message on top of the picture box
+			preview.Controls.Add(previewSplit);
+			_inner.Panel2.Controls.Add(preview);
 
-			// Dock order: the last added control is laid out first
-			preview.Controls.Add(_info);
-			preview.Controls.Add(controls);
-			preview.Controls.Add(picturePanel);
-			inner.Panel2.Controls.Add(preview);
-
-			Controls.Add(outer);
+			Controls.Add(_outer);
 			Controls.Add(top);
 			Controls.Add(bottom);
 			LayoutBottom(bottom);
@@ -187,14 +254,25 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 				if (f != null) ShowModel(f);
 			};
 
+			_thumbTimer = new Timer { Interval = 80 };
+			_thumbTimer.Tick += (s, e) => ThumbTick();
+			_thumbTimer.Start();
+
+			_wheelFilter = new WheelFilter(this);
+
+			SetGrid(s_grid);
 			ResumeLayout(true);
 
 			Load += (s, e) =>
 			{
 				try
 				{
-					outer.SplitterDistance = Math.Max(outer.Panel1MinSize, 200);
-					inner.SplitterDistance = Math.Max(inner.Panel1MinSize, inner.Width - 380);
+					_outer.SplitterDistance = Math.Max(_outer.Panel1MinSize, 200);
+					// The preview gets the larger share of the width
+					_inner.SplitterDistance = Math.Max(_inner.Panel1MinSize, _inner.Width - (int) (_inner.Width * 0.62));
+					previewSplit.Panel1MinSize = 220;
+					previewSplit.Panel2MinSize = 60;
+					previewSplit.SplitterDistance = Math.Max(previewSplit.Panel1MinSize, previewSplit.Height - 190);
 				}
 				catch (Exception ex)
 				{
@@ -202,6 +280,25 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 				}
 				BuildTree(currentValue);
 			};
+		}
+
+		private static Label MakeLabel(string text)
+		{
+			return new Label { Text = text, AutoSize = true, TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(6, 7, 0, 0) };
+		}
+
+		private static Bitmap MakePlaceholder()
+		{
+			var bmp = new Bitmap(ThumbSize, ThumbSize);
+			using (var g = Graphics.FromImage(bmp))
+			using (var brush = new SolidBrush(Color.FromArgb(150, 150, 158)))
+			using (var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+			using (var font = new Font(FontFamily.GenericSansSerif, 10f))
+			{
+				g.Clear(ThumbBackground);
+				g.DrawString("MDL", font, brush, new RectangleF(0, 0, ThumbSize, ThumbSize), format);
+			}
+			return bmp;
 		}
 
 		private void LayoutBottom(Panel bottom)
@@ -216,16 +313,72 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 			_pathBox.Width = Math.Max(50, _ok.Left - 16);
 		}
 
+		protected override void OnShown(EventArgs e)
+		{
+			base.OnShown(e);
+			Application.AddMessageFilter(_wheelFilter);
+		}
+
+		protected override void OnFormClosed(FormClosedEventArgs e)
+		{
+			Application.RemoveMessageFilter(_wheelFilter);
+			base.OnFormClosed(e);
+		}
+
 		protected override void Dispose(bool disposing)
 		{
 			if (disposing)
 			{
+				Application.RemoveMessageFilter(_wheelFilter);
 				_previewTimer?.Dispose();
-				var img = _picture?.Image;
-				if (_picture != null) _picture.Image = null;
-				img?.Dispose();
+				_thumbTimer?.Dispose();
+				_thumbs?.Dispose();
+				_placeholder?.Dispose();
 			}
 			base.Dispose(disposing);
+		}
+
+		/// <summary>
+		/// Routes the mouse wheel to the viewer while the cursor is over it, whichever control has the keyboard focus.
+		/// </summary>
+		private class WheelFilter : IMessageFilter
+		{
+			private readonly ModelBrowserDialog _owner;
+
+			public WheelFilter(ModelBrowserDialog owner)
+			{
+				_owner = owner;
+			}
+
+			public bool PreFilterMessage(ref Message m)
+			{
+				return _owner.HandleWheel(ref m);
+			}
+		}
+
+		private bool HandleWheel(ref Message m)
+		{
+			const int WM_MOUSEWHEEL = 0x020A;
+			if (m.Msg != WM_MOUSEWHEEL || IsDisposed || !_viewer.IsHandleCreated || !_viewer.Visible || Form.ActiveForm != this) return false;
+
+			var lp = m.LParam.ToInt64();
+			var x = (short) (lp & 0xFFFF);
+			var y = (short) ((lp >> 16) & 0xFFFF);
+			var delta = (short) ((m.WParam.ToInt64() >> 16) & 0xFFFF);
+
+			var p = _viewer.PointToClient(new Point(x, y));
+			if (!_viewer.ClientRectangle.Contains(p)) return false;
+
+			_viewer.ApplyWheel(delta, p);
+			return true;
+		}
+
+		private void ToggleExpand()
+		{
+			var collapse = !_outer.Panel1Collapsed;
+			_outer.Panel1Collapsed = collapse;
+			_inner.Panel1Collapsed = collapse;
+			_expand.Text = collapse ? "Show list" : "Expand viewer";
 		}
 
 		#region Tree
@@ -472,9 +625,10 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 			}
 		}
 
-		private static ListViewItem MakeItem(IFile file, string folder)
+		private ListViewItem MakeItem(IFile file, string folder)
 		{
-			var item = new ListViewItem(file.Name) { Tag = file };
+			var item = new ListViewItem(file.Name) { Tag = file, ToolTipText = GetGamePath(file) };
+			item.ImageKey = _thumbHave.Contains(file.FullPathName) ? file.FullPathName : PlaceholderKey;
 			item.SubItems.Add(folder);
 			item.SubItems.Add(FormatSize(file.Size));
 			return item;
@@ -549,41 +703,155 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 
 		#endregion
 
+		#region Grid view / thumbnails
+
+		private void SetGrid(bool grid)
+		{
+			s_grid = grid;
+			_list.BeginUpdate();
+			try
+			{
+				_list.View = grid ? View.LargeIcon : View.Details;
+			}
+			finally
+			{
+				_list.EndUpdate();
+			}
+			_gridToggle.Text = grid ? "List view" : "Grid view";
+			if (_list.SelectedItems.Count > 0) _list.SelectedItems[0].EnsureVisible();
+		}
+
+		/// <summary>
+		/// Renders one missing thumbnail per tick (visible items first), on a background task.
+		/// </summary>
+		private async void ThumbTick()
+		{
+			if (_thumbBusy || IsDisposed || _list.View != View.LargeIcon || _list.Items.Count == 0) return;
+
+			ListViewItem target = null;
+			var top = _list.TopItem;
+			var height = _list.ClientSize.Height;
+			for (var i = top != null ? top.Index : 0; i < _list.Items.Count; i++)
+			{
+				var item = _list.Items[i];
+				if (item.Bounds.Top > height) break;
+
+				var file = item.Tag as IFile;
+				if (file == null) continue;
+				var key = file.FullPathName;
+				if (_thumbHave.Contains(key) || _thumbFailed.Contains(key)) continue;
+
+				target = item;
+				break;
+			}
+			if (target == null) return;
+
+			var f = (IFile) target.Tag;
+			var thumbKey = f.FullPathName;
+			_thumbBusy = true;
+			Bitmap bmp = null;
+			try
+			{
+				await Task.Run(() =>
+				{
+					try
+					{
+						if (!MdlFile.CanRead(f)) return;
+						var mdl = MdlFile.FromFile(f);
+						bmp = ModelThumbnailRenderer.RenderThumbnail(mdl, ThumbSize, ThumbBackground);
+					}
+					catch
+					{
+						// Unreadable model: it just keeps the placeholder
+					}
+				});
+			}
+			finally
+			{
+				_thumbBusy = false;
+			}
+
+			if (IsDisposed)
+			{
+				if (bmp != null) bmp.Dispose();
+				return;
+			}
+
+			if (bmp == null)
+			{
+				_thumbFailed.Add(thumbKey);
+				return;
+			}
+
+			if (_thumbs.Images.Count >= MaxThumbs) ResetThumbs();
+			_thumbs.Images.Add(thumbKey, bmp);
+			_thumbHave.Add(thumbKey);
+			bmp.Dispose();
+
+			// The item may have been replaced by a list refresh while rendering: find it again
+			if (target.ListView == _list) target.ImageKey = thumbKey;
+			else
+			{
+				foreach (ListViewItem item in _list.Items)
+				{
+					var file = item.Tag as IFile;
+					if (file != null && file.FullPathName == thumbKey)
+					{
+						item.ImageKey = thumbKey;
+						break;
+					}
+				}
+			}
+		}
+
+		private void ResetThumbs()
+		{
+			_thumbs.Images.Clear();
+			_thumbs.Images.Add(PlaceholderKey, _placeholder);
+			_thumbHave.Clear();
+			foreach (ListViewItem item in _list.Items) item.ImageKey = PlaceholderKey;
+		}
+
+		#endregion
+
 		#region Preview
 
 		private void ClearPreview(string message)
 		{
 			_loadVersion++;
-			_renderVersion++;
-			_mdl = null;
-			SetImage(null);
-			_pictureMessage.Text = message;
-			_pictureMessage.Visible = true;
+			_viewer.SetMessage(message);
 			_info.Text = "";
-			_rotateLeft.Enabled = false;
-			_rotateRight.Enabled = false;
-			_skin.Enabled = false;
+			SetControlsEnabled(false);
 		}
 
-		private void SetImage(Image image)
+		private void SetControlsEnabled(bool enabled)
 		{
-			var old = _picture.Image;
-			_picture.Image = image;
-			old?.Dispose();
+			_suppressControls = true;
+			try
+			{
+				if (!enabled)
+				{
+					_skin.Enabled = false;
+					_sequence.Items.Clear();
+					_sequence.Enabled = false;
+					_play.Enabled = false;
+					_frame.Enabled = false;
+					_frameLabel.Text = "";
+					ClearBodyGroups();
+				}
+			}
+			finally
+			{
+				_suppressControls = false;
+			}
 		}
 
 		private async void ShowModel(IFile file)
 		{
 			var version = ++_loadVersion;
-			_renderVersion++;
-			_mdl = null;
-			SetImage(null);
-			_pictureMessage.Text = "Loading...";
-			_pictureMessage.Visible = true;
+			_viewer.SetMessage("Loading...");
 			_info.Text = "";
-			_rotateLeft.Enabled = false;
-			_rotateRight.Enabled = false;
-			_skin.Enabled = false;
+			SetControlsEnabled(false);
 
 			MdlFile mdl = null;
 			string info = null;
@@ -612,62 +880,124 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 
 			if (mdl == null)
 			{
-				_pictureMessage.Text = error ?? "Unable to load model";
+				_viewer.SetMessage(error ?? "Unable to load model");
 				_info.Text = GetGamePath(file) + System.Environment.NewLine + FormatSize(file.Size);
 				return;
 			}
 
-			_mdl = mdl;
 			_info.Text = info;
-			_rotateLeft.Enabled = true;
-			_rotateRight.Enabled = true;
-
-			var skins = mdl.Skins?.Count ?? 0;
-			_skin.Value = 0;
-			_skin.Maximum = Math.Max(0, skins - 1);
-			_skin.Enabled = skins > 1;
-
-			RenderCurrent();
+			_viewer.SetModel(mdl);
+			PopulateControls(mdl);
+			_viewer.Playing = _play.Checked && _viewer.FrameCount > 1;
 		}
 
-		private void Rotate(float degrees)
+		private void PopulateControls(MdlFile mdl)
 		{
-			_azimuth = (_azimuth + degrees + 360f) % 360f;
-			RenderCurrent();
-		}
-
-		private async void RenderCurrent()
-		{
-			var mdl = _mdl;
-			if (mdl == null) return;
-
-			var version = ++_renderVersion;
-			var skin = (int) _skin.Value;
-			var azimuth = _azimuth;
-			var background = _picture.BackColor;
-
-			Bitmap bmp = null;
-			await Task.Run(() =>
+			_suppressControls = true;
+			try
 			{
-				try
-				{
-					bmp = ModelThumbnailRenderer.Render(mdl, PreviewSize, background, skin, azimuth);
-				}
-				catch (Exception ex)
-				{
-					Log.Error(nameof(ModelBrowserDialog), "Unable to render model preview", ex);
-				}
-			});
+				// Skins
+				var skins = mdl.Skins != null ? mdl.Skins.Count : 0;
+				_skin.Value = 0;
+				_skin.Maximum = Math.Max(0, skins - 1);
+				_skin.Enabled = skins > 1;
 
-			if (IsDisposed || version != _renderVersion)
-			{
-				bmp?.Dispose();
-				return;
+				// Sequences
+				_sequence.BeginUpdate();
+				_sequence.Items.Clear();
+				var seqCount = mdl.Sequences != null ? mdl.Sequences.Count : 0;
+				for (var i = 0; i < seqCount; i++)
+				{
+					var h = mdl.Sequences[i].Header;
+					_sequence.Items.Add(i + ": " + (h.Name ?? "").TrimEnd('\0') + " (" + h.NumFrames + " frames)");
+				}
+				_sequence.EndUpdate();
+				_sequence.Enabled = seqCount > 0;
+				if (seqCount > 0) _sequence.SelectedIndex = 0;
+
+				// Bodygroups
+				ClearBodyGroups();
+				if (mdl.BodyParts != null)
+				{
+					for (var p = 0; p < mdl.BodyParts.Count; p++)
+					{
+						var part = mdl.BodyParts[p];
+						if (part.Models == null || part.Models.Length < 2) continue;
+
+						var partIndex = p;
+						var combo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 150 };
+						for (var m = 0; m < part.Models.Length; m++)
+						{
+							var name = (part.Models[m].Header.Name ?? "").TrimEnd('\0');
+							combo.Items.Add(m + (name.Length > 0 ? ": " + name : ""));
+						}
+						combo.SelectedIndex = 0;
+						combo.SelectedIndexChanged += (s, e) =>
+						{
+							if (!_suppressControls) _viewer.SetBodyModel(partIndex, combo.SelectedIndex);
+						};
+
+						var title = (part.Header.Name ?? "").TrimEnd('\0');
+						_bodyPanel.Controls.Add(MakeLabel((title.Length > 0 ? title : "Bodypart " + p) + ":"));
+						_bodyPanel.Controls.Add(combo);
+					}
+				}
+				_bodyPanel.Visible = _bodyPanel.Controls.Count > 0;
+
+				UpdateFrameControls();
 			}
+			finally
+			{
+				_suppressControls = false;
+			}
+		}
 
-			SetImage(bmp);
-			_pictureMessage.Text = "No preview available";
-			_pictureMessage.Visible = bmp == null;
+		private void ClearBodyGroups()
+		{
+			var old = _bodyPanel.Controls.Cast<Control>().ToList();
+			_bodyPanel.Controls.Clear();
+			foreach (var c in old) c.Dispose();
+			_bodyPanel.Visible = false;
+		}
+
+		private void UpdateFrameControls()
+		{
+			var wasSuppressed = _suppressControls;
+			_suppressControls = true;
+			try
+			{
+				var count = _viewer.FrameCount;
+				_frame.Maximum = Math.Max(0, count - 1);
+				_frame.Value = Math.Max(0, Math.Min(_viewer.Frame, _frame.Maximum));
+				_frame.Enabled = count > 1;
+				_play.Enabled = count > 1;
+				UpdateFrameLabel();
+			}
+			finally
+			{
+				_suppressControls = wasSuppressed;
+			}
+		}
+
+		private void SetFrameControl(int frame)
+		{
+			var wasSuppressed = _suppressControls;
+			_suppressControls = true;
+			try
+			{
+				_frame.Value = Math.Max(0, Math.Min(frame, _frame.Maximum));
+				UpdateFrameLabel();
+			}
+			finally
+			{
+				_suppressControls = wasSuppressed;
+			}
+		}
+
+		private void UpdateFrameLabel()
+		{
+			var count = _viewer.FrameCount;
+			_frameLabel.Text = count > 0 ? "Frame " + _frame.Value + " / " + (count - 1) : "";
 		}
 
 		private static string Describe(IFile file, MdlFile mdl)
@@ -737,6 +1067,7 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 
 			return sb.ToString();
 		}
+
 
 		#endregion
 	}
