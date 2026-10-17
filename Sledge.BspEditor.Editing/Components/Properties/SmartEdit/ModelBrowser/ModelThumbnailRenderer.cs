@@ -23,7 +23,7 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 				Background = background,
 				FitTight = true,
 				SuperSample = 2,
-				Shading = ModelShading.Smooth
+				Shading = ModelShading.FromModel
 			});
 		}
 

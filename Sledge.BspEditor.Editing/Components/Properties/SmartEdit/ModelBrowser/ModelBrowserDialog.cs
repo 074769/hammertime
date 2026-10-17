@@ -24,13 +24,6 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 		private const string PlaceholderKey = "__placeholder";
 		private static readonly Color ThumbBackground = Color.FromArgb(64, 66, 72);
 
-		// Remembered between openings of the dialog
-		private static bool s_grid;
-		private static int s_shading;
-		private static bool s_cull;
-		private static bool s_additive = true;
-		private static bool s_zfix = true;
-
 		public IFile SelectedFile { get; private set; }
 
 		private readonly IFile _root;
@@ -40,19 +33,18 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 		private readonly TextBox _search;
 		private readonly Label _count;
 		private readonly Button _gridToggle;
+		private readonly Panel _top;
+		private readonly Panel _bottom;
 		private readonly SplitContainer _outer;
 		private readonly SplitContainer _inner;
+		private readonly SplitContainer _previewSplit;
 		private readonly TreeView _tree;
 		private readonly ListView _list;
 		private readonly ImageList _thumbs;
 		private readonly ModelViewerControl _viewer;
-		private readonly ComboBox _shading;
 		private readonly NumericUpDown _skin;
 		private readonly ComboBox _sequence;
 		private readonly CheckBox _play;
-		private readonly CheckBox _cull;
-		private readonly CheckBox _additive;
-		private readonly CheckBox _zfix;
 		private readonly TrackBar _frame;
 		private readonly Label _frameLabel;
 		private readonly FlowLayoutPanel _bodyPanel;
@@ -95,34 +87,35 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 			Size = new Size(1320, 800);
 			MinimumSize = new Size(900, 540);
 
-			// Bottom bar
-			var bottom = new Panel { Dock = DockStyle.Bottom, Height = 40 };
-			_cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90, Anchor = AnchorStyles.Right | AnchorStyles.Top };
-			_ok = new Button { Text = "OK", Width = 90, Enabled = false, Anchor = AnchorStyles.Right | AnchorStyles.Top };
-			_ok.Click += (s, e) => Confirm();
-			_pathBox = new TextBox { ReadOnly = true, Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top };
-			bottom.Controls.Add(_pathBox);
-			bottom.Controls.Add(_ok);
-			bottom.Controls.Add(_cancel);
-			bottom.Resize += (s, e) => LayoutBottom(bottom);
-			AcceptButton = _ok;
-			CancelButton = _cancel;
+			// Top bar: the path of the selected model, and the grid / list toggle
+			_top = new Panel { Dock = DockStyle.Top, Height = 34 };
+			_pathBox = new TextBox { ReadOnly = true, Left = 8, Top = 7 };
+			_gridToggle = new Button { Top = 5, Width = 86, Height = 24 };
+			_gridToggle.Click += (s, e) => SetGrid(!ModelBrowserSettings.GridView);
+			_top.Controls.Add(_pathBox);
+			_top.Controls.Add(_gridToggle);
+			_top.Resize += (s, e) => LayoutBars();
 
-			// Top bar
-			var top = new Panel { Dock = DockStyle.Top, Height = 34 };
-			var searchLabel = new Label { Text = "Search:", AutoSize = true, Left = 8, Top = 9 };
-			_search = new TextBox { Left = 62, Top = 6, Width = 300 };
+			// Bottom bar: search, model count, OK / Cancel
+			_bottom = new Panel { Dock = DockStyle.Bottom, Height = 40 };
+			_cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90 };
+			_ok = new Button { Text = "OK", Width = 90, Enabled = false };
+			_ok.Click += (s, e) => Confirm();
+			var searchLabel = new Label { Text = "Search:", AutoSize = true, Left = 8, Top = 14 };
+			_search = new TextBox { Left = 62, Top = 11, Width = 300 };
 			_search.TextChanged += (s, e) =>
 			{
 				if (!_suppressSearchEvent) RefreshList(null);
 			};
-			_gridToggle = new Button { Left = 372, Top = 5, Width = 86, Height = 24 };
-			_gridToggle.Click += (s, e) => SetGrid(!s_grid);
-			_count = new Label { AutoSize = true, Left = 470, Top = 9, Text = "" };
-			top.Controls.Add(searchLabel);
-			top.Controls.Add(_search);
-			top.Controls.Add(_gridToggle);
-			top.Controls.Add(_count);
+			_count = new Label { AutoSize = true, Left = 374, Top = 14, Text = "" };
+			_bottom.Controls.Add(searchLabel);
+			_bottom.Controls.Add(_search);
+			_bottom.Controls.Add(_count);
+			_bottom.Controls.Add(_ok);
+			_bottom.Controls.Add(_cancel);
+			_bottom.Resize += (s, e) => LayoutBars();
+			AcceptButton = _ok;
+			CancelButton = _cancel;
 
 			// Tree | (list | preview)
 			_outer = new SplitContainer { Dock = DockStyle.Fill, FixedPanel = FixedPanel.Panel1 };
@@ -150,9 +143,11 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 				ShowItemToolTips = true,
 				LargeImageList = _thumbs
 			};
-			_list.Columns.Add("Name", 190);
-			_list.Columns.Add("Folder", 150);
-			_list.Columns.Add("Size", 70, HorizontalAlignment.Right);
+			_list.Columns.Add("Name", ModelBrowserSettings.ColumnNameWidth > 20 ? ModelBrowserSettings.ColumnNameWidth : 190);
+			_list.Columns.Add("Folder", ModelBrowserSettings.ColumnFolderWidth > 20 ? ModelBrowserSettings.ColumnFolderWidth : 150);
+			_list.Columns.Add("Size", ModelBrowserSettings.ColumnSizeWidth > 20 ? ModelBrowserSettings.ColumnSizeWidth : 70, HorizontalAlignment.Right);
+			_sortColumn = ModelBrowserSettings.SortColumn;
+			_sortAscending = ModelBrowserSettings.SortAscending;
 			_list.SelectedIndexChanged += ListSelectionChanged;
 			_list.DoubleClick += (s, e) => { if (_list.SelectedItems.Count == 1) Confirm(); };
 			_list.ColumnClick += ListColumnClick;
@@ -160,7 +155,8 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 
 			// Preview panel: controls on top, viewer in the middle, frame bar below it, details at the bottom
 			var preview = new Panel { Dock = DockStyle.Fill, Padding = new Padding(6) };
-			var previewSplit = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, FixedPanel = FixedPanel.Panel2 };
+			_previewSplit = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, FixedPanel = FixedPanel.Panel2 };
+			var previewSplit = _previewSplit;
 
 			_viewer = new ModelViewerControl { Dock = DockStyle.Fill };
 			_viewer.FrameChanged += (s, f) => SetFrameControl(f);
@@ -183,15 +179,6 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 			_bodyPanel = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true, Visible = false };
 
 			var bar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true };
-			_shading = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
-			_shading.Items.AddRange(new object[] { "Smooth", "Flat", "Unlit (fullbright)", "Solid (no textures)", "Wireframe" });
-			_shading.SelectedIndex = Math.Max(0, Math.Min(s_shading, _shading.Items.Count - 1));
-			_viewer.Shading = (ModelShading) _shading.SelectedIndex;
-			_shading.SelectedIndexChanged += (s, e) =>
-			{
-				s_shading = _shading.SelectedIndex;
-				_viewer.Shading = (ModelShading) _shading.SelectedIndex;
-			};
 			_skin = new NumericUpDown { Width = 52, Minimum = 0, Maximum = 0, Enabled = false };
 			_skin.ValueChanged += (s, e) =>
 			{
@@ -210,42 +197,16 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 				_play.Text = _play.Checked ? "Pause" : "Play";
 				if (!_suppressControls) _viewer.Playing = _play.Checked;
 			};
-			_cull = new CheckBox { Text = "Backface culling", AutoSize = true, Checked = s_cull, Margin = new Padding(8, 5, 0, 0) };
-			_cull.CheckedChanged += (s, e) =>
-			{
-				s_cull = _cull.Checked;
-				_viewer.BackfaceCulling = s_cull;
-			};
-			_additive = new CheckBox { Text = "Additive", AutoSize = true, Checked = s_additive, Margin = new Padding(8, 5, 0, 0) };
-			_additive.CheckedChanged += (s, e) =>
-			{
-				s_additive = _additive.Checked;
-				_viewer.Additive = s_additive;
-			};
-			_zfix = new CheckBox { Text = "Z-fight fix", AutoSize = true, Checked = s_zfix, Margin = new Padding(8, 5, 0, 0) };
-			_zfix.CheckedChanged += (s, e) =>
-			{
-				s_zfix = _zfix.Checked;
-				_viewer.ZFightFix = s_zfix;
-			};
-			_viewer.BackfaceCulling = s_cull;
-			_viewer.Additive = s_additive;
-			_viewer.ZFightFix = s_zfix;
 			var reset = new Button { Text = "Reset view", AutoSize = true };
 			reset.Click += (s, e) => _viewer.ResetView();
 			_expand = new Button { Text = "Expand viewer", AutoSize = true };
 			_expand.Click += (s, e) => ToggleExpand();
 
-			bar.Controls.Add(MakeLabel("Shading:"));
-			bar.Controls.Add(_shading);
 			bar.Controls.Add(MakeLabel("Skin:"));
 			bar.Controls.Add(_skin);
 			bar.Controls.Add(MakeLabel("Sequence:"));
 			bar.Controls.Add(_sequence);
 			bar.Controls.Add(_play);
-			bar.Controls.Add(_cull);
-			bar.Controls.Add(_additive);
-			bar.Controls.Add(_zfix);
 			bar.Controls.Add(reset);
 			bar.Controls.Add(_expand);
 
@@ -271,9 +232,9 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 			_inner.Panel2.Controls.Add(preview);
 
 			Controls.Add(_outer);
-			Controls.Add(top);
-			Controls.Add(bottom);
-			LayoutBottom(bottom);
+			Controls.Add(_top);
+			Controls.Add(_bottom);
+			LayoutBars();
 
 			_previewTimer = new Timer { Interval = 150 };
 			_previewTimer.Tick += (s, e) =>
@@ -290,19 +251,27 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 
 			_wheelFilter = new WheelFilter(this);
 
-			SetGrid(s_grid);
+			SetGrid(ModelBrowserSettings.GridView);
+			ApplySavedWindow();
 			ResumeLayout(true);
 
 			Load += (s, e) =>
 			{
 				try
 				{
-					_outer.SplitterDistance = Math.Max(_outer.Panel1MinSize, 200);
-					// The preview gets the larger share of the width
-					_inner.SplitterDistance = Math.Max(_inner.Panel1MinSize, _inner.Width - (int) (_inner.Width * 0.62));
+					var treeWidth = ModelBrowserSettings.TreeWidth > 0 ? ModelBrowserSettings.TreeWidth : 200;
+					_outer.SplitterDistance = Math.Max(_outer.Panel1MinSize, Math.Min(treeWidth, Math.Max(_outer.Panel1MinSize, _outer.Width - 300)));
+
+					// The preview gets the larger share of the width by default
+					var previewWidth = ModelBrowserSettings.PreviewWidth > 0 ? ModelBrowserSettings.PreviewWidth : (int) (_inner.Width * 0.62);
+					previewWidth = Math.Max(200, Math.Min(previewWidth, _inner.Width - 200));
+					_inner.SplitterDistance = Math.Max(_inner.Panel1MinSize, _inner.Width - previewWidth);
+
 					previewSplit.Panel1MinSize = 220;
 					previewSplit.Panel2MinSize = 60;
-					previewSplit.SplitterDistance = Math.Max(previewSplit.Panel1MinSize, previewSplit.Height - 190);
+					var infoHeight = ModelBrowserSettings.InfoHeight > 0 ? ModelBrowserSettings.InfoHeight : 190;
+					infoHeight = Math.Max(60, Math.Min(infoHeight, previewSplit.Height - 220));
+					previewSplit.SplitterDistance = Math.Max(previewSplit.Panel1MinSize, previewSplit.Height - infoHeight);
 				}
 				catch (Exception ex)
 				{
@@ -331,16 +300,93 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 			return bmp;
 		}
 
-		private void LayoutBottom(Panel bottom)
+		private void LayoutBars()
 		{
-			var w = bottom.ClientSize.Width;
+			if (_top == null || _bottom == null) return;
+
+			// Top: [ path ........................ ] [Grid view]
+			_gridToggle.Left = Math.Max(8, _top.ClientSize.Width - _gridToggle.Width - 8);
+			_pathBox.Width = Math.Max(50, _gridToggle.Left - 16);
+
+			// Bottom: Search: [....] 123 models ................ [OK] [Cancel]
+			var w = _bottom.ClientSize.Width;
 			_cancel.Left = w - _cancel.Width - 8;
 			_cancel.Top = 7;
 			_ok.Left = _cancel.Left - _ok.Width - 6;
 			_ok.Top = 7;
-			_pathBox.Left = 8;
-			_pathBox.Top = 9;
-			_pathBox.Width = Math.Max(50, _ok.Left - 16);
+		}
+
+		/// <summary>
+		/// Restore the window position, size and state from the last time (only if it is still on a screen).
+		/// </summary>
+		private void ApplySavedWindow()
+		{
+			var w = ModelBrowserSettings.WindowWidth;
+			var h = ModelBrowserSettings.WindowHeight;
+			if (w < MinimumSize.Width || h < MinimumSize.Height) return; // never saved (or nonsense)
+
+			var bounds = new Rectangle(ModelBrowserSettings.WindowLeft, ModelBrowserSettings.WindowTop, w, h);
+			if (!Screen.AllScreens.Any(sc => sc.WorkingArea.IntersectsWith(bounds))) return; // monitor is gone
+
+			StartPosition = FormStartPosition.Manual;
+			Bounds = bounds;
+			if (ModelBrowserSettings.WindowMaximized) WindowState = FormWindowState.Maximized;
+		}
+
+		/// <summary>
+		/// Remember how the user arranged the browser. Stored through the shell's settings provider.
+		/// </summary>
+		private void SaveState()
+		{
+			try
+			{
+				var maximized = WindowState == FormWindowState.Maximized;
+				var normal = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
+				if (WindowState != FormWindowState.Minimized)
+				{
+					ModelBrowserSettings.WindowLeft = normal.Left;
+					ModelBrowserSettings.WindowTop = normal.Top;
+					ModelBrowserSettings.WindowWidth = normal.Width;
+					ModelBrowserSettings.WindowHeight = normal.Height;
+					ModelBrowserSettings.WindowMaximized = maximized;
+				}
+
+				// Splitters can't be measured while the "expand viewer" mode has panels collapsed
+				if (!_outer.Panel1Collapsed && !_inner.Panel1Collapsed)
+				{
+					ModelBrowserSettings.TreeWidth = _outer.SplitterDistance;
+					ModelBrowserSettings.PreviewWidth = _inner.Width - _inner.SplitterDistance;
+					ModelBrowserSettings.InfoHeight = _previewSplit.Height - _previewSplit.SplitterDistance;
+				}
+
+				ModelBrowserSettings.GridView = _list.View == View.LargeIcon;
+				ModelBrowserSettings.ColumnNameWidth = _list.Columns[0].Width;
+				ModelBrowserSettings.ColumnFolderWidth = _list.Columns[1].Width;
+				ModelBrowserSettings.ColumnSizeWidth = _list.Columns[2].Width;
+				ModelBrowserSettings.SortColumn = _sortColumn;
+				ModelBrowserSettings.SortAscending = _sortAscending;
+
+				var node = _tree.SelectedNode;
+				if (node != null && _search.Text.Trim().Length == 0)
+				{
+					var parts = new List<string>();
+					for (var n = node; n != null && n.Parent != null; n = n.Parent) parts.Insert(0, n.Text);
+					ModelBrowserSettings.LastFolder = string.Join("/", parts);
+				}
+
+				// Write it to disk now rather than waiting for the editor to shut down
+				LogicAndTrick.Oy.Oy.Publish("Settings:Save");
+			}
+			catch (Exception ex)
+			{
+				Log.Error(nameof(ModelBrowserDialog), "Unable to save model browser state", ex);
+			}
+		}
+
+		protected override void OnFormClosing(FormClosingEventArgs e)
+		{
+			SaveState();
+			base.OnFormClosing(e);
 		}
 
 		protected override void OnShown(EventArgs e)
@@ -433,8 +479,15 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 			var segments = (currentValue ?? "").Replace('\\', '/').Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries).ToList();
 			var fileName = segments.Count > 0 ? segments[segments.Count - 1] : null;
 			if (segments.Count > 0) segments.RemoveAt(segments.Count - 1);
+			var useLastFolder = string.IsNullOrEmpty(currentValue) && !string.IsNullOrEmpty(ModelBrowserSettings.LastFolder);
 			if (_hasModelsFolder && segments.Count > 0 && string.Equals(segments[0], "models", StringComparison.OrdinalIgnoreCase)) segments.RemoveAt(0);
 			else if (_hasModelsFolder && segments.Count == 0 && fileName != null && string.Equals(fileName, "models", StringComparison.OrdinalIgnoreCase)) fileName = null;
+
+			if (useLastFolder)
+			{
+				// Nothing selected yet: reopen where the user left off (relative to the models folder)
+				segments = ModelBrowserSettings.LastFolder.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+			}
 
 			var node = _tree.Nodes[0];
 			foreach (var seg in segments)
@@ -636,6 +689,8 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 				_list.EndUpdate();
 			}
 
+			SortList();
+
 			_count.Text = items.Count + (truncated ? "+" : "") + (items.Count == 1 ? " model" : " models") + (query.Length > 0 ? " (all folders)" : "");
 
 			ListViewItem toSelect = null;
@@ -683,6 +738,14 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 				_sortAscending = true;
 			}
 
+			SortList();
+		}
+
+		private void SortList()
+		{
+			if (_sortColumn < 0 || _sortColumn >= _list.Columns.Count) return;
+
+			var e = new { Column = _sortColumn };
 			var items = _list.Items.Cast<ListViewItem>().ToList();
 			Func<ListViewItem, object> key;
 			if (e.Column == 2) key = x => ((IFile) x.Tag).Size;
@@ -737,7 +800,7 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 
 		private void SetGrid(bool grid)
 		{
-			s_grid = grid;
+			ModelBrowserSettings.GridView = grid;
 			_list.BeginUpdate();
 			try
 			{
@@ -752,13 +815,85 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 		}
 
 		/// <summary>
-		/// Renders one missing thumbnail per tick (visible items first), on a background task.
+		/// Fills in missing thumbnails for the visible items (visible items first), one after another on a background
+		/// task. Thumbnails come from the persistent disk cache when the model hasn't changed, otherwise they are
+		/// rendered and cached.
 		/// </summary>
 		private async void ThumbTick()
 		{
-			if (_thumbBusy || IsDisposed || _list.View != View.LargeIcon || _list.Items.Count == 0) return;
+			if (_thumbBusy) return;
+			_thumbBusy = true;
+			try
+			{
+				while (!IsDisposed && _list.View == View.LargeIcon)
+				{
+					var target = NextVisibleWithoutThumb();
+					if (target == null) break;
 
-			ListViewItem target = null;
+					var f = (IFile) target.Tag;
+					var thumbKey = f.FullPathName;
+					Bitmap bmp = null;
+
+					await Task.Run(() =>
+					{
+						try
+						{
+							bmp = ThumbnailCache.GetOrCreate(f, ThumbSize, () =>
+							{
+								if (!MdlFile.CanRead(f)) return null;
+								var mdl = MdlFile.FromFile(f);
+								return ModelThumbnailRenderer.RenderThumbnail(mdl, ThumbSize, ThumbBackground);
+							});
+						}
+						catch
+						{
+							// Unreadable model: it just keeps the placeholder
+						}
+					});
+
+					if (IsDisposed)
+					{
+						if (bmp != null) bmp.Dispose();
+						return;
+					}
+
+					if (bmp == null)
+					{
+						_thumbFailed.Add(thumbKey);
+						continue;
+					}
+
+					if (_thumbs.Images.Count >= MaxThumbs) ResetThumbs();
+					_thumbs.Images.Add(thumbKey, bmp);
+					_thumbHave.Add(thumbKey);
+					bmp.Dispose();
+
+					// The item may have been replaced by a list refresh while this was loading: find it again
+					if (target.ListView == _list) target.ImageKey = thumbKey;
+					else
+					{
+						foreach (ListViewItem item in _list.Items)
+						{
+							var file = item.Tag as IFile;
+							if (file != null && file.FullPathName == thumbKey)
+							{
+								item.ImageKey = thumbKey;
+								break;
+							}
+						}
+					}
+				}
+			}
+			finally
+			{
+				_thumbBusy = false;
+			}
+		}
+
+		private ListViewItem NextVisibleWithoutThumb()
+		{
+			if (_list.Items.Count == 0) return null;
+
 			var height = _list.ClientSize.Height;
 			for (var i = FirstVisibleIndex(); i < _list.Items.Count; i++)
 			{
@@ -770,67 +905,9 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 				var key = file.FullPathName;
 				if (_thumbHave.Contains(key) || _thumbFailed.Contains(key)) continue;
 
-				target = item;
-				break;
+				return item;
 			}
-			if (target == null) return;
-
-			var f = (IFile) target.Tag;
-			var thumbKey = f.FullPathName;
-			_thumbBusy = true;
-			Bitmap bmp = null;
-			try
-			{
-				await Task.Run(() =>
-				{
-					try
-					{
-						if (!MdlFile.CanRead(f)) return;
-						var mdl = MdlFile.FromFile(f);
-						bmp = ModelThumbnailRenderer.RenderThumbnail(mdl, ThumbSize, ThumbBackground);
-					}
-					catch
-					{
-						// Unreadable model: it just keeps the placeholder
-					}
-				});
-			}
-			finally
-			{
-				_thumbBusy = false;
-			}
-
-			if (IsDisposed)
-			{
-				if (bmp != null) bmp.Dispose();
-				return;
-			}
-
-			if (bmp == null)
-			{
-				_thumbFailed.Add(thumbKey);
-				return;
-			}
-
-			if (_thumbs.Images.Count >= MaxThumbs) ResetThumbs();
-			_thumbs.Images.Add(thumbKey, bmp);
-			_thumbHave.Add(thumbKey);
-			bmp.Dispose();
-
-			// The item may have been replaced by a list refresh while rendering: find it again
-			if (target.ListView == _list) target.ImageKey = thumbKey;
-			else
-			{
-				foreach (ListViewItem item in _list.Items)
-				{
-					var file = item.Tag as IFile;
-					if (file != null && file.FullPathName == thumbKey)
-					{
-						item.ImageKey = thumbKey;
-						break;
-					}
-				}
-			}
+			return null;
 		}
 
 		/// <summary>

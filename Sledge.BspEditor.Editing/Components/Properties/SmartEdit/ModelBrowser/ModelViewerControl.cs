@@ -29,8 +29,8 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 		private float _elevation = DefaultElevation;
 		private float _zoom = 1f;
 		private PointF _pan;
-		private ModelShading _shading = ModelShading.Smooth;
-		private bool _backfaceCulling;
+		private ModelShading _shading = ModelShading.FromModel;
+		private bool _backfaceCulling = true;
 		private bool _additive = true;
 		private bool _zFightFix = true;
 		private int _skin;

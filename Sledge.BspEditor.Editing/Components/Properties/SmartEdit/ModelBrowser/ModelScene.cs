@@ -24,7 +24,10 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 		Solid = 3,
 
 		/// <summary>Triangle edges only.</summary>
-		Wireframe = 4
+		Wireframe = 4,
+
+		/// <summary>Per texture, from the model's own flags: flatshade = flat, fullbright = unlit, otherwise smooth.</summary>
+		FromModel = 5
 	}
 
 	public class ModelRenderOptions
@@ -38,7 +41,7 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 		public float Zoom = 1f;
 		public PointF Pan;
 
-		public ModelShading Shading = ModelShading.Smooth;
+		public ModelShading Shading = ModelShading.FromModel;
 
 		/// <summary>Fit the projected bounds tightly into the image (thumbnails). Zoom and pan are ignored.</summary>
 		public bool FitTight;
@@ -55,7 +58,7 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 		public int[] Body;
 
 		/// <summary>Skip triangles facing away from the camera (GoldSource culls model back faces in game).</summary>
-		public bool BackfaceCulling;
+		public bool BackfaceCulling = true;
 
 		/// <summary>Draw textures flagged additive with additive blending (after the opaque faces, no depth write).</summary>
 		public bool Additive = true;
@@ -91,6 +94,7 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 			public bool Flat; // chrome etc: use a flat colour instead of sampling
 			public bool Fullbright;
 			public bool Additive;
+			public bool Flatshade;
 		}
 
 		private class Fit
@@ -426,15 +430,19 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 
 					if (o.BackfaceCulling && IsBackFacing(t, dir, windingSign)) continue;
 
+					// Shading comes from the model's own texture flags unless a mode was forced
+					var mode = o.Shading;
+					if (mode == ModelShading.FromModel) mode = tex != null && tex.Flatshade ? ModelShading.Flat : ModelShading.Smooth;
+
 					float s0 = 1f, s1 = 1f, s2 = 1f;
-					var fullbright = o.Shading == ModelShading.Unlit || (tex != null && tex.Fullbright);
+					var fullbright = mode == ModelShading.Unlit || (tex != null && tex.Fullbright);
 					if (!fullbright)
 					{
 						var fn = Vector3.Cross(t.P1 - t.P0, t.P2 - t.P0);
 						var hasFn = fn.LengthSquared() > 1e-9f;
 						if (hasFn) fn = Vector3.Normalize(fn);
 
-						if (o.Shading == ModelShading.Flat)
+						if (mode == ModelShading.Flat)
 						{
 							s0 = s1 = s2 = hasFn ? Lit(fn, light) : 1f;
 						}
@@ -644,7 +652,8 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 					Height = Math.Max(1, t.Header.Height),
 					Flat = t.Header.Flags.HasFlag(TextureFlags.Chrome),
 					Fullbright = t.Header.Flags.HasFlag(TextureFlags.Fullbright),
-					Additive = t.Header.Flags.HasFlag(TextureFlags.Additive)
+					Additive = t.Header.Flags.HasFlag(TextureFlags.Additive),
+					Flatshade = t.Header.Flags.HasFlag(TextureFlags.Flatshade)
 				};
 				tb.Argb = new int[tb.Width * tb.Height];
 
