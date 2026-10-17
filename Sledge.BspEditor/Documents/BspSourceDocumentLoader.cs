@@ -159,13 +159,9 @@ namespace Sledge.BspEditor.Documents
 		/// <inheritdoc />
 		public async Task<IDocument> Load(string location)
 		{
-			var t = Sledge.Common.Logging.StartupLog.Now;
 			var env = await GetEnvironment();
-			Sledge.Common.Logging.StartupLog.Done("  load " + Path.GetFileName(location) + ": GetEnvironment", t);
 			if (env == null) return null;
-			t = Sledge.Common.Logging.StartupLog.Now;
 			var gameData = await env.GetGameData();
-			Sledge.Common.Logging.StartupLog.Done("  load " + Path.GetFileName(location) + ": GetGameData (FGDs)", t);
 			if (!gameData.Classes.Any())
 			{
 				//TODO: Open anyway without collection of classes
@@ -187,19 +183,15 @@ namespace Sledge.BspEditor.Documents
 				{
 					try
 					{
-						var parseStart = Sledge.Common.Logging.StartupLog.Now;
 						var result = await provider.Value.Load(stream, env);
-						Sledge.Common.Logging.StartupLog.Done("  load " + Path.GetFileName(location) + ": parse file with " + provider.Value.GetType().Name, parseStart);
 						if (result.Map == null)
 						{
 							stream.Seek(0, SeekOrigin.Begin);
 							continue;
 						}
 
-						var relationsStart = Sledge.Common.Logging.StartupLog.Now;
 						CollectEntitiesRecursively(result.Map.Root);
 						SearchForRelatives();
-						Sledge.Common.Logging.StartupLog.Done("  load " + Path.GetFileName(location) + ": entity relations", relationsStart);
 
 						var md = new MapDocument(result.Map, env) { FileName = location };
 						await ProcessAfterLoad(env, md, result);
@@ -258,9 +250,7 @@ namespace Sledge.BspEditor.Documents
 		/// <param name="result">The result of the load operation</param>
 		private async Task ProcessAfterLoad(IEnvironment env, MapDocument document, BspFileLoadResult result)
 		{
-			var updateStart = Sledge.Common.Logging.StartupLog.Now;
 			await env.UpdateDocumentData(document);
-			Sledge.Common.Logging.StartupLog.Done("  after load: Environment.UpdateDocumentData", updateStart);
 
 			// Re-apply any texture packages (e.g. WADs) the user has previously chosen to
 			// manually unload for this specific map, before anything else touches textures.
@@ -275,9 +265,7 @@ namespace Sledge.BspEditor.Documents
 
 			foreach (var p in _processors.Select(x => x.Value).OrderBy(x => x.OrderHint))
 			{
-				var processStart = Sledge.Common.Logging.StartupLog.Now;
 				await p.AfterLoad(document);
-				Sledge.Common.Logging.StartupLog.Done("  after load: processor " + p.GetType().Name, processStart);
 			}
 
 			// Re-apply the grid size last used for this specific map
@@ -412,9 +400,7 @@ namespace Sledge.BspEditor.Documents
 			var envId = documentPointer.Get<string>("Environment");
 			if (String.IsNullOrWhiteSpace(fileName) || String.IsNullOrWhiteSpace(envId)) return null;
 
-			var envStart = Sledge.Common.Logging.StartupLog.Now;
 			var env = _environments.Value.GetEnvironment(envId);
-			Sledge.Common.Logging.StartupLog.Done("  load " + Path.GetFileName(fileName) + ": GetEnvironment (settings, FGDs, WADs, models)", envStart);
 			if (env?.ID == null) return null;
 
 			if (!File.Exists(fileName)) return null;
@@ -425,18 +411,14 @@ namespace Sledge.BspEditor.Documents
 				{
 					try
 					{
-						var parseStart = Sledge.Common.Logging.StartupLog.Now;
 						var result = await provider.Value.Load(stream, env);
-						Sledge.Common.Logging.StartupLog.Done("  load " + Path.GetFileName(fileName) + ": parse file with " + provider.Value.GetType().Name, parseStart);
 						if (result.Map == null)
 						{
 							stream.Seek(0, SeekOrigin.Begin);
 							continue;
 						}
-						var relationsStart = Sledge.Common.Logging.StartupLog.Now;
 						CollectEntitiesRecursively(result.Map.Root);
 						SearchForRelatives();
-						Sledge.Common.Logging.StartupLog.Done("  load " + Path.GetFileName(fileName) + ": entity relations", relationsStart);
 
 						var md = new MapDocument(result.Map, env) { FileName = fileName };
 						await ProcessAfterLoad(env, md, result);

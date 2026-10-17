@@ -152,10 +152,8 @@ namespace Sledge.Shell.Registers
 		public async Task ActivateDocument(IDocument document)
 		{
 			// Diagnostic: who is activating which document, and when
-			var traceStart = Sledge.Common.Logging.StartupLog.Now;
 			var frames = string.Join(" <- ", new System.Diagnostics.StackTrace(1, false).GetFrames()?.Take(8).Select(f => f.GetMethod()?.DeclaringType?.Name + "." + f.GetMethod()?.Name) ?? Enumerable.Empty<string>());
 			Sledge.Common.Logging.Log.Debug(nameof(DocumentRegister), $"Activate [{DateTime.Now:HH:mm:ss.fff}] {document?.Name ?? "(none)"} from {frames}");
-			Sledge.Common.Logging.StartupLog.Done("    activate: diagnostic stack trace and debug log", traceStart);
 
 			if (document == null)
 			{
@@ -164,12 +162,8 @@ namespace Sledge.Shell.Registers
 			}
 			else
 			{
-				var activatedStart = Sledge.Common.Logging.StartupLog.Now;
 				await Oy.Publish("Document:Activated", document);
-				Sledge.Common.Logging.StartupLog.Done("    activate: 'Document:Activated' event handlers", activatedStart);
-				var contextStart = Sledge.Common.Logging.StartupLog.Now;
 				await Oy.Publish("Context:Add", new ContextInfo("ActiveDocument", document));
-				Sledge.Common.Logging.StartupLog.Done("    activate: 'Context:Add' event handlers", contextStart);
 			}
 		}
 
@@ -243,12 +237,8 @@ namespace Sledge.Shell.Registers
 		private async Task OpenDocument(IDocument doc)
 		{
 			_openDocuments.Add(doc);
-			var opened = Sledge.Common.Logging.StartupLog.Now;
 			await Oy.Publish("Document:Opened", doc);
-			Sledge.Common.Logging.StartupLog.Done("  open " + doc.Name + ": 'Document:Opened' event handlers", opened);
-			var activated = Sledge.Common.Logging.StartupLog.Now;
 			await ActivateDocument(doc);
-			Sledge.Common.Logging.StartupLog.Done("  open " + doc.Name + ": ActivateDocument", activated);
 		}
 
 		// Settings provider
