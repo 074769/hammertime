@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Globalization;
 using System.Threading;
-using Sledge.Common.Logging;
 using Sledge.Shell;
 
 namespace Sledge.Editor
@@ -11,8 +10,6 @@ namespace Sledge.Editor
         [STAThread]
         static void Main()
         {
-            StartupLog.Mark("Program.Main entered");
-
             // From: https://stackoverflow.com/a/9160150
             // This is the easiest and most consistent way to force decimals to be used in winforms controls.
             // Users expect decimals to be displayed, since that's how VHE and other editors behave.
@@ -29,7 +26,6 @@ namespace Sledge.Editor
             Thread.CurrentThread.CurrentCulture = forceDecimalCulture;
 
             // We're finished ruining the culture, let's run the app now.
-            StartupLog.Mark("Culture set, calling Startup.Run");
             Startup.Run();
         }
     }

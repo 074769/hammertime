@@ -5,7 +5,6 @@ using System.ComponentModel.Composition.Primitives;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using Sledge.Common.Logging;
 
 namespace Sledge.Common
 {
@@ -25,11 +24,8 @@ namespace Sledge.Common
             var parts = new List<ComposablePartCatalog>();
 
             var dir = _directory;
-            var total = StartupLog.Now;
-            var skipped = 0;
             foreach (var dll in Directory.GetFiles(dir, "*.dll").Union(Directory.GetFiles(dir, "*.exe")))
             {
-                var start = StartupLog.Now;
                 try
                 {
                     // See if the assembly is managed
@@ -38,21 +34,12 @@ namespace Sledge.Common
                 catch
                 {
                     // Invalid assembly; Skip
-                    skipped++;
                     continue;
                 }
 
-                var catalog = new AssemblyCatalog(dll);
-
-                // Force the part discovery (reflection over every type) now so it is timed per assembly.
-                // MEF would do the same work later anyway, so this doesn't add to the total.
-                var count = catalog.Parts.Count();
-                parts.Add(catalog);
-
-                StartupLog.Done("catalog: " + Path.GetFileName(dll) + " (" + count + " parts)", start);
+                parts.Add(new AssemblyCatalog(dll));
             }
 
-            StartupLog.Done("catalog: scanned " + parts.Count + " managed assemblies, skipped " + skipped + " native/invalid", total);
             return new AggregateCatalog(parts);
         }
         
