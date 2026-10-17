@@ -23,7 +23,8 @@ namespace Sledge.Shell
 
 		/// <summary>
 		/// SetCompatibleTextRenderingDefault throws if it is called after any window exists (the splash),
-		/// so these must only ever run once, before the first window is created.
+		/// so these (and SetUnhandledExceptionMode, which has the same restriction) must only
+		/// ever run once, before the first window is created.
 		/// </summary>
 		private static void InitialiseWinForms()
 		{
@@ -32,6 +33,7 @@ namespace Sledge.Shell
 
 			Application.EnableVisualStyles();
 			Application.SetCompatibleTextRenderingDefault(false);
+			Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
 		}
 
 		/// <summary>
@@ -107,7 +109,6 @@ namespace Sledge.Shell
 
 			InitialiseWinForms();
 
-			Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
 			Application.ThreadException += (s, e) => UnhandledException(e.Exception);
 			AppDomain.CurrentDomain.UnhandledException += (s, e) => UnhandledException(e.ExceptionObject as Exception);
 
