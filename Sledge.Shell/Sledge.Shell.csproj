@@ -84,6 +84,9 @@
     <None Remove="Translations\Sledge.Shell.zh_cn.json" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Resources\SplashScreen.png" LogicalName="Sledge.Shell.SplashScreen.png" />
+  </ItemGroup>
+  <ItemGroup>
     <Reference Include="Microsoft.VisualBasic" />
     <Reference Include="System" />
     <Reference Include="System.ComponentModel.Composition" />

@@ -39,9 +39,9 @@ namespace Sledge.Shell
 		/// <summary>
 		/// Update the text on the splash screen, if it is still showing
 		/// </summary>
-		internal static void SetSplashStatus(string text)
+		internal static void SetSplashStatus(string text, int percent)
 		{
-			_splash?.SetStatus(text);
+			_splash?.SetStatus(text, percent);
 		}
 
 		/// <summary>
@@ -65,7 +65,7 @@ namespace Sledge.Shell
 
 				_splash = new Forms.SplashForm();
 				_splash.Show();
-				SetSplashStatus("Loading plugins...");
+				SetSplashStatus("Loading plugins...", 5);
 
 				var catalog = new AggregateCatalog();
 
@@ -114,7 +114,7 @@ namespace Sledge.Shell
 
 			Oy.UnhandledException += (s, e) => UnhandledException(e.Exception);
 
-			SetSplashStatus("Starting Hammertime...");
+			SetSplashStatus("Starting Hammertime...", 25);
 			var shell = container.GetExport<Forms.Shell>().Value;
 			shell.Ready += (s, e) => CloseSplash();
 			var si = new SingleInstance(shell);

@@ -190,13 +190,13 @@ namespace Sledge.Shell.Forms
 		{
 			try
 			{
-				Startup.SetSplashStatus("Starting up...");
+				Startup.SetSplashStatus("Starting up...", 40);
 				await _bootstrapper.Value.Startup();
 
-				Startup.SetSplashStatus("Loading settings...");
+				Startup.SetSplashStatus("Loading settings...", 60);
 				await _bootstrapper.Value.Initialise();
 
-				Startup.SetSplashStatus("Opening maps...");
+				Startup.SetSplashStatus("Opening maps...", 80);
 				await PostLoad();
 			}
 			catch (Exception e)
@@ -232,8 +232,11 @@ namespace Sledge.Shell.Forms
 			{
 				if (_openDocuments != null && _openLastFiles)
 				{
-					foreach (var dp in _openDocuments)
+					var total = _openDocuments.Count;
+					for (var i = 0; i < total; i++)
 					{
+						Startup.SetSplashStatus($"Opening maps ({i + 1}/{total})...", 80 + 18 * i / total);
+						var dp = _openDocuments[i];
 						await _documentRegister.Value.OpenDocument(dp.ToPointer(), dp.Loader);
 					}
 				}
