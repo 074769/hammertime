@@ -33,16 +33,37 @@ namespace Sledge.Shell
             [ImportMany] IEnumerable<Lazy<IShutdownHook>> shutdownHooks
         )
         {
-            _startupHooks = startupHooks.Select(x => x.Value).ToList();
-            _uiStartupHooks = uiStartupHooks.Select(x => x.Value).ToList();
-            _initialiseHooks = initialiseHooks.Select(x => x.Value).ToList();
-            _shuttingDownHooks = shuttingDownHooks.Select(x => x.Value).ToList();
-            _uiShutdownHooks = uiShutdownHooks.Select(x => x.Value).ToList();
-            _shutdownHooks = shutdownHooks.Select(x => x.Value).ToList();
+            using (StartupLog.Scope("Bootstrapper: create all hook instances"))
+            {
+                _startupHooks = Resolve("startup", startupHooks);
+                _uiStartupHooks = Resolve("UI startup", uiStartupHooks);
+                _initialiseHooks = Resolve("initialise", initialiseHooks);
+                _shuttingDownHooks = Resolve("shutting down", shuttingDownHooks);
+                _uiShutdownHooks = Resolve("UI shutdown", uiShutdownHooks);
+                _shutdownHooks = Resolve("shutdown", shutdownHooks);
+            }
+        }
+
+        /// <summary>
+        /// Instantiate the hooks (MEF creates the part and its imports on first .Value), timing each one.
+        /// </summary>
+        private static List<T> Resolve<T>(string kind, IEnumerable<Lazy<T>> lazies)
+        {
+            var list = new List<T>();
+            foreach (var lazy in lazies)
+            {
+                var start = StartupLog.Now;
+                var value = lazy.Value;
+                StartupLog.Done("Create " + kind + " hook: " + value.GetType().FullName, start);
+                list.Add(value);
+            }
+            return list;
         }
 
         private void Handle<T>(string description, T hook, Action<T> function)
         {
+            var name = description + ": " + hook.GetType().FullName;
+            var start = StartupLog.Now;
             try
             {
 #if DEBUG
@@ -52,12 +73,19 @@ namespace Sledge.Shell
             }
             catch (Exception e)
             {
+                StartupLog.Mark("FAILED " + name + " - " + e.GetType().Name + ": " + e.Message);
                 Oy.Publish("Shell:UnhandledException", e);
+            }
+            finally
+            {
+                StartupLog.Done(name, start);
             }
         }
 
         private async Task Handle<T>(string description, T hook, Func<T, Task> function)
         {
+            var name = description + ": " + hook.GetType().FullName;
+            var start = StartupLog.Now;
             try
             {
 #if DEBUG
@@ -67,7 +95,12 @@ namespace Sledge.Shell
             }
             catch (Exception e)
             {
+                StartupLog.Mark("FAILED " + name + " - " + e.GetType().Name + ": " + e.Message);
                 Oy.Publish("Shell:UnhandledException", e);
+            }
+            finally
+            {
+                StartupLog.Done(name, start);
             }
         }
 
@@ -76,10 +109,12 @@ namespace Sledge.Shell
         /// </summary>
         public void UIStartup()
         {
+            var phase = StartupLog.Now;
             foreach (var hook in _uiStartupHooks.OrderBy(x => x.GetType().Name))
             {
                 Handle("UI Startup hook", hook, h => h.OnUIStartup());
             }
+            StartupLog.Done("PHASE: all UI startup hooks", phase);
         }
 
         /// <summary>
@@ -88,10 +123,12 @@ namespace Sledge.Shell
         /// <returns>The running task</returns>
         public async Task Startup()
         {
+            var phase = StartupLog.Now;
             foreach (var export in _startupHooks.OrderBy(x => x.GetType().FullName))
             {
                 await Handle("Startup hook", export, h => h.OnStartup());
             }
+            StartupLog.Done("PHASE: all startup hooks", phase);
         }
 
         /// <summary>
@@ -100,10 +137,12 @@ namespace Sledge.Shell
         /// <returns>The running task</returns>
         public async Task Initialise()
         {
+            var phase = StartupLog.Now;
             foreach (var export in _initialiseHooks.OrderBy(x => x.GetType().FullName))
             {
                 await Handle("Initialise hook", export, h => h.OnInitialise());
             }
+            StartupLog.Done("PHASE: all initialise hooks", phase);
         }
 
         /// <summary>

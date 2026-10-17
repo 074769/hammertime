@@ -1,4 +1,5 @@
 ﻿using LogicAndTrick.Oy;
+using Sledge.Common.Logging;
 using Sledge.Common.Shell.Commands;
 using Sledge.Common.Shell.Documents;
 using Sledge.Common.Shell.Settings;
@@ -54,9 +55,16 @@ namespace Sledge.Shell.Forms
 			_documentRegister = documentRegister;
 			_translation = translation;
 
-			InitializeComponent();
-			InitializeShell();
+			using (StartupLog.Scope("Shell constructor: InitializeComponent"))
+			{
+				InitializeComponent();
+			}
+			using (StartupLog.Scope("Shell constructor: InitializeShell"))
+			{
+				InitializeShell();
+			}
 			this.Opacity = 0;
+			Shown += (s, e) => StartupLog.Mark("Shell.Shown (window is on screen, still transparent until startup hooks finish)");
             AllowDrop = true;
             this.DragEnter += Shell_DragEnter;
             this.DragDrop += Shell_DragDrop;
@@ -151,12 +159,18 @@ namespace Sledge.Shell.Forms
 
 		protected override void OnLoad(EventArgs e)
 		{
+			StartupLog.Mark("Shell.OnLoad: begin");
+
 			// Bootstrap the shell
 			_bootstrapper.Value.UIStartup();
 			_bootstrapper.Value.Startup()
 				.ContinueWith(_ => _bootstrapper.Value.Initialise())
 				.ContinueWith(_ => PostLoad())
-				.ContinueWith(_ => this.InvokeLater(()=> this.Opacity = 1));
+				.ContinueWith(_ => this.InvokeLater(() =>
+				{
+					this.Opacity = 1;
+					StartupLog.Mark("Window made visible (Opacity = 1); session restore may still be running");
+				}));
 
 			// Set up bootstrapping for shutdown
 			Closing += DoClosing;
@@ -193,10 +207,14 @@ namespace Sledge.Shell.Forms
 				{
 					foreach (var dp in _openDocuments)
 					{
+						var start = StartupLog.Now;
 						await _documentRegister.Value.OpenDocument(dp.ToPointer(), dp.Loader);
+						StartupLog.Done("Restore document: " + dp.FileName + " (" + dp.Loader + ")", start);
 					}
 				}
+				var argsStart = StartupLog.Now;
 				await Oy.Publish("Shell:InstanceOpened", Environment.GetCommandLineArgs().ToList());
+				StartupLog.Done("Open documents from command line", argsStart);
 			}
 			finally
 			{
@@ -209,6 +227,8 @@ namespace Sledge.Shell.Forms
 						Application.Idle -= idle;
 						_restoringSession = false;
 						ReselectLastDocument();
+						StartupLog.Mark("Session restore complete and idle");
+						StartupLog.Finish();
 					};
 					Application.Idle += idle;
 				});

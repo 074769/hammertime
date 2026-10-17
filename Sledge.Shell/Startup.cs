@@ -5,6 +5,7 @@ using System.IO;
 using System.Windows.Forms;
 using LogicAndTrick.Oy;
 using Sledge.Common;
+using Sledge.Common.Logging;
 
 namespace Sledge.Shell
 {
@@ -25,17 +26,27 @@ namespace Sledge.Shell
 		{
 			try
 			{
+				StartupLog.Mark("Startup.Run: building MEF catalog (the assembly scan itself runs lazily, see 'catalog:' lines)");
 				var catalog = new AggregateCatalog();
 
 				catalog.Catalogs.Add(new ValidAssembliesInDirectoryContainer(AppDomain.CurrentDomain.BaseDirectory));
-				BuildCatalog?.Invoke(null, catalog);
+				using (StartupLog.Scope("BuildCatalog event handlers"))
+				{
+					BuildCatalog?.Invoke(null, catalog);
+				}
 
-				var container = new CompositionContainer(catalog, CompositionOptions.DisableSilentRejection);
+				CompositionContainer container;
+				using (StartupLog.Scope("Create CompositionContainer"))
+				{
+					container = new CompositionContainer(catalog, CompositionOptions.DisableSilentRejection);
+				}
 
 				Run(container);
 			}
 			catch (Exception e)
 			{
+				StartupLog.Mark("Startup FAILED: " + e.Message);
+				StartupLog.Finish();
 				using (StreamWriter outputFile = new StreamWriter("./startup.log"))
 				{
 					outputFile.WriteLine(DateTime.Now);
@@ -64,8 +75,11 @@ namespace Sledge.Shell
 		{
 			Common.Container.Initialise(container);
 
-			Application.EnableVisualStyles();
-			Application.SetCompatibleTextRenderingDefault(false);
+			using (StartupLog.Scope("WinForms visual styles setup"))
+			{
+				Application.EnableVisualStyles();
+				Application.SetCompatibleTextRenderingDefault(false);
+			}
 
 			Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
 			Application.ThreadException += (s, e) => UnhandledException(e.Exception);
@@ -73,7 +87,11 @@ namespace Sledge.Shell
 
 			Oy.UnhandledException += (s, e) => UnhandledException(e.Exception);
 
-			var shell = container.GetExport<Forms.Shell>().Value;
+			Forms.Shell shell;
+			using (StartupLog.Scope("Resolve Shell export (MEF composition: assembly scan, part creation, Shell constructor)"))
+			{
+				shell = container.GetExport<Forms.Shell>().Value;
+			}
 			var si = new SingleInstance(shell);
 			
 
@@ -83,6 +101,15 @@ namespace Sledge.Shell
 				UnhandledException(e.Exception);
 			};
 
+			EventHandler firstIdle = null;
+			firstIdle = (s, e) =>
+			{
+				Application.Idle -= firstIdle;
+				StartupLog.Mark("First Application.Idle (message loop is running and the UI is responsive)");
+			};
+			Application.Idle += firstIdle;
+
+			StartupLog.Mark("Entering SingleInstance.Run (creates the main window, runs Shell.OnLoad)");
 			si.Run(Environment.GetCommandLineArgs());
 		}
 
