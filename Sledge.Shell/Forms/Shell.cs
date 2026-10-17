@@ -57,6 +57,7 @@ namespace Sledge.Shell.Forms
 			InitializeComponent();
 			InitializeShell();
 			this.Opacity = 0;
+			this.Enabled = false; // Ignore input until startup has finished
             AllowDrop = true;
             this.DragEnter += Shell_DragEnter;
             this.DragDrop += Shell_DragDrop;
@@ -153,10 +154,7 @@ namespace Sledge.Shell.Forms
 		{
 			// Bootstrap the shell
 			_bootstrapper.Value.UIStartup();
-			_bootstrapper.Value.Startup()
-				.ContinueWith(_ => _bootstrapper.Value.Initialise())
-				.ContinueWith(_ => PostLoad())
-				.ContinueWith(_ => this.InvokeLater(()=> this.Opacity = 1));
+			StartupSequence();
 
 			// Set up bootstrapping for shutdown
 			Closing += DoClosing;
@@ -183,6 +181,49 @@ namespace Sledge.Shell.Forms
 			if (DocumentTabs.SelectedTab != page) DocumentTabs.SelectedTab = page;
 			_documentRegister.Value.ActivateDocument(last);
 		}
+
+		/// <summary>
+		/// Runs the startup hooks, settings and reopened documents in order. The shell is revealed only after
+		/// all of them have finished, whether or not one of them failed.
+		/// </summary>
+		private async void StartupSequence()
+		{
+			try
+			{
+				Startup.SetSplashStatus("Starting up...");
+				await _bootstrapper.Value.Startup();
+
+				Startup.SetSplashStatus("Loading settings...");
+				await _bootstrapper.Value.Initialise();
+
+				Startup.SetSplashStatus("Opening maps...");
+				await PostLoad();
+			}
+			catch (Exception e)
+			{
+				Oy.Publish("Shell:UnhandledException", e);
+			}
+			finally
+			{
+				this.InvokeLater(ShowWhenReady);
+			}
+		}
+
+		/// <summary>
+		/// Reveal the shell now that startup has finished, then tell listeners (the splash screen) it is ready.
+		/// </summary>
+		private void ShowWhenReady()
+		{
+			Enabled = true;
+			Opacity = 1;
+			Activate();
+			Ready?.Invoke(this, EventArgs.Empty);
+		}
+
+		/// <summary>
+		/// Raised once the shell is visible and all startup work, including reopening documents, has finished.
+		/// </summary>
+		internal event EventHandler Ready;
 
 		private async Task PostLoad()
 		{

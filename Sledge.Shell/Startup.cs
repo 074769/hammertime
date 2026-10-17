@@ -18,6 +18,26 @@ namespace Sledge.Shell
 		/// </summary>
 		public static event EventHandler<AggregateCatalog> BuildCatalog;
 
+		private static Forms.SplashForm _splash;
+
+		/// <summary>
+		/// Update the text on the splash screen, if it is still showing
+		/// </summary>
+		internal static void SetSplashStatus(string text)
+		{
+			_splash?.SetStatus(text);
+		}
+
+		/// <summary>
+		/// Close the splash screen. Called once the shell is ready.
+		/// </summary>
+		private static void CloseSplash()
+		{
+			var splash = _splash;
+			_splash = null;
+			splash?.Close();
+		}
+
 		/// <summary>
 		/// Run the shell as an application using a container from the application catalog
 		/// </summary>
@@ -25,6 +45,13 @@ namespace Sledge.Shell
 		{
 			try
 			{
+				Application.EnableVisualStyles();
+				Application.SetCompatibleTextRenderingDefault(false);
+
+				_splash = new Forms.SplashForm();
+				_splash.Show();
+				SetSplashStatus("Loading plugins...");
+
 				var catalog = new AggregateCatalog();
 
 				catalog.Catalogs.Add(new ValidAssembliesInDirectoryContainer(AppDomain.CurrentDomain.BaseDirectory));
@@ -36,6 +63,7 @@ namespace Sledge.Shell
 			}
 			catch (Exception e)
 			{
+				CloseSplash();
 				using (StreamWriter outputFile = new StreamWriter("./startup.log"))
 				{
 					outputFile.WriteLine(DateTime.Now);
@@ -73,7 +101,9 @@ namespace Sledge.Shell
 
 			Oy.UnhandledException += (s, e) => UnhandledException(e.Exception);
 
+			SetSplashStatus("Starting Hammertime...");
 			var shell = container.GetExport<Forms.Shell>().Value;
+			shell.Ready += (s, e) => CloseSplash();
 			var si = new SingleInstance(shell);
 			
 
