@@ -19,6 +19,20 @@ namespace Sledge.Shell
 		public static event EventHandler<AggregateCatalog> BuildCatalog;
 
 		private static Forms.SplashForm _splash;
+		private static bool _winFormsInitialised;
+
+		/// <summary>
+		/// SetCompatibleTextRenderingDefault throws if it is called after any window exists (the splash),
+		/// so these must only ever run once, before the first window is created.
+		/// </summary>
+		private static void InitialiseWinForms()
+		{
+			if (_winFormsInitialised) return;
+			_winFormsInitialised = true;
+
+			Application.EnableVisualStyles();
+			Application.SetCompatibleTextRenderingDefault(false);
+		}
 
 		/// <summary>
 		/// Update the text on the splash screen, if it is still showing
@@ -45,8 +59,7 @@ namespace Sledge.Shell
 		{
 			try
 			{
-				Application.EnableVisualStyles();
-				Application.SetCompatibleTextRenderingDefault(false);
+				InitialiseWinForms();
 
 				_splash = new Forms.SplashForm();
 				_splash.Show();
@@ -92,8 +105,7 @@ namespace Sledge.Shell
 		{
 			Common.Container.Initialise(container);
 
-			Application.EnableVisualStyles();
-			Application.SetCompatibleTextRenderingDefault(false);
+			InitialiseWinForms();
 
 			Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
 			Application.ThreadException += (s, e) => UnhandledException(e.Exception);
