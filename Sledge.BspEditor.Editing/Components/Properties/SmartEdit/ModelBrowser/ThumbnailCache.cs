@@ -26,7 +26,7 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 			{
 				if (_folder == null)
 				{
-					_folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Hammertime", "ModelThumbnails");
+					_folder = Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "Hammertime", "ModelThumbnails");
 				}
 				return _folder;
 			}
