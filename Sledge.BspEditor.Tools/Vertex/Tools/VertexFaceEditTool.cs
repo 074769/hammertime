@@ -269,13 +269,12 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
             return new Polygon(face.Vertices.Select(x => x.Position)).GetIntersectionPoint(line);
         }
         
-        protected override void MouseDown(MapDocument document, MapViewport viewport, PerspectiveCamera camera,
-            ViewportEvent e)
+        // True while the left button is held after a drag has started: faces under the cursor are added as it sweeps over them
+        private bool _painting;
+
+        /// <summary>The nearest face (of the vertex-selected solids) under the cursor, or null.</summary>
+        private SolidFace PickFace(PerspectiveCamera camera, ViewportEvent e)
         {
-            if (e.Button != MouseButtons.Left) return;
-
-            e.Handled = true;
-
             // First, get the ray that is cast from the clicked point along the viewport frustrum
             var (start, end) = camera.CastRayFromScreen(new Vector3(e.X, e.Y, 0));
             var ray = new Line(start, end);
@@ -284,26 +283,72 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
             var hits = Selection.Where(x => x.Copy.BoundingBox.IntersectsWith(ray));
 
             // Sort the list of intersecting elements by distance from ray origin
-            var clickedFace = hits
-                .SelectMany(x => x.Copy.Faces.Select(f => new { Solid = x, Face = f}))
+            var clicked = hits
+                .SelectMany(x => x.Copy.Faces.Select(f => new { Solid = x, Face = f }))
                 .Select(x => new { Item = x, Intersection = GetIntersectionPoint(x.Face, ray) })
                 .Where(x => x.Intersection != null)
                 .OrderBy(x => (x.Intersection.Value - ray.Start).Length())
                 .Select(x => x.Item)
                 .FirstOrDefault();
-            
 
-            var faces = new List<SolidFace>();
-            if (clickedFace != null)
+            return clicked == null ? null : new SolidFace(clicked.Solid, clicked.Face);
+        }
+
+        /// <summary>Adds the picked face (every face of its solid while Shift is held), skipping faces that are already selected.</summary>
+        private bool AddPicked(SolidFace picked)
+        {
+            var added = false;
+            var faces = KeyboardState.Shift ? picked.Solid.Copy.Faces.ToList() : new List<MutableFace> { picked.Face };
+            foreach (var f in faces)
             {
-                if (KeyboardState.Shift) faces.AddRange(clickedFace.Solid.Copy.Faces.Select(x => new SolidFace(clickedFace.Solid, x)));
-                else faces.Add(new SolidFace(clickedFace.Solid, clickedFace.Face));
+                if (_selectedFaces.Any(x => ReferenceEquals(x.Face, f))) continue;
+                _selectedFaces.Add(new SolidFace(picked.Solid, f));
+                added = true;
             }
-            
+            return added;
+        }
+
+        protected override void MouseDown(MapDocument document, MapViewport viewport, PerspectiveCamera camera,
+            ViewportEvent e)
+        {
+            if (e.Button != MouseButtons.Left) return;
+
+            e.Handled = true;
+
+            var picked = PickFace(camera, e);
+
             if (!KeyboardState.Ctrl) ClearSelection();
-            _selectedFaces.AddRange(faces);
+            if (picked != null) AddPicked(picked);
 
             Invalidate();
+        }
+
+        // Click and drag: hold the left button after the first click and sweep over faces to add them.
+        // Ctrl on the first click keeps the existing selection, Shift adds the whole solid under the cursor.
+        protected override void DragStart(MapDocument document, MapViewport viewport, PerspectiveCamera camera,
+            ViewportEvent e)
+        {
+            if (e.Button != MouseButtons.Left) return;
+            e.Handled = true;
+            _painting = true;
+        }
+
+        protected override void DragMove(MapDocument document, MapViewport viewport, PerspectiveCamera camera,
+            ViewportEvent e)
+        {
+            if (!_painting || e.Button != MouseButtons.Left) return;
+            e.Handled = true;
+
+            var picked = PickFace(camera, e);
+            if (picked != null && AddPicked(picked)) Invalidate();
+        }
+
+        protected override void DragEnd(MapDocument document, MapViewport viewport, PerspectiveCamera camera,
+            ViewportEvent e)
+        {
+            if (e.Button != MouseButtons.Left) return;
+            e.Handled = true;
+            _painting = false;
         }
 
         #endregion
@@ -321,6 +366,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 
         public override async Task ToolDeselected()
         {
+            _painting = false;
             ClearSelection();
             await base.ToolDeselected();
         }
