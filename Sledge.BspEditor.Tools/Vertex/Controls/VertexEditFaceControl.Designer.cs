@@ -28,11 +28,7 @@
 		/// </summary>
 		private void InitializeComponent()
 		{
-			BevelButton = new System.Windows.Forms.Button();
 			WithSelectedFacesLabel = new System.Windows.Forms.Label();
-			BevelValue = new System.Windows.Forms.NumericUpDown();
-			UnitsLabel2 = new System.Windows.Forms.Label();
-			BevelByLabel = new System.Windows.Forms.Label();
 			PokeFaceButton = new System.Windows.Forms.Button();
 			PokeByLabel = new System.Windows.Forms.Label();
 			UnitsLabel1 = new System.Windows.Forms.Label();
@@ -41,21 +37,9 @@
 			ExtrudeValue = new System.Windows.Forms.NumericUpDown();
 			label1 = new System.Windows.Forms.Label();
 			label2 = new System.Windows.Forms.Label();
-			((System.ComponentModel.ISupportInitialize)BevelValue).BeginInit();
 			((System.ComponentModel.ISupportInitialize)PokeFaceCount).BeginInit();
 			((System.ComponentModel.ISupportInitialize)ExtrudeValue).BeginInit();
 			SuspendLayout();
-			// 
-			// BevelButton
-			// 
-			BevelButton.Location = new System.Drawing.Point(177, 54);
-			BevelButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
-			BevelButton.Name = "BevelButton";
-			BevelButton.Size = new System.Drawing.Size(58, 27);
-			BevelButton.TabIndex = 9;
-			BevelButton.Text = "Bevel";
-			BevelButton.UseVisualStyleBackColor = true;
-			BevelButton.Click += BevelButtonClicked;
 			// 
 			// WithSelectedFacesLabel
 			// 
@@ -66,37 +50,6 @@
 			WithSelectedFacesLabel.Size = new System.Drawing.Size(111, 15);
 			WithSelectedFacesLabel.TabIndex = 3;
 			WithSelectedFacesLabel.Text = "With selected faces:";
-			// 
-			// BevelValue
-			// 
-			BevelValue.Location = new System.Drawing.Point(70, 58);
-			BevelValue.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
-			BevelValue.Maximum = new decimal(new int[] { 1000, 0, 0, 0 });
-			BevelValue.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
-			BevelValue.Name = "BevelValue";
-			BevelValue.Size = new System.Drawing.Size(68, 23);
-			BevelValue.TabIndex = 11;
-			BevelValue.Value = new decimal(new int[] { 16, 0, 0, 0 });
-			// 
-			// UnitsLabel2
-			// 
-			UnitsLabel2.AutoSize = true;
-			UnitsLabel2.Location = new System.Drawing.Point(140, 60);
-			UnitsLabel2.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
-			UnitsLabel2.Name = "UnitsLabel2";
-			UnitsLabel2.Size = new System.Drawing.Size(33, 15);
-			UnitsLabel2.TabIndex = 6;
-			UnitsLabel2.Text = "units";
-			// 
-			// BevelByLabel
-			// 
-			BevelByLabel.AutoSize = true;
-			BevelByLabel.Location = new System.Drawing.Point(4, 60);
-			BevelByLabel.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
-			BevelByLabel.Name = "BevelByLabel";
-			BevelByLabel.Size = new System.Drawing.Size(51, 15);
-			BevelByLabel.TabIndex = 7;
-			BevelByLabel.Text = "Bevel by";
 			// 
 			// PokeFaceButton
 			// 
@@ -190,18 +143,13 @@
 			Controls.Add(label1);
 			Controls.Add(label2);
 			Controls.Add(PokeFaceButton);
-			Controls.Add(BevelButton);
 			Controls.Add(WithSelectedFacesLabel);
 			Controls.Add(PokeFaceCount);
-			Controls.Add(BevelValue);
 			Controls.Add(UnitsLabel1);
 			Controls.Add(PokeByLabel);
-			Controls.Add(UnitsLabel2);
-			Controls.Add(BevelByLabel);
 			Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
 			Name = "VertexEditFaceControl";
 			Size = new System.Drawing.Size(246, 113);
-			((System.ComponentModel.ISupportInitialize)BevelValue).EndInit();
 			((System.ComponentModel.ISupportInitialize)PokeFaceCount).EndInit();
 			((System.ComponentModel.ISupportInitialize)ExtrudeValue).EndInit();
 			ResumeLayout(false);
@@ -210,15 +158,11 @@
 
 		#endregion
 
-		private System.Windows.Forms.Button BevelButton;
-        private System.Windows.Forms.Label WithSelectedFacesLabel;
-        private System.Windows.Forms.NumericUpDown BevelValue;
-        private System.Windows.Forms.Label UnitsLabel2;
-        private System.Windows.Forms.Label BevelByLabel;
-        private System.Windows.Forms.Button PokeFaceButton;
-        private System.Windows.Forms.Label PokeByLabel;
-        private System.Windows.Forms.Label UnitsLabel1;
-        private System.Windows.Forms.NumericUpDown PokeFaceCount;
+		private System.Windows.Forms.Label WithSelectedFacesLabel;
+		private System.Windows.Forms.Button PokeFaceButton;
+		private System.Windows.Forms.Label PokeByLabel;
+		private System.Windows.Forms.Label UnitsLabel1;
+		private System.Windows.Forms.NumericUpDown PokeFaceCount;
 		private System.Windows.Forms.Button ExtrudeButton;
 		private System.Windows.Forms.NumericUpDown ExtrudeValue;
 		private System.Windows.Forms.Label label1;

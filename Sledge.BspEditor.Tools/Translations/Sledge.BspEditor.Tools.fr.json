@@ -214,9 +214,7 @@
                 "WithSelectedFaces": "Avec les faces sélectionnées :",
                 "Units": "unités",
                 "PokeBy": "Pousser par",
-                "BevelBy": "Biseauter par",
-                "Poke": "Pousser",
-                "Bevel": "Biseauter"
+                "Poke": "Pousser"
             }
         },
         "Errors": {

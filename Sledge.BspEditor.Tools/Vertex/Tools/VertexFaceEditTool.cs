@@ -58,7 +58,6 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
         {
             yield return Oy.Subscribe<string>("VertexTool:DeselectAll", _ => ClearSelection());
             yield return Oy.Subscribe<int>("VertexEditFaceTool:Poke", v => Poke(v));
-            yield return Oy.Subscribe<int>("VertexEditFaceTool:Bevel", v => Bevel(v));
             yield return Oy.Subscribe<int>("VertexEditFaceTool:Extrude", v => Extrude(v));
 		}
         private async Task Extrude(int num)
@@ -85,23 +84,6 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
                 PokeFace(solidFace, num);
             }
             await FinishEdit(document, new Transaction(), _selectedFaces.Select(x => x.Solid));
-        }
-
-        private async Task Bevel(int num)
-        {
-            var document = GetDocument();
-            if (document == null || _selectedFaces.Count == 0) return;
-
-            var changed = new List<VertexSolid>();
-            foreach (var group in _selectedFaces.GroupBy(x => x.Solid).ToList())
-            {
-                if (BevelSolid(group.Key, group.Select(x => x.Face).ToList(), num)) changed.Add(group.Key);
-            }
-
-            // Nothing could be bevelled (distance too big for the face, or no neighbouring faces): leave everything as it was
-            if (changed.Count == 0) return;
-
-            await FinishEdit(document, new Transaction(), changed);
         }
 
         /// <summary>
@@ -243,80 +225,6 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
             AttachNextTo(document, transaction, parents, solidFace.Solid.Real, extruded);
             transaction.Add(new Select(extruded));
             extruded.DescendantsChanged();
-        }
-
-        private static Vector3? InwardDirection(Vector3 towardsInterior, Vector3 edgeDirection)
-        {
-            var v = towardsInterior - edgeDirection * Vector3.Dot(towardsInterior, edgeDirection);
-            return v.LengthSquared() < 1e-6f ? (Vector3?) null : Vector3.Normalize(v);
-        }
-
-        /// <summary>
-        /// Chamfers every edge of the given faces: each edge is cut back by <paramref name="distance"/> along both faces that meet at it.
-        /// The face itself shrinks, the neighbouring faces get shorter, and a new sloped face fills each cut.
-        /// The solid is rebuilt from its planes, so it stays one valid convex brush. The bevelled faces keep their texture and the new faces are null.
-        /// </summary>
-        private bool BevelSolid(VertexSolid vertexSolid, IList<MutableFace> faces, float distance)
-        {
-            var solid = vertexSolid.Copy;
-            var d = Math.Abs(distance);
-            if (d < 0.001f) return false;
-
-            var points = solid.Faces.SelectMany(f => f.Vertices.Select(v => v.Position)).ToList();
-            if (points.Count == 0) return false;
-            var centre = points.Aggregate(Vector3.Zero, (a, b) => a + b) / points.Count;
-
-            var chamfers = new List<Sledge.DataStructures.Geometric.Plane>();
-            foreach (var face in faces)
-            {
-                foreach (var edge in face.GetEdges())
-                {
-                    var along = edge.End - edge.Start;
-                    if (along.LengthSquared() < 1e-6f) continue;
-                    along = Vector3.Normalize(along);
-                    var mid = (edge.Start + edge.End) / 2;
-
-                    var neighbour = solid.Faces.FirstOrDefault(f => !ReferenceEquals(f, face)
-                        && f.Vertices.Any(v => v.Position.EquivalentTo(edge.Start))
-                        && f.Vertices.Any(v => v.Position.EquivalentTo(edge.End)));
-                    if (neighbour == null) continue;
-
-                    var inFace = InwardDirection(face.Origin - mid, along);
-                    var inNeighbour = InwardDirection(neighbour.Origin - mid, along);
-                    if (inFace == null || inNeighbour == null) continue;
-
-                    // The cut runs from d inside the bevelled face to d inside the neighbouring face
-                    var p1 = edge.Start + inFace.Value * d;
-                    var p2 = edge.End + inFace.Value * d;
-                    var p3 = edge.Start + inNeighbour.Value * d;
-
-                    var n = Vector3.Cross(p2 - p1, p3 - p1);
-                    if (n.LengthSquared() < 1e-8f) continue;
-                    n = Vector3.Normalize(n);
-                    if (Vector3.Dot(n, centre - p1) > 0) n = -n; // face away from the inside of the solid
-
-                    chamfers.Add(new Sledge.DataStructures.Geometric.Plane(n, p1));
-                }
-            }
-            if (chamfers.Count == 0) return false;
-
-            var poly = new Polyhedron(solid.Faces.Select(f => f.Plane).Concat(chamfers));
-            if (poly.Polygons.Count < 4) return false;
-            if (poly.Polygons.Any(p => p.Vertices.Count < 3 || p.Vertices.Any(v => !IsFinite(v)))) return false;
-
-            var nullTexture = faces[0].Texture.Clone();
-            nullTexture.Name = "null";
-
-            var rebuilt = new List<MutableFace>();
-            foreach (var pg in poly.Polygons)
-            {
-                var original = solid.Faces.FirstOrDefault(f => f.Plane.EquivalentTo(pg.Plane, 0.0075f));
-                rebuilt.Add(new MutableFace(pg.Vertices, original != null ? original.Texture.Clone() : nullTexture.Clone()));
-            }
-
-            solid.Faces.Clear();
-            foreach (var f in rebuilt) solid.Faces.Add(f);
-            return true;
         }
 
 		#endregion

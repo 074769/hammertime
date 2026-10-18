@@ -336,9 +336,7 @@
                 "WithSelectedFaces": "With selected faces:",
                 "Units": "units",
                 "PokeBy": "Poke by",
-                "BevelBy": "Bevel by",
-                "Poke": "Poke",
-                "Bevel": "Bevel"
+                "Poke": "Poke"
             }
         },
         "Errors": {

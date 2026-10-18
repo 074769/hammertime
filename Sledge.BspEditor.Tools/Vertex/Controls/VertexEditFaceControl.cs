@@ -16,11 +16,9 @@ namespace Sledge.BspEditor.Tools.Vertex.Controls
 		#region Translations
 
 		public string WithSelectedFaces { set => this.InvokeLater(() => WithSelectedFacesLabel.Text = value); }
-		public string Units { set => this.InvokeLater(() => { UnitsLabel1.Text = value; UnitsLabel2.Text = value; }); }
+		public string Units { set => this.InvokeLater(() => { UnitsLabel1.Text = value; label1.Text = value; }); }
 		public string PokeBy { set => this.InvokeLater(() => PokeByLabel.Text = value); }
-		public string BevelBy { set => this.InvokeLater(() => BevelByLabel.Text = value); }
 		public string Poke { set => this.InvokeLater(() => PokeFaceButton.Text = value); }
-		public string Bevel { set => this.InvokeLater(() => BevelButton.Text = value); }
 
 		#endregion
 
@@ -82,7 +80,6 @@ namespace Sledge.BspEditor.Tools.Vertex.Controls
 		    var rows = new (Label label, Control input, Label units, Button button)[]
 		    {
 		        (PokeByLabel, PokeFaceCount, UnitsLabel1, PokeFaceButton),
-		        (BevelByLabel, BevelValue, UnitsLabel2, BevelButton),
 		        (label2, ExtrudeValue, label1, ExtrudeButton)
 		    };
 
@@ -108,11 +105,6 @@ namespace Sledge.BspEditor.Tools.Vertex.Controls
 		    }
 
 		    return y;
-		}
-
-		private void BevelButtonClicked(object sender, EventArgs e)
-		{
-			Oy.Publish("VertexEditFaceTool:Bevel", (int) BevelValue.Value);
 		}
 
 		private void PokeFaceButtonClicked(object sender, EventArgs e)
