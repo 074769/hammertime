@@ -10,6 +10,7 @@ using System.Windows.Forms;
 using LogicAndTrick.Oy;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Modification;
+using Sledge.BspEditor.Modification.Operations.Data;
 using Sledge.BspEditor.Modification.Operations.Selection;
 using Sledge.BspEditor.Modification.Operations.Tree;
 using Sledge.BspEditor.Primitives.MapObjectData;
@@ -60,30 +61,87 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
             yield return Oy.Subscribe<int>("VertexEditFaceTool:Bevel", v => Bevel(v));
             yield return Oy.Subscribe<int>("VertexEditFaceTool:Extrude", v => Extrude(v));
 		}
-        private void Extrude(int num)
+        private async Task Extrude(int num)
         {
-			foreach (var solidFace in _selectedFaces)
-			{
-				BevelFace(solidFace, num, false);
-			}
-			UpdateSolids(_selectedFaces.Select(x => x.Solid).ToList());
-		}
-        private void Poke(int num)
+            var document = GetDocument();
+            if (document == null || _selectedFaces.Count == 0) return;
+
+            var tran = new Transaction();
+            var groups = new Dictionary<long, Group>();
+            foreach (var solidFace in _selectedFaces)
+            {
+                BevelFace(document, tran, groups, solidFace, num, false);
+            }
+            await FinishEdit(document, tran);
+        }
+
+        private async Task Poke(int num)
         {
+            var document = GetDocument();
+            if (document == null || _selectedFaces.Count == 0) return;
+
             foreach (var solidFace in _selectedFaces)
             {
                 PokeFace(solidFace, num);
             }
-            UpdateSolids(_selectedFaces.Select(x => x.Solid).ToList());
+            await FinishEdit(document, new Transaction());
         }
 
-        private void Bevel(int num)
+        private async Task Bevel(int num)
         {
+            var document = GetDocument();
+            if (document == null || _selectedFaces.Count == 0) return;
+
+            var tran = new Transaction();
+            var groups = new Dictionary<long, Group>();
             foreach (var solidFace in _selectedFaces)
             {
-                BevelFace(solidFace, num);
+                BevelFace(document, tran, groups, solidFace, num, true);
             }
-            UpdateSolids(_selectedFaces.Select(x => x.Solid).ToList());
+            await FinishEdit(document, tran);
+        }
+
+        /// <summary>
+        /// Writes every edited solid back to the map in the same transaction as the operations that
+        /// built on it (new solids, groups). That way one undo reverses the whole edit, and the vertex
+        /// tool's working copies are never left out of step with the map.
+        /// </summary>
+        private async Task FinishEdit(MapDocument document, Transaction tran)
+        {
+            var solids = _selectedFaces
+                .Select(x => x.Solid)
+                .GroupBy(x => x.Real.ID)
+                .Select(g => g.First())
+                .ToList();
+
+            foreach (var solid in solids)
+            {
+                // Same guard as VertexSelection.Commit: never write NaN / infinity into a map solid
+                if (solid.Copy.Faces.Any(f => f.Vertices.Any(v => !IsFinite(v.Position)))) continue;
+
+                tran.Add(new RemoveMapObjectData(solid.Real.ID, solid.Real.Faces));
+                tran.Add(new AddMapObjectData(solid.Real.ID, solid.Copy.Faces.Select(x => x.ToFace(document.Map.NumberGenerator))));
+            }
+
+            // The selected faces are stale once the solids are rebuilt, so drop the selection
+            ClearSelection();
+
+            if (!tran.IsEmpty)
+            {
+                await MapDocumentOperation.Perform(document, tran);
+            }
+
+            // Working copies now match the map again (and are no longer dirty)
+            foreach (var solid in solids)
+            {
+                solid.Reset();
+            }
+            Invalidate();
+        }
+
+        private static bool IsFinite(System.Numerics.Vector3 v)
+        {
+            return !(float.IsNaN(v.X) || float.IsNaN(v.Y) || float.IsNaN(v.Z) || float.IsInfinity(v.X) || float.IsInfinity(v.Y) || float.IsInfinity(v.Z));
         }
 
         private IList<MutableFace> GetSelectedFaces()
@@ -118,7 +176,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
             }
         }
 
-        private void BevelFace(SolidFace solidFace, int num, bool bevel = true)
+        private void BevelFace(MapDocument document, Transaction transaction, Dictionary<long, Group> groups, SolidFace solidFace, int num, bool bevel)
         {
             var face = solidFace.Face;
             var solid = solidFace.Solid.Copy;
@@ -128,48 +186,51 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 
             // Scale the face a bit and move it away by the bevel distance
             var origin = face.Origin;
-            face.Transform(Matrix4x4.CreateScale(Vector3.One * (bevel?0.9f:1f), origin));
+            face.Transform(Matrix4x4.CreateScale(Vector3.One * (bevel ? 0.9f : 1f), origin));
             face.Transform(Matrix4x4.CreateTranslation(face.Plane.Normal * num));
 
             var vertList = face.Vertices.ToList();
 
-			var document = GetDocument();
-
-			var parentGroup = solidFace.Solid.Real.Hierarchy.Parent as Group;
-            if(parentGroup == null)
+            // One group per real solid, shared by every face edited on it in this action.
+            // The group and its attach are queued in the same transaction, not performed on their own.
+            var real = solidFace.Solid.Real;
+            Group parentGroup;
+            if (!groups.TryGetValue(real.ID, out parentGroup))
             {
-                parentGroup = new Group(document.Map.NumberGenerator.Next("MapObject"));
-                var groupTransaction = new Transaction(new Attach(solidFace.Solid.Real.Hierarchy.Parent.ID, parentGroup));
-                groupTransaction.Add(new Attach(parentGroup.ID, solidFace.Solid.Real));
-                MapDocumentOperation.Perform(document, groupTransaction);
+                parentGroup = real.Hierarchy.Parent as Group;
+                if (parentGroup == null)
+                {
+                    parentGroup = new Group(document.Map.NumberGenerator.Next("MapObject"));
+                    transaction.Add(new Attach(real.Hierarchy.Parent.ID, parentGroup));
+                    transaction.Add(new Attach(parentGroup.ID, real));
+                }
+                groups[real.ID] = parentGroup;
             }
 
-
-			var solid1 = new Solid(document.Map.NumberGenerator.Next("MapObject"));
+            var solid1 = new Solid(document.Map.NumberGenerator.Next("MapObject"));
             var solid1v = new VertexSolid(solid1);
-            var solid12 = solid1v.Copy;
 
-			var transaction = new Transaction();
-			transaction.Add(new Attach(document.Map.Root.ID, solid1v.Real));
-			// Create a face for each new edge -> old edge
-			foreach (var edge in face.GetEdges())
+            transaction.Add(new Attach(document.Map.Root.ID, solid1v.Real));
+
+            // Create a face for each new edge -> old edge
+            foreach (var edge in face.GetEdges())
             {
                 var startIndex = vertList.FindIndex(x => x.Position.EquivalentTo(edge.Start));
                 var endIndex = vertList.FindIndex(x => x.Position.EquivalentTo(edge.End));
-				var verts = new[] { vertexPositions[startIndex], vertexPositions[endIndex], edge.End, edge.Start };
+                var verts = new[] { vertexPositions[startIndex], vertexPositions[endIndex], edge.End, edge.Start };
                 var texture = face.Texture.Clone();
                 {
                     var neighbouringFace = solid.Faces.FirstOrDefault(f =>
-                    f.Vertices.Where(v => v.Position == vertexPositions[startIndex]).Any() &&
-                    f.Vertices.Where(v => v.Position == vertexPositions[endIndex]).Any()
+                        f.Vertices.Where(v => v.Position == vertexPositions[startIndex]).Any() &&
+                        f.Vertices.Where(v => v.Position == vertexPositions[endIndex]).Any()
                     );
-                    if(neighbouringFace != null)
+                    if (neighbouringFace != null)
                     {
                         texture = neighbouringFace.Texture.Clone();
                         if (neighbouringFace.Texture.Name.ToLower().Equals("null"))
                             texture.Name = face.Texture.Name;
                     }
-				}
+                }
                 var f = new Face(document.Map.NumberGenerator.Next("Face"))
                 {
                     Plane = new DataStructures.Geometric.Plane(verts[0], verts[1], verts[3]),
@@ -177,77 +238,26 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
                 };
                 f.Vertices.AddRange(verts);
                 solid1.Data.Add(f);
+            }
 
-			}
-			if (!bevel)
+            if (!bevel)
             {
                 solid.Faces.Remove(face);
 
                 var tex = face.Texture.Clone();
                 tex.Name = "null";
 
-				var f = new MutableFace(vertexPositions, tex);
-
-
+                var f = new MutableFace(vertexPositions, tex);
                 var fb = new MutableFace(vertexPositions.Reverse<Vector3>(), tex);
 
                 solid.Faces.Add(f);
-				solid1.Data.Add(fb.ToFace(document.Map.NumberGenerator));
+                solid1.Data.Add(fb.ToFace(document.Map.NumberGenerator));
                 solid1.Data.Add(face.ToFace(document.Map.NumberGenerator));
-                solid1v.IsDirty = true;
 
                 transaction.Add(new Select(solid1));
                 transaction.Add(new Attach(parentGroup.ID, solid1));
-
-			}
-            solid1.DescendantsChanged();
-			MapDocumentOperation.Perform(document, transaction);
-		}
-
-		#endregion
-
-		#region 3D interaction
-
-		private Vector3? GetIntersectionPoint(MutableFace face, Line line)
-        {
-            return new Polygon(face.Vertices.Select(x => x.Position)).GetIntersectionPoint(line);
-        }
-        
-        protected override void MouseDown(MapDocument document, MapViewport viewport, PerspectiveCamera camera,
-            ViewportEvent e)
-        {
-            if (e.Button != MouseButtons.Left) return;
-
-            e.Handled = true;
-
-            // First, get the ray that is cast from the clicked point along the viewport frustrum
-            var (start, end) = camera.CastRayFromScreen(new Vector3(e.X, e.Y, 0));
-            var ray = new Line(start, end);
-
-            // Grab all the elements that intersect with the ray
-            var hits = Selection.Where(x => x.Copy.BoundingBox.IntersectsWith(ray));
-
-            // Sort the list of intersecting elements by distance from ray origin
-            var clickedFace = hits
-                .SelectMany(x => x.Copy.Faces.Select(f => new { Solid = x, Face = f}))
-                .Select(x => new { Item = x, Intersection = GetIntersectionPoint(x.Face, ray) })
-                .Where(x => x.Intersection != null)
-                .OrderBy(x => (x.Intersection.Value - ray.Start).Length())
-                .Select(x => x.Item)
-                .FirstOrDefault();
-            
-
-            var faces = new List<SolidFace>();
-            if (clickedFace != null)
-            {
-                if (KeyboardState.Shift) faces.AddRange(clickedFace.Solid.Copy.Faces.Select(x => new SolidFace(clickedFace.Solid, x)));
-                else faces.Add(new SolidFace(clickedFace.Solid, clickedFace.Face));
             }
-            
-            if (!KeyboardState.Ctrl) ClearSelection();
-            _selectedFaces.AddRange(faces);
-
-            Invalidate();
+            solid1.DescendantsChanged();
         }
 
         #endregion
@@ -272,18 +282,6 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
         public override void Update()
         {
             ClearSelection();
-        }
-
-        private void UpdateSolids(List<VertexSolid> solids)
-        {
-            if (!solids.Any()) return;
-
-            foreach (var solid in solids)
-            {
-                solid.IsDirty = true;
-            }
-
-            Invalidate();
         }
 
         protected override void Render(MapDocument document, BufferBuilder builder, ResourceCollector resourceCollector)
