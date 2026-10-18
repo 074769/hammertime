@@ -111,6 +111,27 @@ namespace Sledge.BspEditor.Tools.Vertex.Selection
             return !(float.IsNaN(v.X) || float.IsNaN(v.Y) || float.IsNaN(v.Z) || float.IsInfinity(v.X) || float.IsInfinity(v.Y) || float.IsInfinity(v.Z));
         }
 
+        /// <summary>
+        /// Refreshes the working copy of every unedited selected solid that the map has changed underneath us
+        /// (undo, redo, or an edit made outside the vertex tool). Returns true if any copy was refreshed.
+        /// </summary>
+        public bool ResetUpdated(IEnumerable<IMapObject> updated)
+        {
+            var set = new HashSet<IMapObject>(updated);
+            if (set.Count == 0) return false;
+
+            var any = false;
+            lock (_lock)
+            {
+                foreach (var solid in _selectedSolids.Where(x => !x.IsDirty && set.Contains(x.Real)).ToList())
+                {
+                    solid.Reset();
+                    any = true;
+                }
+            }
+            return any;
+        }
+
         public async Task Reset(MapDocument document)
         {
             lock (_lock)

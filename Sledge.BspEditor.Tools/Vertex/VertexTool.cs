@@ -93,6 +93,16 @@ namespace Sledge.BspEditor.Tools.Vertex
 			{
 				if (x == GetDocument()) SelectionChanged();
 			});
+			// Undo/redo (or anything else) can change the solids under the tool: refresh the working copies so the tool never shows or writes back stale geometry
+			yield return Oy.Subscribe<Change>("MapDocument:Changed", c =>
+			{
+				if (c.Document != GetDocument()) return;
+				if (_selection.ResetUpdated(c.Updated))
+				{
+					CurrentSubTool?.Update();
+					Invalidate();
+				}
+			});
 			yield return Oy.Subscribe<Type>("VertexTool:SetSubTool", t =>
 			{
 				CurrentSubTool = _subTools.Select(x => x.Value).FirstOrDefault(x => x.GetType() == t);

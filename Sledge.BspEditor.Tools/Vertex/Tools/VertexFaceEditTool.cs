@@ -67,12 +67,12 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
             if (document == null || _selectedFaces.Count == 0) return;
 
             var tran = new Transaction();
-            var groups = new Dictionary<long, Group>();
+            var parents = new Dictionary<long, IMapObject>();
             foreach (var solidFace in _selectedFaces)
             {
-                BevelFace(document, tran, groups, solidFace, num, false);
+                ExtrudeFace(document, tran, parents, solidFace, num);
             }
-            await FinishEdit(document, tran);
+            await FinishEdit(document, tran, _selectedFaces.Select(x => x.Solid));
         }
 
         private async Task Poke(int num)
@@ -84,7 +84,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
             {
                 PokeFace(solidFace, num);
             }
-            await FinishEdit(document, new Transaction());
+            await FinishEdit(document, new Transaction(), _selectedFaces.Select(x => x.Solid));
         }
 
         private async Task Bevel(int num)
@@ -92,24 +92,25 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
             var document = GetDocument();
             if (document == null || _selectedFaces.Count == 0) return;
 
-            var tran = new Transaction();
-            var groups = new Dictionary<long, Group>();
-            foreach (var solidFace in _selectedFaces)
+            var changed = new List<VertexSolid>();
+            foreach (var group in _selectedFaces.GroupBy(x => x.Solid).ToList())
             {
-                BevelFace(document, tran, groups, solidFace, num, true);
+                if (BevelSolid(group.Key, group.Select(x => x.Face).ToList(), num)) changed.Add(group.Key);
             }
-            await FinishEdit(document, tran);
+
+            // Nothing could be bevelled (distance too big for the face, or no neighbouring faces): leave everything as it was
+            if (changed.Count == 0) return;
+
+            await FinishEdit(document, new Transaction(), changed);
         }
 
         /// <summary>
         /// Writes every edited solid back to the map in the same transaction as the operations that
-        /// built on it (new solids, groups). That way one undo reverses the whole edit, and the vertex
-        /// tool's working copies are never left out of step with the map.
+        /// built on it (new solids, groups). That way one undo reverses the whole edit.
         /// </summary>
-        private async Task FinishEdit(MapDocument document, Transaction tran)
+        private async Task FinishEdit(MapDocument document, Transaction tran, IEnumerable<VertexSolid> changedSolids)
         {
-            var solids = _selectedFaces
-                .Select(x => x.Solid)
+            var solids = changedSolids
                 .GroupBy(x => x.Real.ID)
                 .Select(g => g.First())
                 .ToList();
@@ -176,41 +177,46 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
             }
         }
 
-        private void BevelFace(MapDocument document, Transaction transaction, Dictionary<long, Group> groups, SolidFace solidFace, int num, bool bevel)
+        /// <summary>
+        /// Adds the new solid to the same parent as the solid it was made from, so a brush entity (or group) keeps owning it.
+        /// A solid that sits loose in the world is grouped with what was made from it.
+        /// </summary>
+        private void AttachNextTo(MapDocument document, Transaction transaction, Dictionary<long, IMapObject> parents, Solid original, Solid created)
+        {
+            IMapObject parent;
+            if (!parents.TryGetValue(original.ID, out parent))
+            {
+                parent = original.Hierarchy.Parent;
+                if (parent is Root)
+                {
+                    var group = new Group(document.Map.NumberGenerator.Next("MapObject"));
+                    transaction.Add(new Attach(parent.ID, group));
+                    // Detach before re-attaching, so that undo puts the original solid back where it was
+                    transaction.Add(new Detatch(parent.ID, original));
+                    transaction.Add(new Attach(group.ID, original));
+                    parent = group;
+                }
+                parents[original.ID] = parent;
+            }
+            transaction.Add(new Attach(parent.ID, created));
+        }
+
+        private void ExtrudeFace(MapDocument document, Transaction transaction, Dictionary<long, IMapObject> parents, SolidFace solidFace, int num)
         {
             var face = solidFace.Face;
             var solid = solidFace.Solid.Copy;
+            var gen = document.Map.NumberGenerator;
 
-            // Remember the original positions
+            // Remember the original positions, then move the face out by the extrude distance
             var vertexPositions = face.Vertices.Select(x => x.Position).ToList();
-
-            // Scale the face a bit and move it away by the bevel distance
-            var origin = face.Origin;
-            face.Transform(Matrix4x4.CreateScale(Vector3.One * (bevel ? 0.9f : 1f), origin));
             face.Transform(Matrix4x4.CreateTranslation(face.Plane.Normal * num));
-
             var vertList = face.Vertices.ToList();
 
-            // One group per real solid, shared by every face edited on it in this action.
-            // The group and its attach are queued in the same transaction, not performed on their own.
-            var real = solidFace.Solid.Real;
-            Group parentGroup;
-            if (!groups.TryGetValue(real.ID, out parentGroup))
-            {
-                parentGroup = real.Hierarchy.Parent as Group;
-                if (parentGroup == null)
-                {
-                    parentGroup = new Group(document.Map.NumberGenerator.Next("MapObject"));
-                    transaction.Add(new Attach(real.Hierarchy.Parent.ID, parentGroup));
-                    transaction.Add(new Attach(parentGroup.ID, real));
-                }
-                groups[real.ID] = parentGroup;
-            }
+            // Only the extruded face keeps its texture, everything else that gets created is null
+            var nullTexture = face.Texture.Clone();
+            nullTexture.Name = "null";
 
-            var solid1 = new Solid(document.Map.NumberGenerator.Next("MapObject"));
-            var solid1v = new VertexSolid(solid1);
-
-            transaction.Add(new Attach(document.Map.Root.ID, solid1v.Real));
+            var extruded = new Solid(gen.Next("MapObject"));
 
             // Create a face for each new edge -> old edge
             foreach (var edge in face.GetEdges())
@@ -218,46 +224,99 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
                 var startIndex = vertList.FindIndex(x => x.Position.EquivalentTo(edge.Start));
                 var endIndex = vertList.FindIndex(x => x.Position.EquivalentTo(edge.End));
                 var verts = new[] { vertexPositions[startIndex], vertexPositions[endIndex], edge.End, edge.Start };
-                var texture = face.Texture.Clone();
+                var f = new Face(gen.Next("Face"))
                 {
-                    var neighbouringFace = solid.Faces.FirstOrDefault(f =>
-                        f.Vertices.Where(v => v.Position == vertexPositions[startIndex]).Any() &&
-                        f.Vertices.Where(v => v.Position == vertexPositions[endIndex]).Any()
-                    );
-                    if (neighbouringFace != null)
-                    {
-                        texture = neighbouringFace.Texture.Clone();
-                        if (neighbouringFace.Texture.Name.ToLower().Equals("null"))
-                            texture.Name = face.Texture.Name;
-                    }
-                }
-                var f = new Face(document.Map.NumberGenerator.Next("Face"))
-                {
-                    Plane = new DataStructures.Geometric.Plane(verts[0], verts[1], verts[3]),
-                    Texture = texture
+                    Plane = new Sledge.DataStructures.Geometric.Plane(verts[0], verts[1], verts[3]),
+                    Texture = nullTexture.Clone()
                 };
                 f.Vertices.AddRange(verts);
-                solid1.Data.Add(f);
+                extruded.Data.Add(f);
             }
 
-            if (!bevel)
+            // The original face is now covered by the new solid
+            solid.Faces.Remove(face);
+            solid.Faces.Add(new MutableFace(vertexPositions, nullTexture.Clone()));
+
+            extruded.Data.Add(new MutableFace(vertexPositions.Reverse<Vector3>(), nullTexture.Clone()).ToFace(gen));
+            extruded.Data.Add(face.ToFace(gen));
+
+            AttachNextTo(document, transaction, parents, solidFace.Solid.Real, extruded);
+            transaction.Add(new Select(extruded));
+            extruded.DescendantsChanged();
+        }
+
+        private static Vector3? InwardDirection(Vector3 towardsInterior, Vector3 edgeDirection)
+        {
+            var v = towardsInterior - edgeDirection * Vector3.Dot(towardsInterior, edgeDirection);
+            return v.LengthSquared() < 1e-6f ? (Vector3?) null : Vector3.Normalize(v);
+        }
+
+        /// <summary>
+        /// Chamfers every edge of the given faces: each edge is cut back by <paramref name="distance"/> along both faces that meet at it.
+        /// The face itself shrinks, the neighbouring faces get shorter, and a new sloped face fills each cut.
+        /// The solid is rebuilt from its planes, so it stays one valid convex brush. The bevelled faces keep their texture and the new faces are null.
+        /// </summary>
+        private bool BevelSolid(VertexSolid vertexSolid, IList<MutableFace> faces, float distance)
+        {
+            var solid = vertexSolid.Copy;
+            var d = Math.Abs(distance);
+            if (d < 0.001f) return false;
+
+            var points = solid.Faces.SelectMany(f => f.Vertices.Select(v => v.Position)).ToList();
+            if (points.Count == 0) return false;
+            var centre = points.Aggregate(Vector3.Zero, (a, b) => a + b) / points.Count;
+
+            var chamfers = new List<Sledge.DataStructures.Geometric.Plane>();
+            foreach (var face in faces)
             {
-                solid.Faces.Remove(face);
+                foreach (var edge in face.GetEdges())
+                {
+                    var along = edge.End - edge.Start;
+                    if (along.LengthSquared() < 1e-6f) continue;
+                    along = Vector3.Normalize(along);
+                    var mid = (edge.Start + edge.End) / 2;
 
-                var tex = face.Texture.Clone();
-                tex.Name = "null";
+                    var neighbour = solid.Faces.FirstOrDefault(f => !ReferenceEquals(f, face)
+                        && f.Vertices.Any(v => v.Position.EquivalentTo(edge.Start))
+                        && f.Vertices.Any(v => v.Position.EquivalentTo(edge.End)));
+                    if (neighbour == null) continue;
 
-                var f = new MutableFace(vertexPositions, tex);
-                var fb = new MutableFace(vertexPositions.Reverse<Vector3>(), tex);
+                    var inFace = InwardDirection(face.Origin - mid, along);
+                    var inNeighbour = InwardDirection(neighbour.Origin - mid, along);
+                    if (inFace == null || inNeighbour == null) continue;
 
-                solid.Faces.Add(f);
-                solid1.Data.Add(fb.ToFace(document.Map.NumberGenerator));
-                solid1.Data.Add(face.ToFace(document.Map.NumberGenerator));
+                    // The cut runs from d inside the bevelled face to d inside the neighbouring face
+                    var p1 = edge.Start + inFace.Value * d;
+                    var p2 = edge.End + inFace.Value * d;
+                    var p3 = edge.Start + inNeighbour.Value * d;
 
-                transaction.Add(new Select(solid1));
-                transaction.Add(new Attach(parentGroup.ID, solid1));
+                    var n = Vector3.Cross(p2 - p1, p3 - p1);
+                    if (n.LengthSquared() < 1e-8f) continue;
+                    n = Vector3.Normalize(n);
+                    if (Vector3.Dot(n, centre - p1) > 0) n = -n; // face away from the inside of the solid
+
+                    chamfers.Add(new Sledge.DataStructures.Geometric.Plane(n, p1));
+                }
             }
-            solid1.DescendantsChanged();
+            if (chamfers.Count == 0) return false;
+
+            var poly = new Polyhedron(solid.Faces.Select(f => f.Plane).Concat(chamfers));
+            if (poly.Polygons.Count < 4) return false;
+            if (poly.Polygons.Any(p => p.Vertices.Count < 3 || p.Vertices.Any(v => !IsFinite(v)))) return false;
+
+            var nullTexture = faces[0].Texture.Clone();
+            nullTexture.Name = "null";
+
+            var rebuilt = new List<MutableFace>();
+            foreach (var pg in poly.Polygons)
+            {
+                var original = solid.Faces.FirstOrDefault(f => f.Plane.EquivalentTo(pg.Plane, 0.0075f));
+                rebuilt.Add(new MutableFace(pg.Vertices, original != null ? original.Texture.Clone() : nullTexture.Clone()));
+            }
+
+            solid.Faces.Clear();
+            foreach (var f in rebuilt) solid.Faces.Add(f);
+            return true;
         }
 
 		#endregion
