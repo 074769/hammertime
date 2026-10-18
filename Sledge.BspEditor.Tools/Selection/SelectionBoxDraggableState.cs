@@ -59,8 +59,8 @@ namespace Sledge.BspEditor.Tools.Selection
 
 		/// <summary>
 		/// Shows or hides the selection's bounding box (outline, fill and size text in the 2D views,
-		/// wireframe in the 3D view) together with the transform handles and move highlight.
-		/// The handles stay interactive, and the model origin markers are not affected.
+		/// wireframe in the 3D view) and the move highlight. The transform handles are not affected
+		/// and stay visible. The model origin markers are not affected either.
 		/// </summary>
 		public bool ShowBoundingBox
 		{
@@ -68,7 +68,7 @@ namespace Sledge.BspEditor.Tools.Selection
 			set
 			{
 				_showBoundingBox = value;
-				RenderHandles = value; // handles and the move highlight follow the box
+				RenderMoveHighlight = value;
 			}
 		}
 		private bool _showBoundingBox = true;
