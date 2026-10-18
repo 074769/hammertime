@@ -260,6 +260,52 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
             solid1.DescendantsChanged();
         }
 
+		#endregion
+
+		#region 3D interaction
+
+		private Vector3? GetIntersectionPoint(MutableFace face, Line line)
+        {
+            return new Polygon(face.Vertices.Select(x => x.Position)).GetIntersectionPoint(line);
+        }
+        
+        protected override void MouseDown(MapDocument document, MapViewport viewport, PerspectiveCamera camera,
+            ViewportEvent e)
+        {
+            if (e.Button != MouseButtons.Left) return;
+
+            e.Handled = true;
+
+            // First, get the ray that is cast from the clicked point along the viewport frustrum
+            var (start, end) = camera.CastRayFromScreen(new Vector3(e.X, e.Y, 0));
+            var ray = new Line(start, end);
+
+            // Grab all the elements that intersect with the ray
+            var hits = Selection.Where(x => x.Copy.BoundingBox.IntersectsWith(ray));
+
+            // Sort the list of intersecting elements by distance from ray origin
+            var clickedFace = hits
+                .SelectMany(x => x.Copy.Faces.Select(f => new { Solid = x, Face = f}))
+                .Select(x => new { Item = x, Intersection = GetIntersectionPoint(x.Face, ray) })
+                .Where(x => x.Intersection != null)
+                .OrderBy(x => (x.Intersection.Value - ray.Start).Length())
+                .Select(x => x.Item)
+                .FirstOrDefault();
+            
+
+            var faces = new List<SolidFace>();
+            if (clickedFace != null)
+            {
+                if (KeyboardState.Shift) faces.AddRange(clickedFace.Solid.Copy.Faces.Select(x => new SolidFace(clickedFace.Solid, x)));
+                else faces.Add(new SolidFace(clickedFace.Solid, clickedFace.Face));
+            }
+            
+            if (!KeyboardState.Ctrl) ClearSelection();
+            _selectedFaces.AddRange(faces);
+
+            Invalidate();
+        }
+
         #endregion
 
         public override async Task SelectionChanged()
