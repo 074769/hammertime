@@ -447,7 +447,7 @@ namespace Sledge.BspEditor.Tools.Extrude
             transaction.Add(new Attach(parent.ID, created));
         }
 
-        private static Face MakeFace(UniqueNumberGenerator gen, IEnumerable<Vector3> vertices, Texture texture)
+        private static Face MakeFace(UniqueNumberGenerator gen, IEnumerable<Vector3> vertices, Sledge.BspEditor.Primitives.Texture texture)
         {
             var verts = vertices.ToList();
             var face = new Face(gen.Next("Face")) { Texture = texture };
