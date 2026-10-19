@@ -26,16 +26,23 @@ using Sledge.Rendering.Overlay;
 using Sledge.Rendering.Viewports;
 using Sledge.Shell.Input;
 using Plane = Sledge.DataStructures.Geometric.Plane;
+using BufferBuilder = Sledge.Rendering.Resources.BufferBuilder;
+using BufferGroup = Sledge.Rendering.Resources.BufferGroup;
+using ResourceCollector = Sledge.BspEditor.Rendering.Resources.ResourceCollector;
+using PipelineType = Sledge.Rendering.Pipelines.PipelineType;
+using VertexStandard = Sledge.Rendering.Primitives.VertexStandard;
+using VertexFlags = Sledge.Rendering.Primitives.VertexFlags;
 
 namespace Sledge.BspEditor.Tools.Extrude
 {
     /// <summary>
-    /// Extrude tool: click a face in the 3D view and drag it out. Releasing the mouse makes the extrusion.
+    /// Extrude tool, in two steps that E switches between.
     ///
-    /// Any visible face can be picked, the solid doesn't have to be selected. Ctrl+click adds or removes a face; dragging one of
-    /// the picked faces extrudes all of them, and faces that share vertices meet there (their edges are mitred, not overlapped).
-    /// The drag snaps to the amount set in the sidebar (1 unit by default); Enter extrudes the picked faces by exactly that amount.
-    /// Escape clears the picked faces. After an extrusion the new end faces stay picked, so the next drag continues from them.
+    /// Select (red): click a face, Ctrl+click to add or remove, or hold the left button and sweep over faces to pick them. Any visible
+    /// face can be picked, the solid doesn't have to be selected.
+    /// Extrude (blue): drag away from the picked faces and release to make the extrusion. Faces that share vertices meet there
+    /// (their edges are mitred, not overlapped). The drag snaps to the amount in the sidebar (1 unit by default); Enter extrudes by exactly that amount.
+    /// Escape clears the picked faces. After an extrusion the new end faces stay picked, ready for the next drag.
     /// </summary>
     [Export(typeof(ITool))]
     [Export]
@@ -62,12 +69,34 @@ namespace Sledge.BspEditor.Tools.Extrude
         private string _status;
         private float _amount = 1;
 
+        // false: picking faces (red), true: dragging them out (blue). E switches between the two
+        private bool _extrudeMode;
+        private bool _painting;
+
         // Drag state: the face the mouse went down on, where, and how far it has been pulled (already snapped)
         private PickedFace _anchor;
         private int _downX;
         private int _downY;
         private bool _dragging;
         private float _dragDistance;
+
+        /// <summary>True while the tool is in its extrude step (picked faces are blue), false while it is picking faces (red).</summary>
+        public bool IsExtrudeMode
+        {
+            get { lock (_lock) return _extrudeMode; }
+        }
+
+        /// <summary>Switches between picking faces and extruding them.</summary>
+        public void ToggleMode()
+        {
+            lock (_lock)
+            {
+                _extrudeMode = !_extrudeMode;
+                _painting = false;
+                CancelDragUnlocked();
+                _status = null;
+            }
+        }
 
         /// <summary>The extrusion amount (units). Drags snap to multiples of it and Enter extrudes by it.</summary>
         public float Amount
@@ -115,6 +144,7 @@ namespace Sledge.BspEditor.Tools.Extrude
 
         public override Task ToolSelected()
         {
+            lock (_lock) _extrudeMode = false;
             ClearFaces();
             return base.ToolSelected();
         }
@@ -123,6 +153,7 @@ namespace Sledge.BspEditor.Tools.Extrude
         {
             CancelDrag();
             ClearFaces();
+            lock (_lock) _extrudeMode = false;
             return base.ToolDeselected();
         }
 
@@ -178,15 +209,22 @@ namespace Sledge.BspEditor.Tools.Extrude
             return value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + (Math.Abs(value - 1) < 0.001f ? " unit" : " units");
         }
 
-        /// <summary>One line for the sidebar: what is picked, what will happen, or why it can't.</summary>
+        /// <summary>One line for the sidebar: what is picked, what to do next, or why nothing happened.</summary>
         public string GetInfoText()
         {
             lock (_lock)
             {
                 if (_dragging) return "Extruding " + Units(_dragDistance) + ". Release to make it.";
                 if (!string.IsNullOrEmpty(_status)) return _status;
-                if (_faces.Count == 0) return "Click a face to pick it, then drag it out. Ctrl adds or removes faces.";
-                return _faces.Count + (_faces.Count == 1 ? " face picked." : " faces picked.") + " Drag one out, or press Enter to extrude by " + Units(_amount) + ".";
+
+                if (!_extrudeMode)
+                {
+                    if (_faces.Count == 0) return "Click a face, or hold the mouse and sweep over faces. Ctrl adds or removes. Then press E to extrude.";
+                    return _faces.Count + (_faces.Count == 1 ? " face picked." : " faces picked.") + " Press E to extrude them.";
+                }
+
+                if (_faces.Count == 0) return "No faces picked. Press E to go back and pick some.";
+                return _faces.Count + (_faces.Count == 1 ? " face picked." : " faces picked.") + " Drag to extrude, or press Enter for " + Units(_amount) + ". E goes back to picking.";
             }
         }
 
@@ -244,8 +282,21 @@ namespace Sledge.BspEditor.Tools.Extrude
             lock (_lock)
             {
                 CancelDragUnlocked();
+                _painting = false;
                 _status = null;
 
+                if (_extrudeMode)
+                {
+                    // Extrude step: nothing is picked or unpicked here. The drag pulls every picked face, measured along
+                    // the face under the cursor (or the first picked face when the cursor is somewhere else)
+                    var under = picked == null ? null : _faces.FirstOrDefault(x => ReferenceEquals(x.Face, picked.Face));
+                    _anchor = under ?? _faces.FirstOrDefault();
+                    _downX = e.X;
+                    _downY = e.Y;
+                    return;
+                }
+
+                // Select step
                 if (picked == null)
                 {
                     if (!KeyboardState.Ctrl) _faces.Clear();
@@ -259,16 +310,8 @@ namespace Sledge.BspEditor.Tools.Extrude
                     return;
                 }
 
-                if (existing == null)
-                {
-                    if (!KeyboardState.Ctrl) _faces.Clear();
-                    _faces.Add(picked);
-                }
-
-                // Dragging from here pulls every picked face
-                _anchor = existing ?? picked;
-                _downX = e.X;
-                _downY = e.Y;
+                if (!KeyboardState.Ctrl) _faces.Clear();
+                if (!_faces.Any(x => ReferenceEquals(x.Face, picked.Face))) _faces.Add(picked);
             }
         }
 
@@ -277,7 +320,7 @@ namespace Sledge.BspEditor.Tools.Extrude
             var hover = PickFace(document, camera, e.X, e.Y);
             lock (_lock)
             {
-                if (!_dragging) _hover = hover;
+                if (!_dragging) _hover = _extrudeMode ? null : hover;
             }
         }
 
@@ -291,10 +334,18 @@ namespace Sledge.BspEditor.Tools.Extrude
             if (e.Button != MouseButtons.Left) return;
             lock (_lock)
             {
-                if (_anchor == null) return;
-                _dragging = true;
-                _dragDistance = 0;
-                _hover = null;
+                if (_extrudeMode)
+                {
+                    if (_anchor == null) return;
+                    _dragging = true;
+                    _dragDistance = 0;
+                    _hover = null;
+                }
+                else
+                {
+                    // Select step: sweeping over faces picks them
+                    _painting = true;
+                }
             }
             e.Handled = true;
         }
@@ -306,6 +357,14 @@ namespace Sledge.BspEditor.Tools.Extrude
             int downX, downY;
             lock (_lock)
             {
+                if (_painting)
+                {
+                    e.Handled = true;
+                    var swept = PickFace(document, camera, e.X, e.Y);
+                    if (swept != null && !_faces.Any(x => ReferenceEquals(x.Face, swept.Face))) _faces.Add(swept);
+                    return;
+                }
+
                 if (!_dragging || _anchor == null) return;
                 anchor = _anchor;
                 amount = _amount;
@@ -327,6 +386,13 @@ namespace Sledge.BspEditor.Tools.Extrude
             float distance;
             lock (_lock)
             {
+                if (_painting)
+                {
+                    _painting = false;
+                    e.Handled = true;
+                    return;
+                }
+
                 wasDragging = _dragging;
                 distance = _dragDistance;
                 CancelDragUnlocked();
@@ -362,7 +428,12 @@ namespace Sledge.BspEditor.Tools.Extrude
 
         private void HandleKey(ViewportEvent e)
         {
-            if (e.KeyCode == Keys.Enter)
+            if (e.KeyCode == Keys.E && !e.Control && !e.Shift && !e.Alt)
+            {
+                ToggleMode();
+                e.Handled = true;
+            }
+            else if (e.KeyCode == Keys.Enter)
             {
                 float amount;
                 lock (_lock) amount = _amount;
@@ -372,6 +443,7 @@ namespace Sledge.BspEditor.Tools.Extrude
             else if (e.KeyCode == Keys.Escape)
             {
                 CancelDrag();
+                lock (_lock) _painting = false;
                 ClearFaces();
                 e.Handled = true;
             }
@@ -565,12 +637,17 @@ namespace Sledge.BspEditor.Tools.Extrude
             transaction.Add(new Attach(parent.ID, created));
         }
 
-        private static Face MakeFace(UniqueNumberGenerator gen, IEnumerable<Vector3> vertices, Sledge.BspEditor.Primitives.Texture texture)
+        /// <summary>
+        /// A new face. With align, the texture axes are reset to lie in the face's own plane: a texture copied from a face that
+        /// points another way would have its axes perpendicular to this one (the "texture axis perpendicular to face" problem).
+        /// </summary>
+        private static Face MakeFace(UniqueNumberGenerator gen, IEnumerable<Vector3> vertices, Sledge.BspEditor.Primitives.Texture texture, bool align)
         {
             var verts = vertices.ToList();
             var face = new Face(gen.Next("Face")) { Texture = texture };
             face.Vertices.AddRange(verts);
             face.Plane = new Plane(verts[0], verts[1], verts[2]);
+            if (align) face.Texture.AlignToNormal(face.Plane.Normal);
             return face;
         }
 
@@ -592,16 +669,16 @@ namespace Sledge.BspEditor.Tools.Extrude
             for (var i = 0; i < bottom.Count; i++)
             {
                 var j = (i + 1) % bottom.Count;
-                extruded.Data.Add(MakeFace(gen, new[] { bottom[i], bottom[j], top[j], top[i] }, nullTexture.Clone()));
+                extruded.Data.Add(MakeFace(gen, new[] { bottom[i], bottom[j], top[j], top[i] }, nullTexture.Clone(), true));
             }
 
             // The base sits on the old face (turned around) and the top is the moved face
-            extruded.Data.Add(MakeFace(gen, Enumerable.Reverse(bottom), nullTexture.Clone()));
-            var topFace = MakeFace(gen, top, face.Texture.Clone());
+            extruded.Data.Add(MakeFace(gen, Enumerable.Reverse(bottom), nullTexture.Clone(), true));
+            var topFace = MakeFace(gen, top, face.Texture.Clone(), false);
             extruded.Data.Add(topFace);
 
             // The old face is now covered by the new solid, so it loses its texture
-            var covered = MakeFace(gen, bottom, nullTexture.Clone());
+            var covered = MakeFace(gen, bottom, nullTexture.Clone(), false);
             transaction.Add(new RemoveMapObjectData(picked.Solid.ID, new[] { face }));
             transaction.Add(new AddMapObjectData(picked.Solid.ID, new[] { covered }));
 
@@ -614,9 +691,60 @@ namespace Sledge.BspEditor.Tools.Extrude
 
         #region Rendering
 
-        private static readonly Color FaceColour = Color.OrangeRed;
+        // Red while picking faces, blue while extruding them
+        private static readonly Color SelectColour = Color.Red;
+        private static readonly Color ExtrudeColour = Color.DodgerBlue;
         private static readonly Color HoverColour = Color.Yellow;
         private static readonly Color PreviewColour = Color.Cyan;
+
+        protected override void Render(MapDocument document, BufferBuilder builder, ResourceCollector resourceCollector)
+        {
+            base.Render(document, builder, resourceCollector);
+
+            List<PickedFace> faces;
+            bool extrude;
+            lock (_lock)
+            {
+                faces = _faces.ToList();
+                extrude = _extrudeMode;
+            }
+            if (faces.Count == 0) return;
+
+            var verts = new List<VertexStandard>();
+            var indices = new List<int>();
+            var groups = new List<BufferGroup>();
+
+            var col = Vector4.One;
+            var tint = Color.FromArgb(128, extrude ? ExtrudeColour : SelectColour).ToVector4();
+
+            foreach (var p in faces)
+            {
+                var corners = p.Face.Vertices.ToList();
+                if (corners.Count < 3) continue;
+
+                var vo = verts.Count;
+                var io = indices.Count;
+
+                verts.AddRange(corners.Select(x => new VertexStandard
+                {
+                    Position = x,
+                    Colour = col,
+                    Tint = tint,
+                    Flags = VertexFlags.FlatColour
+                }));
+
+                for (var i = 2; i < corners.Count; i++)
+                {
+                    indices.Add(vo);
+                    indices.Add(vo + i - 1);
+                    indices.Add(vo + i);
+                }
+
+                groups.Add(new BufferGroup(PipelineType.TexturedAlpha, CameraType.Perspective, p.Face.Origin, (uint) io, (uint) (indices.Count - io)));
+            }
+
+            if (verts.Count > 0) builder.Append(verts, indices.Select(x => (uint) x), groups);
+        }
 
         private static bool ClipToFront(PerspectiveCamera camera, ref Vector3 a, ref Vector3 b)
         {
@@ -635,6 +763,7 @@ namespace Sledge.BspEditor.Tools.Extrude
             PickedFace hover;
             PickedFace anchor;
             bool dragging;
+            bool extrude;
             float distance;
             lock (_lock)
             {
@@ -642,8 +771,10 @@ namespace Sledge.BspEditor.Tools.Extrude
                 hover = _hover;
                 anchor = _anchor;
                 dragging = _dragging;
+                extrude = _extrudeMode;
                 distance = _dragDistance;
             }
+            var faceColour = extrude ? ExtrudeColour : SelectColour;
 
             void Line(Vector3 a, Vector3 b, Color colour, float width)
             {
@@ -680,9 +811,16 @@ namespace Sledge.BspEditor.Tools.Extrude
                 }
             }
 
-            foreach (var p in faces) Outline(p.Face.Vertices.ToList(), FaceColour, 3f);
+            foreach (var p in faces) Outline(p.Face.Vertices.ToList(), faceColour, 3f);
 
             if (hover != null && !faces.Any(f => ReferenceEquals(f.Face, hover.Face))) Outline(hover.Face.Vertices.ToList(), HoverColour, 3f);
+
+            // Which step the tool is in, so it is obvious whether a click picks faces or a drag extrudes them
+            if (camera != null)
+            {
+                var label = extrude ? "EXTRUDE  (E: back to select)" : "SELECT FACES  (E: extrude)";
+                im.AddText(new Vector2(12, 12), faceColour, FontType.Large, label);
+            }
 
             // The amount, next to the face being pulled
             if (camera != null && dragging && anchor != null)
