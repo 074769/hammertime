@@ -145,18 +145,34 @@ namespace Sledge.BspEditor.Tools.Extrude
             });
         }
 
+        // Pressing the tool's hotkey while the tool is already active re-activates it: the tool is deselected and selected again
+        // straight away. That is the cue to switch step instead of starting over (the same way the clip tool cycles its side).
+        private static readonly TimeSpan ReactivationWindow = TimeSpan.FromMilliseconds(250);
+        private DateTime _deselectedAt = DateTime.MinValue;
+
         public override Task ToolSelected()
         {
-            lock (_lock) _extrudeMode = false;
-            ClearFaces();
+            var reactivated = DateTime.UtcNow - _deselectedAt < ReactivationWindow;
+            if (reactivated)
+            {
+                // Same tool, pressed again: keep the picked faces and switch between selecting and extruding
+                ToggleMode();
+            }
+            else
+            {
+                lock (_lock) _extrudeMode = false;
+                ClearFaces();
+            }
             return base.ToolSelected();
         }
 
         public override Task ToolDeselected()
         {
+            // Nothing is cleared here: if this turns out to be a re-activation the picked faces must survive.
+            // A genuine switch to another tool is cleaned up by the next ToolSelected.
             CancelDrag();
-            ClearFaces();
-            lock (_lock) _extrudeMode = false;
+            lock (_lock) _painting = false;
+            _deselectedAt = DateTime.UtcNow;
             return base.ToolDeselected();
         }
 
@@ -446,20 +462,6 @@ namespace Sledge.BspEditor.Tools.Extrude
                 e.Handled = true;
             }
         }
-
-        /// <summary>
-        /// The tool's hotkey is the one set in Settings > Hotkeys for this tool. It normally just activates the tool; while the tool
-        /// is already active it is taken here instead, and switches between picking faces and extruding them.
-        /// </summary>
-        private bool HandleToolHotkey(string hotkey)
-        {
-            if (hotkey != GetName()) return false;
-            ToggleMode();
-            return true;
-        }
-
-        protected override bool FilterHotkey(MapDocument document, MapViewport viewport, PerspectiveCamera camera, string hotkey, Keys keys) => HandleToolHotkey(hotkey);
-        protected override bool FilterHotkey(MapDocument document, MapViewport viewport, OrthographicCamera camera, string hotkey, Keys keys) => HandleToolHotkey(hotkey);
 
         protected override void KeyDown(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e) => HandleKey(e);
         protected override void KeyDown(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e) => HandleKey(e);
