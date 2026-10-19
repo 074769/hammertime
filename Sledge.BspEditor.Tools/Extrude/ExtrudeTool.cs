@@ -30,11 +30,12 @@ using Plane = Sledge.DataStructures.Geometric.Plane;
 namespace Sledge.BspEditor.Tools.Extrude
 {
     /// <summary>
-    /// Extrude tool: pick faces of the selected solids, set a distance, press Extrude.
+    /// Extrude tool: click a face in the 3D view and drag it out. Releasing the mouse makes the extrusion.
     ///
-    /// Click a solid in the 3D view to select it first, then click its faces (Ctrl+click adds or removes a face,
-    /// Shift+click picks every face of the solid, hold the left button and sweep to paint faces).
-    /// The new block is previewed while faces are picked. Enter applies, Escape clears the faces.
+    /// Any visible face can be picked, the solid doesn't have to be selected. Ctrl+click adds or removes a face; dragging one of
+    /// the picked faces extrudes all of them, and faces that share vertices meet there (their edges are mitred, not overlapped).
+    /// The drag snaps to the amount set in the sidebar (1 unit by default); Enter extrudes the picked faces by exactly that amount.
+    /// Escape clears the picked faces. After an extrusion the new end faces stay picked, so the next drag continues from them.
     /// </summary>
     [Export(typeof(ITool))]
     [Export]
@@ -59,18 +60,24 @@ namespace Sledge.BspEditor.Tools.Extrude
         private readonly List<PickedFace> _faces = new List<PickedFace>();
         private PickedFace _hover;
         private string _status;
-        private bool _painting;
-        private float _distance = 16;
+        private float _amount = 1;
 
-        /// <summary>How far to extrude along each face's normal (units).</summary>
-        public float Distance
+        // Drag state: the face the mouse went down on, where, and how far it has been pulled (already snapped)
+        private PickedFace _anchor;
+        private int _downX;
+        private int _downY;
+        private bool _dragging;
+        private float _dragDistance;
+
+        /// <summary>The extrusion amount (units). Drags snap to multiples of it and Enter extrudes by it.</summary>
+        public float Amount
         {
-            get => _distance;
+            get => _amount;
             set
             {
                 lock (_lock)
                 {
-                    _distance = value;
+                    _amount = Math.Max(0.01f, value);
                     _status = null;
                 }
             }
@@ -114,21 +121,27 @@ namespace Sledge.BspEditor.Tools.Extrude
 
         public override Task ToolDeselected()
         {
-            _painting = false;
+            CancelDrag();
             ClearFaces();
             return base.ToolDeselected();
         }
 
         protected override void DocumentChanged()
         {
+            CancelDrag();
             ClearFaces();
         }
 
         #region State
 
-        private static IEnumerable<Solid> SelectedSolids(MapDocument document)
+        private void CancelDrag()
         {
-            return document.Selection.OfType<Solid>().ToList();
+            lock (_lock)
+            {
+                _anchor = null;
+                _dragging = false;
+                _dragDistance = 0;
+            }
         }
 
         private void ClearFaces()
@@ -141,38 +154,39 @@ namespace Sledge.BspEditor.Tools.Extrude
             }
         }
 
-        /// <summary>Drops faces whose solid is no longer selected or no longer has that face.</summary>
+        /// <summary>Drops faces whose solid is gone from the map or no longer has that face (undo, redo, another tool).</summary>
         private void Refresh()
         {
-            var document = GetDocument();
             lock (_lock)
             {
-                if (document == null)
-                {
-                    _faces.Clear();
-                }
-                else
-                {
-                    var selected = new HashSet<Solid>(SelectedSolids(document));
-                    _faces.RemoveAll(f => !selected.Contains(f.Solid) || !f.Solid.Faces.Any(x => ReferenceEquals(x, f.Face)));
-                }
+                _faces.RemoveAll(f => f.Solid.Hierarchy.Parent == null || !f.Solid.Faces.Any(x => ReferenceEquals(x, f.Face)));
+                if (_anchor != null && !_faces.Any(f => ReferenceEquals(f.Face, _anchor.Face))) CancelDragUnlocked();
                 _hover = null;
                 _status = null;
             }
         }
 
-        /// <summary>One line for the sidebar: what is selected, what will happen, or why it can't.</summary>
+        private void CancelDragUnlocked()
+        {
+            _anchor = null;
+            _dragging = false;
+            _dragDistance = 0;
+        }
+
+        private static string Units(float value)
+        {
+            return value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + (Math.Abs(value - 1) < 0.001f ? " unit" : " units");
+        }
+
+        /// <summary>One line for the sidebar: what is picked, what will happen, or why it can't.</summary>
         public string GetInfoText()
         {
             lock (_lock)
             {
+                if (_dragging) return "Extruding " + Units(_dragDistance) + ". Release to make it.";
                 if (!string.IsNullOrEmpty(_status)) return _status;
-
-                var document = GetDocument();
-                if (document == null) return "";
-                if (!SelectedSolids(document).Any()) return "Select a solid (click it in the 3D view), then click its faces.";
-                if (_faces.Count == 0) return "Click a face to pick it. Shift+click picks the whole solid, drag to paint faces. Ctrl adds or removes.";
-                return _faces.Count + (_faces.Count == 1 ? " face selected." : " faces selected.");
+                if (_faces.Count == 0) return "Click a face to pick it, then drag it out. Ctrl adds or removes faces.";
+                return _faces.Count + (_faces.Count == 1 ? " face picked." : " faces picked.") + " Drag one out, or press Enter to extrude by " + Units(_amount) + ".";
             }
         }
 
@@ -180,102 +194,46 @@ namespace Sledge.BspEditor.Tools.Extrude
 
         #region Picking
 
-        /// <summary>
-        /// True if nothing else is in front of the point as seen from the camera. The solids themselves count, so the far side
-        /// of a brush is hidden by its own near side.
-        /// </summary>
-        private static bool IsVisible(MapDocument document, PerspectiveCamera camera, Vector3 point)
+        /// <summary>The nearest face under the cursor that points at the camera, on the nearest solid the cursor is over. Any solid counts.</summary>
+        private static PickedFace PickFace(MapDocument document, PerspectiveCamera camera, int x, int y)
         {
-            var distance = (point - camera.Position).Length();
-            if (distance < 1e-3f) return true;
-
-            var tolerance = 0.5f + distance * 0.003f;
-            foreach (var hit in document.Map.Root.GetIntersectionsForVisibleObjects(new Line(camera.Position, point)))
-            {
-                if (!(hit.Object is Solid)) continue;
-                return (hit.Intersection - camera.Position).Length() >= distance - tolerance;
-            }
-            return true;
-        }
-
-        /// <summary>The nearest visible, camera-facing face of a selected solid under the cursor, or null.</summary>
-        private PickedFace PickFace(MapDocument document, PerspectiveCamera camera, int x, int y)
-        {
-            var selected = SelectedSolids(document).ToList();
-            if (selected.Count == 0) return null;
-
             var (start, end) = camera.CastRayFromScreen(new Vector3(x, y, 0));
             var line = new Line(start, end);
             var dir = Vector3.Normalize(end - start);
 
-            PickedFace best = null;
-            var bestPoint = Vector3.Zero;
+            var hit = document.Map.Root.GetIntersectionsForVisibleObjects(line)
+                .FirstOrDefault(h => h.Object is Solid);
+            if (hit == null) return null;
+
+            var solid = (Solid) hit.Object;
+            Face best = null;
             var bestDistance = float.MaxValue;
-
-            foreach (var solid in selected)
+            foreach (var face in solid.Faces)
             {
-                foreach (var face in solid.Faces)
-                {
-                    if (face.Vertices.Count < 3) continue;
-                    if (Vector3.Dot(face.Plane.Normal, dir) >= 0) continue;
+                if (face.Vertices.Count < 3) continue;
+                if (Vector3.Dot(face.Plane.Normal, dir) >= 0) continue;
 
-                    var hit = new Polygon(face.Vertices).GetIntersectionPoint(line);
-                    if (!hit.HasValue) continue;
+                var point = new Polygon(face.Vertices).GetIntersectionPoint(line);
+                if (!point.HasValue) continue;
 
-                    var d = (hit.Value - start).Length();
-                    if (d >= bestDistance) continue;
+                var d = (point.Value - start).Length();
+                if (d >= bestDistance) continue;
 
-                    bestDistance = d;
-                    bestPoint = hit.Value;
-                    best = new PickedFace(solid, face);
-                }
+                bestDistance = d;
+                best = face;
             }
 
-            return best != null && IsVisible(document, camera, bestPoint) ? best : null;
+            return best == null ? null : new PickedFace(solid, best);
         }
 
-        /// <summary>Adds the picked face (every face of its solid with Shift). With toggle, faces already picked are removed instead.</summary>
-        private bool AddPicked(PickedFace picked, bool wholeSolid, bool toggle)
+        private bool IsPicked(PickedFace picked)
         {
-            var changed = false;
-            var faces = wholeSolid ? picked.Solid.Faces.ToList() : new List<Face> { picked.Face };
-            lock (_lock)
-            {
-                foreach (var f in faces)
-                {
-                    var existing = _faces.FirstOrDefault(x => ReferenceEquals(x.Face, f));
-                    if (existing != null)
-                    {
-                        if (!toggle) continue;
-                        _faces.Remove(existing);
-                    }
-                    else
-                    {
-                        _faces.Add(new PickedFace(picked.Solid, f));
-                    }
-                    changed = true;
-                }
-                _status = null;
-            }
-            return changed;
+            return _faces.Any(x => ReferenceEquals(x.Face, picked.Face));
         }
 
         #endregion
 
         #region Mouse and keys
-
-        private void SelectSolid(MapDocument document, Solid solid)
-        {
-            if (solid == null) return;
-
-            var operation = new Transaction();
-            if (!KeyboardState.Ctrl)
-            {
-                operation.Add(new Deselect(document.Selection.Where(x => !ReferenceEquals(x, solid)).ToList()));
-            }
-            if (!solid.IsSelected) operation.Add(new Select(solid));
-            if (!operation.IsEmpty) MapDocumentOperation.Perform(document, operation);
-        }
 
         protected override void MouseDown(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
         {
@@ -283,45 +241,44 @@ namespace Sledge.BspEditor.Tools.Extrude
             e.Handled = true;
 
             var picked = PickFace(document, camera, e.X, e.Y);
-            if (picked != null)
+            lock (_lock)
             {
-                if (!KeyboardState.Ctrl) ClearFaces();
-                AddPicked(picked, KeyboardState.Shift, KeyboardState.Ctrl);
-                _painting = true;
-                return;
-            }
+                CancelDragUnlocked();
+                _status = null;
 
-            // Not on a face of a selected solid: a click on a solid selects that solid, so its faces can be picked next
-            var (start, end) = camera.CastRayFromScreen(new Vector3(e.X, e.Y, 0));
-            var closest = document.Map.Root.GetIntersectionsForVisibleObjects(new Line(start, end))
-                .Where(x => x.Object is Solid)
-                .Select(x => (Solid) x.Object)
-                .FirstOrDefault();
+                if (picked == null)
+                {
+                    if (!KeyboardState.Ctrl) _faces.Clear();
+                    return;
+                }
 
-            if (closest != null)
-            {
-                if (!closest.IsSelected || KeyboardState.Ctrl) SelectSolid(document, closest);
+                var existing = _faces.FirstOrDefault(x => ReferenceEquals(x.Face, picked.Face));
+                if (existing != null && KeyboardState.Ctrl)
+                {
+                    _faces.Remove(existing);
+                    return;
+                }
+
+                if (existing == null)
+                {
+                    if (!KeyboardState.Ctrl) _faces.Clear();
+                    _faces.Add(picked);
+                }
+
+                // Dragging from here pulls every picked face
+                _anchor = existing ?? picked;
+                _downX = e.X;
+                _downY = e.Y;
             }
-            else if (!KeyboardState.Ctrl) ClearFaces();
         }
 
         protected override void MouseMove(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
         {
-            // Painting: faces under the cursor are added as it sweeps over them
-            if (_painting)
-            {
-                var painted = PickFace(document, camera, e.X, e.Y);
-                if (painted != null && !_faces.Any(x => ReferenceEquals(x.Face, painted.Face))) AddPicked(painted, false, false);
-            }
-
             var hover = PickFace(document, camera, e.X, e.Y);
-            lock (_lock) _hover = hover;
-        }
-
-        protected override void MouseUp(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
-        {
-            if (e.Button != MouseButtons.Left) return;
-            _painting = false;
+            lock (_lock)
+            {
+                if (!_dragging) _hover = hover;
+            }
         }
 
         protected override void MouseLeave(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
@@ -329,15 +286,92 @@ namespace Sledge.BspEditor.Tools.Extrude
             lock (_lock) _hover = null;
         }
 
+        protected override void DragStart(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
+        {
+            if (e.Button != MouseButtons.Left) return;
+            lock (_lock)
+            {
+                if (_anchor == null) return;
+                _dragging = true;
+                _dragDistance = 0;
+                _hover = null;
+            }
+            e.Handled = true;
+        }
+
+        protected override void DragMove(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
+        {
+            PickedFace anchor;
+            float amount;
+            int downX, downY;
+            lock (_lock)
+            {
+                if (!_dragging || _anchor == null) return;
+                anchor = _anchor;
+                amount = _amount;
+                downX = _downX;
+                downY = _downY;
+            }
+            e.Handled = true;
+
+            var distance = DragDistance(camera, anchor, e.X - downX, e.Y - downY);
+            distance = (float) Math.Round(distance / amount) * amount;
+            if (distance < 0) distance = 0;
+
+            lock (_lock) _dragDistance = distance;
+        }
+
+        protected override void DragEnd(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
+        {
+            bool wasDragging;
+            float distance;
+            lock (_lock)
+            {
+                wasDragging = _dragging;
+                distance = _dragDistance;
+                CancelDragUnlocked();
+            }
+            if (!wasDragging) return;
+
+            e.Handled = true;
+            if (distance > 0) Apply(distance);
+        }
+
+        /// <summary>How far the face has been pulled along its normal, from how far the mouse moved on screen (in units, not snapped).</summary>
+        private static float DragDistance(PerspectiveCamera camera, PickedFace anchor, float dx, float dy)
+        {
+            const float probe = 64f;
+            var center = anchor.Face.Origin;
+            var normal = anchor.Face.Plane.Normal;
+
+            var p0 = camera.WorldToScreen(center);
+            var p1 = camera.WorldToScreen(center + normal * probe);
+            var along = new Vector2(p1.X - p0.X, p1.Y - p0.Y);
+            var pixelsPerUnit = along.Length() / probe;
+
+            // The normal points almost straight at (or away from) the camera, so it has no direction on screen:
+            // fall back to the vertical mouse movement, scaled by how far away the face is
+            if (pixelsPerUnit < 0.05f)
+            {
+                var distanceToCamera = (center - camera.Position).Length();
+                return -dy * Math.Max(0.1f, distanceToCamera / 400f);
+            }
+
+            return Vector2.Dot(new Vector2(dx, dy), along / along.Length()) / pixelsPerUnit;
+        }
+
         private void HandleKey(ViewportEvent e)
         {
             if (e.KeyCode == Keys.Enter)
             {
-                var unused = Apply();
+                float amount;
+                lock (_lock) amount = _amount;
+                var unused = Apply(amount);
                 e.Handled = true;
             }
             else if (e.KeyCode == Keys.Escape)
             {
+                CancelDrag();
                 ClearFaces();
                 e.Handled = true;
             }
@@ -348,58 +382,142 @@ namespace Sledge.BspEditor.Tools.Extrude
 
         #endregion
 
-        #region Apply
+        #region Geometry
 
-        public void ClearSelectedFaces()
+        private static (int, int, int) Key(Vector3 v)
         {
-            ClearFaces();
+            return ((int) Math.Round(v.X * 10), (int) Math.Round(v.Y * 10), (int) Math.Round(v.Z * 10));
         }
 
-        /// <summary>Picks every face of the selected solids.</summary>
-        public void SelectAllFaces()
+        private static bool IsFinite(Vector3 v)
         {
-            var document = GetDocument();
-            if (document == null) return;
-            lock (_lock)
-            {
-                _faces.Clear();
-                foreach (var solid in SelectedSolids(document))
-                {
-                    foreach (var f in solid.Faces) _faces.Add(new PickedFace(solid, f));
-                }
-                _status = null;
-            }
+            return !(float.IsNaN(v.X) || float.IsNaN(v.Y) || float.IsNaN(v.Z) || float.IsInfinity(v.X) || float.IsInfinity(v.Y) || float.IsInfinity(v.Z));
         }
 
         /// <summary>
-        /// Extrudes the picked faces. Each one gets a new solid (sides, a base on the old face, a top that keeps the texture),
-        /// attached to the same parent as the solid it came from. Everything is one transaction, so one undo reverses the lot.
+        /// The direction a vertex moves for one unit of extrusion, given the normals of every picked face that uses it.
+        /// One normal: straight out. Several: the corner where their offset planes meet (each plane moves exactly one unit),
+        /// which is what makes neighbouring faces meet at their shared vertices instead of overlapping or leaving a gap.
         /// </summary>
-        public async Task Apply()
+        private static Vector3 Miter(List<Vector3> normals, Vector3 own)
+        {
+            if (normals.Count == 1) return own;
+
+            var average = Vector3.Zero;
+            foreach (var n in normals) average += n;
+            average = average.LengthSquared() > 1e-6f ? Vector3.Normalize(average) : own;
+
+            Vector3? m = null;
+            if (normals.Count == 2)
+            {
+                var g12 = Vector3.Dot(normals[0], normals[1]);
+                var det = 1 - g12 * g12;
+                if (Math.Abs(det) > 1e-4f)
+                {
+                    var c = 1 / (1 + g12);
+                    m = (normals[0] + normals[1]) * c;
+                }
+            }
+            else if (normals.Count == 3)
+            {
+                var n0 = normals[0];
+                var n1 = normals[1];
+                var n2 = normals[2];
+                var det = Vector3.Dot(n0, Vector3.Cross(n1, n2));
+                if (Math.Abs(det) > 1e-3f)
+                {
+                    // The point whose distance along each normal is exactly 1
+                    m = (Vector3.Cross(n1, n2) + Vector3.Cross(n2, n0) + Vector3.Cross(n0, n1)) / det;
+                }
+            }
+
+            // Very sharp corners would shoot the vertex far away: use the average direction instead
+            if (!m.HasValue || !IsFinite(m.Value) || m.Value.Length() > 4f) return average;
+            return m.Value;
+        }
+
+        /// <summary>A mitred top is only usable if the top face and every side of the new block stay flat.</summary>
+        private static bool IsFlat(List<Vector3> bottom, List<Vector3> top, Vector3 normal)
+        {
+            if (top.Count != bottom.Count || top.Count < 3 || top.Any(v => !IsFinite(v))) return false;
+
+            var topPlane = new Plane(top[0], top[1], top[2]);
+            if (Vector3.Dot(topPlane.Normal, normal) < 0.9f) return false;
+            if (top.Any(v => Math.Abs(Vector3.Dot(topPlane.Normal, v - top[0])) > 0.05f)) return false;
+
+            for (var i = 0; i < bottom.Count; i++)
+            {
+                var j = (i + 1) % bottom.Count;
+                var side = Vector3.Cross(bottom[j] - bottom[i], top[i] - bottom[i]);
+                var length = side.Length();
+                if (length < 1e-4f) return false;
+                if (Math.Abs(Vector3.Dot(side / length, top[j] - bottom[i])) > 0.05f) return false;
+            }
+            return true;
+        }
+
+        /// <summary>Where the far end of each picked face goes. Faces that share vertices share the moved vertex too.</summary>
+        private static Dictionary<PickedFace, List<Vector3>> BuildTops(List<PickedFace> faces, float distance)
+        {
+            var normalsAt = new Dictionary<(int, int, int), List<Vector3>>();
+            foreach (var f in faces)
+            {
+                var n = f.Face.Plane.Normal;
+                foreach (var v in f.Face.Vertices)
+                {
+                    var key = Key(v);
+                    if (!normalsAt.TryGetValue(key, out var list)) normalsAt[key] = list = new List<Vector3>();
+                    if (!list.Any(x => Vector3.Dot(x, n) > 0.9999f)) list.Add(n);
+                }
+            }
+
+            var result = new Dictionary<PickedFace, List<Vector3>>();
+            foreach (var f in faces)
+            {
+                var n = f.Face.Plane.Normal;
+                var bottom = f.Face.Vertices.ToList();
+                var mitred = bottom.Select(v => v + Miter(normalsAt[Key(v)], n) * distance).ToList();
+                result[f] = IsFlat(bottom, mitred, n) ? mitred : bottom.Select(v => v + n * distance).ToList();
+            }
+            return result;
+        }
+
+        #endregion
+
+        #region Apply
+
+        /// <summary>
+        /// Extrudes the picked faces by the distance. Each one gets a new solid (sides, a base on the old face, a top that keeps the
+        /// texture), attached to the same parent as the solid it came from. Everything is one transaction, so one undo reverses the lot.
+        /// The new top faces become the picked faces.
+        /// </summary>
+        public async Task Apply(float distance)
         {
             var document = GetDocument();
             if (document == null) return;
 
             List<PickedFace> faces;
-            float distance;
-            lock (_lock)
-            {
-                faces = _faces.ToList();
-                distance = _distance;
-            }
+            lock (_lock) faces = _faces.ToList();
 
             if (faces.Count == 0)
             {
                 SetStatus("Pick one or more faces first.");
                 return;
             }
+            if (distance <= 0)
+            {
+                SetStatus("Nothing changed.");
+                return;
+            }
 
+            var tops = BuildTops(faces, distance);
             var transaction = new Transaction();
             var parents = new Dictionary<long, IMapObject>();
-            var done = 0;
+            var created = new List<PickedFace>();
             foreach (var picked in faces)
             {
-                if (ExtrudeFace(document, transaction, parents, picked, distance)) done++;
+                var made = ExtrudeFace(document, transaction, parents, picked, tops[picked]);
+                if (made != null) created.Add(made);
             }
 
             if (transaction.IsEmpty)
@@ -408,20 +526,20 @@ namespace Sledge.BspEditor.Tools.Extrude
                 return;
             }
 
-            ClearFaces();
+            CancelDrag();
             await MapDocumentOperation.Perform(document, transaction);
-            SetStatus("Extruded " + done + (done == 1 ? " face" : " faces") + " by "
-                      + distance.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + " units.");
+
+            lock (_lock)
+            {
+                _faces.Clear();
+                _faces.AddRange(created);
+                _status = "Extruded " + created.Count + (created.Count == 1 ? " face" : " faces") + " by " + Units(distance) + ".";
+            }
         }
 
         private void SetStatus(string text)
         {
             lock (_lock) _status = text;
-        }
-
-        private static bool IsFinite(Vector3 v)
-        {
-            return !(float.IsNaN(v.X) || float.IsNaN(v.Y) || float.IsNaN(v.Z) || float.IsInfinity(v.X) || float.IsInfinity(v.Y) || float.IsInfinity(v.Z));
         }
 
         /// <summary>
@@ -456,16 +574,13 @@ namespace Sledge.BspEditor.Tools.Extrude
             return face;
         }
 
-        private static bool ExtrudeFace(MapDocument document, Transaction transaction, Dictionary<long, IMapObject> parents, PickedFace picked, float distance)
+        /// <summary>Queues the new solid for one face. Returns its top face (to keep picked), or null if the face can't be extruded.</summary>
+        private static PickedFace ExtrudeFace(MapDocument document, Transaction transaction, Dictionary<long, IMapObject> parents, PickedFace picked, List<Vector3> top)
         {
             var face = picked.Face;
             var gen = document.Map.NumberGenerator;
             var bottom = face.Vertices.ToList();
-            if (bottom.Count < 3) return false;
-
-            var offset = face.Plane.Normal * distance;
-            var top = bottom.Select(v => v + offset).ToList();
-            if (top.Any(v => !IsFinite(v))) return false;
+            if (bottom.Count < 3 || top.Count != bottom.Count || top.Any(v => !IsFinite(v))) return null;
 
             // Only the extruded face keeps its texture, everything else that gets created is null
             var nullTexture = face.Texture.Clone();
@@ -477,13 +592,13 @@ namespace Sledge.BspEditor.Tools.Extrude
             for (var i = 0; i < bottom.Count; i++)
             {
                 var j = (i + 1) % bottom.Count;
-                var side = MakeFace(gen, new[] { bottom[i], bottom[j], top[j], top[i] }, nullTexture.Clone());
-                extruded.Data.Add(side);
+                extruded.Data.Add(MakeFace(gen, new[] { bottom[i], bottom[j], top[j], top[i] }, nullTexture.Clone()));
             }
 
             // The base sits on the old face (turned around) and the top is the moved face
             extruded.Data.Add(MakeFace(gen, Enumerable.Reverse(bottom), nullTexture.Clone()));
-            extruded.Data.Add(MakeFace(gen, top, face.Texture.Clone()));
+            var topFace = MakeFace(gen, top, face.Texture.Clone());
+            extruded.Data.Add(topFace);
 
             // The old face is now covered by the new solid, so it loses its texture
             var covered = MakeFace(gen, bottom, nullTexture.Clone());
@@ -491,9 +606,8 @@ namespace Sledge.BspEditor.Tools.Extrude
             transaction.Add(new AddMapObjectData(picked.Solid.ID, new[] { covered }));
 
             AttachNextTo(document, transaction, parents, picked.Solid, extruded);
-            transaction.Add(new Select(extruded));
             extruded.DescendantsChanged();
-            return true;
+            return new PickedFace(extruded, topFace);
         }
 
         #endregion
@@ -519,12 +633,16 @@ namespace Sledge.BspEditor.Tools.Extrude
         {
             List<PickedFace> faces;
             PickedFace hover;
+            PickedFace anchor;
+            bool dragging;
             float distance;
             lock (_lock)
             {
                 faces = _faces.ToList();
                 hover = _hover;
-                distance = _distance;
+                anchor = _anchor;
+                dragging = _dragging;
+                distance = _dragDistance;
             }
 
             void Line(Vector3 a, Vector3 b, Color colour, float width)
@@ -544,24 +662,41 @@ namespace Sledge.BspEditor.Tools.Extrude
                 }
             }
 
-            void Outline(Face face, Vector3 shift, Color colour, float width)
+            void Outline(IList<Vector3> v, Color colour, float width)
             {
-                var v = face.Vertices;
-                for (var i = 0; i < v.Count; i++) Line(v[i] + shift, v[(i + 1) % v.Count] + shift, colour, width);
+                for (var i = 0; i < v.Count; i++) Line(v[i], v[(i + 1) % v.Count], colour, width);
             }
 
-            foreach (var p in faces)
+            // While dragging: the block that will be made, with the mitred ends where faces meet
+            if (dragging && distance > 0 && faces.Count > 0)
             {
-                var offset = p.Face.Plane.Normal * distance;
-
-                // The block that will be made: the moved face and the edges that join it to the old one
-                Outline(p.Face, offset, PreviewColour, 1f);
-                foreach (var v in p.Face.Vertices) Line(v, v + offset, PreviewColour, 1f);
-
-                Outline(p.Face, Vector3.Zero, FaceColour, 3f);
+                var tops = BuildTops(faces, distance);
+                foreach (var p in faces)
+                {
+                    var bottom = p.Face.Vertices.ToList();
+                    var top = tops[p];
+                    Outline(top, PreviewColour, 2f);
+                    for (var i = 0; i < bottom.Count; i++) Line(bottom[i], top[i], PreviewColour, 1f);
+                }
             }
 
-            if (hover != null && !faces.Any(f => ReferenceEquals(f.Face, hover.Face))) Outline(hover.Face, Vector3.Zero, HoverColour, 3f);
+            foreach (var p in faces) Outline(p.Face.Vertices.ToList(), FaceColour, 3f);
+
+            if (hover != null && !faces.Any(f => ReferenceEquals(f.Face, hover.Face))) Outline(hover.Face.Vertices.ToList(), HoverColour, 3f);
+
+            // The amount, next to the face being pulled
+            if (camera != null && dragging && anchor != null)
+            {
+                var end = anchor.Face.Origin + anchor.Face.Plane.Normal * distance;
+                var toEnd = Vector3.Dot(end - camera.Position, camera.Direction);
+                if (toEnd > 1f)
+                {
+                    var screen = camera.WorldToScreen(end);
+                    var text = Units(distance);
+                    var size = im.CalcTextSize(FontType.Large, text);
+                    im.AddText(new Vector2(screen.X - size.X / 2, screen.Y - size.Y - 8), PreviewColour, FontType.Large, text);
+                }
+            }
         }
 
         protected override void Render(MapDocument document, IViewport viewport, OrthographicCamera camera, Vector3 worldMin, Vector3 worldMax, I2DRenderer im)
