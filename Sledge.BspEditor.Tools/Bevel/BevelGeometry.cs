@@ -34,6 +34,12 @@ namespace Sledge.BspEditor.Tools.Bevel
         /// <summary>A vertex may sit this far outside a plane before the solid counts as broken.</summary>
         public const float OutsideTolerance = 0.05f;
 
+        /// <summary>Most faces a brush may end up with (the compilers' limit per brush).</summary>
+        public const int MaxFaces = 128;
+
+        /// <summary>Most segments one bevel can have.</summary>
+        public const int MaxSegments = 32;
+
         /// <summary>A clamped distance is rounded down to a multiple of this.</summary>
         public const float Step = 0.125f;
 
@@ -96,18 +102,27 @@ namespace Sledge.BspEditor.Tools.Bevel
             public List<ResultFace> Faces { get; set; } = new List<ResultFace>();
         }
 
+        /// <summary>One flat face of a bevel's profile. Everything is relative to the edge's start point and scales with the distance.</summary>
+        private sealed class Chord
+        {
+            public Vector3 Normal;
+            public Vector3 Mid;
+            public float K;
+        }
+
         private sealed class Cut
         {
             public Vector3 Start;
             public Vector3 End;
-            public Vector3 InA;
-            public Vector3 InB;
-            public Vector3 Normal;
-            public float K;
             public int FaceA;
             public int FaceB;
+            public List<Chord> Chords = new List<Chord>();
+            public float MinChord;
 
-            public Plane PlaneAt(float distance) => new Plane(Normal, Start + InA * distance);
+            public IEnumerable<Plane> PlanesAt(float distance)
+            {
+                return Chords.Select(c => new Plane(c.Normal, Start + c.Mid * distance));
+            }
         }
 
         #region Edges
@@ -190,15 +205,58 @@ namespace Sledge.BspEditor.Tools.Bevel
             return dir;
         }
 
+        /// <summary>
+        /// The corners of a bevel profile for a distance of 1, relative to the edge. One segment is the flat chamfer from
+        /// the point on the first face to the point on the second. More segments follow the arc that touches both faces
+        /// at those two points (Blender's default profile), so every segment is flat and the solid stays convex.
+        /// Null if the edge is too flat or too sharp for an arc.
+        /// </summary>
+        private static List<Vector3> ProfilePoints(Vector3 inA, Vector3 inB, int segments)
+        {
+            if (segments <= 1) return new List<Vector3> { inA, inB };
+
+            var theta = (float) Math.Acos(Math.Max(-1f, Math.Min(1f, Vector3.Dot(inA, inB))));
+            var half = theta / 2;
+            var cosHalf = (float) Math.Cos(half);
+            if (cosHalf < 1e-3f) return null;
+
+            var centre = Vector3.Normalize(inA + inB) / cosHalf;
+            var radius = (float) Math.Tan(half);
+            var u = Vector3.Normalize(inA - centre);
+            var w = Vector3.Normalize(inB - centre);
+            var phi = (float) Math.Acos(Math.Max(-1f, Math.Min(1f, Vector3.Dot(u, w))));
+            var sinPhi = (float) Math.Sin(phi);
+            if (sinPhi < 0.02f) return null;
+
+            var points = new List<Vector3>();
+            for (var k = 0; k <= segments; k++)
+            {
+                var t = k / (float) segments;
+                var dir = u * ((float) Math.Sin((1 - t) * phi) / sinPhi) + w * ((float) Math.Sin(t * phi) / sinPhi);
+                points.Add(centre + dir * radius);
+            }
+            return points;
+        }
+
         public static bool IsFinite(Vector3 v)
         {
             return !(float.IsNaN(v.X) || float.IsNaN(v.Y) || float.IsNaN(v.Z)
                      || float.IsInfinity(v.X) || float.IsInfinity(v.Y) || float.IsInfinity(v.Z));
         }
 
-        private static bool SamePlane(Plane a, Plane b)
+        /// <summary>A polygon's normal from all of its vertices (Newell's method), facing the same way as the hint.</summary>
+        private static Vector3 FaceNormal(IReadOnlyList<Vector3> verts, Vector3 hint)
         {
-            return Vector3.Dot(a.Normal, b.Normal) > 0.99995f && Math.Abs(a.DistanceFromOrigin - b.DistanceFromOrigin) < 0.05f;
+            var n = Vector3.Zero;
+            for (var i = 0; i < verts.Count; i++)
+            {
+                var a = verts[i];
+                var b = verts[(i + 1) % verts.Count];
+                n += new Vector3((a.Y - b.Y) * (a.Z + b.Z), (a.Z - b.Z) * (a.X + b.X), (a.X - b.X) * (a.Y + b.Y));
+            }
+            if (n.LengthSquared() < 1e-12f) return hint;
+            n = Vector3.Normalize(n);
+            return Vector3.Dot(n, hint) < 0 ? -n : n;
         }
 
         private static float Area(IReadOnlyList<Vector3> verts)
@@ -226,7 +284,8 @@ namespace Sledge.BspEditor.Tools.Bevel
         /// <param name="edges">The edges to bevel, as the pairs of end points the user picked.</param>
         /// <param name="requested">How far to cut back along each face.</param>
         /// <param name="clamp">True: shrink the distance until the result is valid. False: all or nothing.</param>
-        public static Result Bevel(IReadOnlyList<FaceInput> faces, IReadOnlyList<(Vector3 Start, Vector3 End)> edges, float requested, bool clamp)
+        /// <param name="segments">How many flat faces each bevel is made of (1 = a flat chamfer, more = a rounded profile).</param>
+        public static Result Bevel(IReadOnlyList<FaceInput> faces, IReadOnlyList<(Vector3 Start, Vector3 End)> edges, float requested, bool clamp, int segments = 1)
         {
             var result = new Result { Requested = requested };
 
@@ -234,6 +293,7 @@ namespace Sledge.BspEditor.Tools.Bevel
             if (edges == null || edges.Count == 0) { Fail(result, "No edges selected."); return result; }
             if (float.IsNaN(requested) || float.IsInfinity(requested) || requested < Step) { Fail(result, "The distance is too small."); return result; }
             if (faces.Any(f => f.Vertices.Any(v => !IsFinite(v)))) { Fail(result, "The solid has invalid vertices."); return result; }
+            if (segments < 1 || segments > MaxSegments) { Fail(result, "Segments must be between 1 and " + MaxSegments + "."); return result; }
 
             var allVerts = new List<Vector3>();
             foreach (var f in faces)
@@ -262,63 +322,96 @@ namespace Sledge.BspEditor.Tools.Bevel
                 var inB = InwardInFace(faces[edge.FaceB], along, mid);
                 if (inA == null || inB == null) { Fail(result, "A selected edge is degenerate."); return result; }
 
-                // The cut faces away from the bisector of the two faces' inward directions
+                // The profile of the bevel, and a plane for each of its flat faces
                 var sum = inA.Value + inB.Value;
                 if (sum.LengthSquared() < 1e-4f) { Fail(result, "A selected edge lies between flat faces; there is nothing to bevel."); return result; }
-                var normal = -Vector3.Normalize(sum);
-                if (Vector3.Dot(normal, centre - start) > 0) normal = -normal;
 
-                var k = -Vector3.Dot(normal, inA.Value);
-                if (k < 1e-3f) { Fail(result, "A selected edge is degenerate."); return result; }
+                var profile = ProfilePoints(inA.Value, inB.Value, segments);
+                if (profile == null) { Fail(result, "A selected edge is too flat or too sharp for " + segments + " segments."); return result; }
 
-                cuts.Add(new Cut
+                var cut = new Cut { Start = start, End = end, FaceA = edge.FaceA, FaceB = edge.FaceB, MinChord = float.MaxValue };
+                for (var k = 0; k < segments; k++)
                 {
-                    Start = start, End = end, InA = inA.Value, InB = inB.Value, Normal = normal, K = k,
-                    FaceA = edge.FaceA, FaceB = edge.FaceB
-                });
+                    var step = profile[k + 1] - profile[k];
+                    var chordMid = (profile[k] + profile[k + 1]) / 2;
+                    var normal = Vector3.Cross(along, step);
+                    if (normal.LengthSquared() < 1e-10f) { Fail(result, "A selected edge is degenerate."); return result; }
+                    normal = Vector3.Normalize(normal);
+
+                    // Faces away from the solid: the corner being cut off is on its outer side
+                    if (Vector3.Dot(normal, -chordMid) < 0) normal = -normal;
+
+                    var kk = -Vector3.Dot(normal, chordMid);
+                    if (kk < 1e-3f) { Fail(result, "A selected edge is degenerate."); return result; }
+
+                    cut.Chords.Add(new Chord { Normal = normal, Mid = chordMid, K = kk });
+                    cut.MinChord = Math.Min(cut.MinChord, step.Length());
+                }
+                cuts.Add(cut);
             }
 
-            // The most each cut can go in before it reaches a vertex that isn't on its own edge
+            if (faces.Count + cuts.Count * segments > MaxFaces)
+            {
+                Fail(result, "That would give the brush " + (faces.Count + cuts.Count * segments) + " faces; the limit is " + MaxFaces + ". Use fewer segments or edges.");
+                return result;
+            }
+
+            // The most each flat face can go in before it reaches a vertex that isn't on its own edge
             var maxDistance = float.MaxValue;
+            // The least that keeps every bevel face from becoming a sliver
+            var minDistance = Step;
             foreach (var cut in cuts)
             {
-                foreach (var v in allVerts)
+                minDistance = Math.Max(minDistance, MinEdgeLength * 1.05f / cut.MinChord);
+                foreach (var chord in cut.Chords)
                 {
-                    if (Same(v, cut.Start) || Same(v, cut.End)) continue;
-                    var limit = (Vector3.Dot(cut.Normal, cut.Start - v) - SliverMargin) / cut.K;
-                    if (limit < maxDistance) maxDistance = limit;
+                    foreach (var v in allVerts)
+                    {
+                        if (Same(v, cut.Start) || Same(v, cut.End)) continue;
+                        var limit = Vector3.Dot(chord.Normal, cut.Start - v) / chord.K - SliverMargin;
+                        if (limit < maxDistance) maxDistance = limit;
+                    }
                 }
             }
 
+            if (requested < minDistance)
+            {
+                Fail(result, segments > 1
+                    ? "Too many segments for this distance: the faces would be tiny. Use fewer segments or a larger distance."
+                    : "The distance is too small.");
+                return result;
+            }
+
             var distance = clamp ? Math.Min(requested, maxDistance) : requested;
-            if (distance < Step)
+            if (distance < minDistance)
             {
                 Fail(result, "There is not enough room to bevel here.");
                 return result;
             }
 
-            var built = Build(faces, cuts, distance);
+            var built = Build(faces, cuts, distance, segments);
             if (built == null && clamp)
             {
-                // Something other than a single cut's own limit is in the way (cuts meeting each other): find the largest distance that works
+                // Something other than a single face's own limit is in the way (bevels meeting each other): find the largest distance that works
+                // Zero is the untouched solid, so it counts as valid; tiny distances are never tried because the search only moves up from there
                 float lo = 0, hi = distance;
-                for (var i = 0; i < 24; i++)
+                for (var i = 0; i < 24 && hi - lo > Step * 0.25f; i++)
                 {
                     var mid = (lo + hi) / 2;
-                    if (Build(faces, cuts, mid) != null) lo = mid; else hi = mid;
+                    if (Build(faces, cuts, mid, segments) != null) lo = mid; else hi = mid;
                 }
 
                 var rounded = (float) Math.Floor(lo / Step) * Step;
-                if (rounded >= Step)
+                if (rounded >= minDistance)
                 {
                     distance = rounded;
-                    built = Build(faces, cuts, distance);
-                    if (built == null)
-                    {
-                        // Rounding can only fail if validity is not monotonic; fall back to the unrounded value
-                        distance = lo;
-                        built = lo >= Step ? Build(faces, cuts, distance) : null;
-                    }
+                    built = Build(faces, cuts, distance, segments);
+                }
+                if (built == null && lo >= minDistance)
+                {
+                    // Rounding can only fail if validity is not monotonic; fall back to the unrounded value
+                    distance = lo;
+                    built = Build(faces, cuts, distance, segments);
                 }
             }
 
@@ -339,9 +432,9 @@ namespace Sledge.BspEditor.Tools.Bevel
         }
 
         /// <summary>Builds the solid at the given distance. Null if the result is anything but a clean, valid, convex solid.</summary>
-        private static List<ResultFace> Build(IReadOnlyList<FaceInput> faces, List<Cut> cuts, float distance)
+        private static List<ResultFace> Build(IReadOnlyList<FaceInput> faces, List<Cut> cuts, float distance, int segments)
         {
-            var cutPlanes = cuts.Select(c => c.PlaneAt(distance)).ToList();
+            var cutPlanes = cuts.SelectMany(c => c.PlanesAt(distance)).ToList();
             if (cutPlanes.Any(p => !IsFinite(p.Normal) || float.IsNaN(p.DistanceFromOrigin) || float.IsInfinity(p.DistanceFromOrigin))) return null;
 
             var planes = faces.Select(f => f.Plane).Concat(cutPlanes).ToList();
@@ -365,13 +458,27 @@ namespace Sledge.BspEditor.Tools.Bevel
             var result = new List<ResultFace>();
             for (var p = 0; p < planes.Count; p++)
             {
+                // Each plane's face is the unused polygon whose vertices all lie on it and whose normal agrees best. The
+                // polygon's own plane is not used for this: on a long thin face it is too noisy to tell neighbouring segments apart
                 var match = -1;
+                var bestDot = 0.99f;
                 for (var q = 0; q < polygons.Count; q++)
                 {
                     if (used[q] || polygons[q].Vertices.Count < 3) continue;
-                    if (!SamePlane(planes[p], polygons[q].Plane)) continue;
-                    match = q;
-                    break;
+                    var qv = polygons[q].Vertices;
+                    var onPlane = true;
+                    for (var i = 0; i < qv.Count && onPlane; i++)
+                    {
+                        if (Math.Abs(Vector3.Dot(planes[p].Normal, qv[i]) - planes[p].DistanceFromOrigin) > OutsideTolerance) onPlane = false;
+                    }
+                    if (!onPlane) continue;
+
+                    var dot = Vector3.Dot(FaceNormal(qv, polygons[q].Plane.Normal), planes[p].Normal);
+                    if (dot > bestDot)
+                    {
+                        bestDot = dot;
+                        match = q;
+                    }
                 }
                 if (match < 0) return null;
                 used[match] = true;
@@ -386,7 +493,7 @@ namespace Sledge.BspEditor.Tools.Bevel
                 }
 
                 if (p < faces.Count) result.Add(new ResultFace(polygon, p, -1));
-                else result.Add(new ResultFace(polygon, -1, cuts[p - faces.Count].FaceA));
+                else result.Add(new ResultFace(polygon, -1, cuts[(p - faces.Count) / segments].FaceA));
             }
 
             // The plane solver does not clip reliably when a cut swallows a face (it can hand back the unclipped face),
