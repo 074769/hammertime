@@ -58,21 +58,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
         {
             yield return Oy.Subscribe<string>("VertexTool:DeselectAll", _ => ClearSelection());
             yield return Oy.Subscribe<int>("VertexEditFaceTool:Poke", v => Poke(v));
-            yield return Oy.Subscribe<int>("VertexEditFaceTool:Extrude", v => Extrude(v));
 		}
-        private async Task Extrude(int num)
-        {
-            var document = GetDocument();
-            if (document == null || _selectedFaces.Count == 0) return;
-
-            var tran = new Transaction();
-            var parents = new Dictionary<long, IMapObject>();
-            foreach (var solidFace in _selectedFaces)
-            {
-                ExtrudeFace(document, tran, parents, solidFace, num);
-            }
-            await FinishEdit(document, tran, _selectedFaces.Select(x => x.Solid));
-        }
 
         private async Task Poke(int num)
         {
@@ -157,74 +143,6 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
                 var f = new MutableFace(verts, face.Texture.Clone());
                 solid.Faces.Add(f);
             }
-        }
-
-        /// <summary>
-        /// Adds the new solid to the same parent as the solid it was made from, so a brush entity (or group) keeps owning it.
-        /// A solid that sits loose in the world is grouped with what was made from it.
-        /// </summary>
-        private void AttachNextTo(MapDocument document, Transaction transaction, Dictionary<long, IMapObject> parents, Solid original, Solid created)
-        {
-            IMapObject parent;
-            if (!parents.TryGetValue(original.ID, out parent))
-            {
-                parent = original.Hierarchy.Parent;
-                if (parent is Root)
-                {
-                    var group = new Group(document.Map.NumberGenerator.Next("MapObject"));
-                    transaction.Add(new Attach(parent.ID, group));
-                    // Detach before re-attaching, so that undo puts the original solid back where it was
-                    transaction.Add(new Detatch(parent.ID, original));
-                    transaction.Add(new Attach(group.ID, original));
-                    parent = group;
-                }
-                parents[original.ID] = parent;
-            }
-            transaction.Add(new Attach(parent.ID, created));
-        }
-
-        private void ExtrudeFace(MapDocument document, Transaction transaction, Dictionary<long, IMapObject> parents, SolidFace solidFace, int num)
-        {
-            var face = solidFace.Face;
-            var solid = solidFace.Solid.Copy;
-            var gen = document.Map.NumberGenerator;
-
-            // Remember the original positions, then move the face out by the extrude distance
-            var vertexPositions = face.Vertices.Select(x => x.Position).ToList();
-            face.Transform(Matrix4x4.CreateTranslation(face.Plane.Normal * num));
-            var vertList = face.Vertices.ToList();
-
-            // Only the extruded face keeps its texture, everything else that gets created is null
-            var nullTexture = face.Texture.Clone();
-            nullTexture.Name = "null";
-
-            var extruded = new Solid(gen.Next("MapObject"));
-
-            // Create a face for each new edge -> old edge
-            foreach (var edge in face.GetEdges())
-            {
-                var startIndex = vertList.FindIndex(x => x.Position.EquivalentTo(edge.Start));
-                var endIndex = vertList.FindIndex(x => x.Position.EquivalentTo(edge.End));
-                var verts = new[] { vertexPositions[startIndex], vertexPositions[endIndex], edge.End, edge.Start };
-                var f = new Face(gen.Next("Face"))
-                {
-                    Plane = new Sledge.DataStructures.Geometric.Plane(verts[0], verts[1], verts[3]),
-                    Texture = nullTexture.Clone()
-                };
-                f.Vertices.AddRange(verts);
-                extruded.Data.Add(f);
-            }
-
-            // The original face is now covered by the new solid
-            solid.Faces.Remove(face);
-            solid.Faces.Add(new MutableFace(vertexPositions, nullTexture.Clone()));
-
-            extruded.Data.Add(new MutableFace(vertexPositions.Reverse<Vector3>(), nullTexture.Clone()).ToFace(gen));
-            extruded.Data.Add(face.ToFace(gen));
-
-            AttachNextTo(document, transaction, parents, solidFace.Solid.Real, extruded);
-            transaction.Add(new Select(extruded));
-            extruded.DescendantsChanged();
         }
 
 		#endregion

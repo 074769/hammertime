@@ -33,12 +33,7 @@
 			PokeByLabel = new System.Windows.Forms.Label();
 			UnitsLabel1 = new System.Windows.Forms.Label();
 			PokeFaceCount = new System.Windows.Forms.NumericUpDown();
-			ExtrudeButton = new System.Windows.Forms.Button();
-			ExtrudeValue = new System.Windows.Forms.NumericUpDown();
-			label1 = new System.Windows.Forms.Label();
-			label2 = new System.Windows.Forms.Label();
 			((System.ComponentModel.ISupportInitialize)PokeFaceCount).BeginInit();
-			((System.ComponentModel.ISupportInitialize)ExtrudeValue).BeginInit();
 			SuspendLayout();
 			// 
 			// WithSelectedFacesLabel
@@ -93,55 +88,9 @@
 			PokeFaceCount.TabIndex = 11;
 			PokeFaceCount.Value = new decimal(new int[] { 16, 0, 0, 0 });
 			// 
-			// ExtrudeButton
-			// 
-			ExtrudeButton.Location = new System.Drawing.Point(177, 83);
-			ExtrudeButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
-			ExtrudeButton.Name = "ExtrudeButton";
-			ExtrudeButton.Size = new System.Drawing.Size(58, 27);
-			ExtrudeButton.TabIndex = 14;
-			ExtrudeButton.Text = "Extrude";
-			ExtrudeButton.UseVisualStyleBackColor = true;
-			ExtrudeButton.Click += ExtrudeButtonClicked;
-			// 
-			// ExtrudeValue
-			// 
-			ExtrudeValue.Location = new System.Drawing.Point(70, 87);
-			ExtrudeValue.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
-			ExtrudeValue.Maximum = new decimal(new int[] { 1000, 0, 0, 0 });
-			ExtrudeValue.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
-			ExtrudeValue.Name = "ExtrudeValue";
-			ExtrudeValue.Size = new System.Drawing.Size(68, 23);
-			ExtrudeValue.TabIndex = 15;
-			ExtrudeValue.Value = new decimal(new int[] { 16, 0, 0, 0 });
-			// 
-			// label1
-			// 
-			label1.AutoSize = true;
-			label1.Location = new System.Drawing.Point(140, 89);
-			label1.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
-			label1.Name = "label1";
-			label1.Size = new System.Drawing.Size(33, 15);
-			label1.TabIndex = 12;
-			label1.Text = "units";
-			// 
-			// label2
-			// 
-			label2.AutoSize = true;
-			label2.Location = new System.Drawing.Point(4, 89);
-			label2.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
-			label2.Name = "label2";
-			label2.Size = new System.Drawing.Size(63, 15);
-			label2.TabIndex = 13;
-			label2.Text = "Extrude by";
-			// 
 			// VertexEditFaceControl
 			// 
 			AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
-			Controls.Add(ExtrudeButton);
-			Controls.Add(ExtrudeValue);
-			Controls.Add(label1);
-			Controls.Add(label2);
 			Controls.Add(PokeFaceButton);
 			Controls.Add(WithSelectedFacesLabel);
 			Controls.Add(PokeFaceCount);
@@ -151,7 +100,6 @@
 			Name = "VertexEditFaceControl";
 			Size = new System.Drawing.Size(246, 113);
 			((System.ComponentModel.ISupportInitialize)PokeFaceCount).EndInit();
-			((System.ComponentModel.ISupportInitialize)ExtrudeValue).EndInit();
 			ResumeLayout(false);
 			PerformLayout();
 		}
@@ -163,9 +111,5 @@
 		private System.Windows.Forms.Label PokeByLabel;
 		private System.Windows.Forms.Label UnitsLabel1;
 		private System.Windows.Forms.NumericUpDown PokeFaceCount;
-		private System.Windows.Forms.Button ExtrudeButton;
-		private System.Windows.Forms.NumericUpDown ExtrudeValue;
-		private System.Windows.Forms.Label label1;
-		private System.Windows.Forms.Label label2;
 	}
 }

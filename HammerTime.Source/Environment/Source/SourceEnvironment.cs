@@ -14,6 +14,7 @@ using Sledge.BspEditor.Tools.Entity;
 using Sledge.BspEditor.Tools.PathTool;
 using Sledge.BspEditor.Tools.Selection;
 using Sledge.BspEditor.Tools.Bevel;
+using Sledge.BspEditor.Tools.Extrude;
 using Sledge.BspEditor.Tools.Spin;
 using Sledge.BspEditor.Tools.Texture;
 using Sledge.BspEditor.Tools.Vertex;
@@ -181,6 +182,7 @@ namespace HammerTime.Source.BspEditor.Environment.Source
 				ClipTool.ClipToolCapability,
 				SpinTool.SpinToolCapability,
 				BevelTool.BevelToolCapability,
+				ExtrudeTool.ExtrudeToolCapability,
 				CordonTool.CordonToolCapability,
 				DecalTool.DecalToolCapability,
 				EntityTool.EntityToolCapability,

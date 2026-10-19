@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <title>Block with a face pulled out</title>
+  <path d="M4 28 L4 14 L18 14 L18 28 Z" fill="#5b8def" stroke="#1f2a36" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M18 14 L28 4 L28 18 L18 28 Z" fill="#8fb1f5" stroke="#1f2a36" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M4 14 L14 4 L28 4 L18 14 Z" fill="#b9cffa" stroke="#1f2a36" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M10 22 L24 22" fill="none" stroke="#ff7043" stroke-width="3" stroke-linecap="round"/>
+</svg>

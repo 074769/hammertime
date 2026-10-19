@@ -16,7 +16,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Controls
 		#region Translations
 
 		public string WithSelectedFaces { set => this.InvokeLater(() => WithSelectedFacesLabel.Text = value); }
-		public string Units { set => this.InvokeLater(() => { UnitsLabel1.Text = value; label1.Text = value; }); }
+		public string Units { set => this.InvokeLater(() => { UnitsLabel1.Text = value; }); }
 		public string PokeBy { set => this.InvokeLater(() => PokeByLabel.Text = value); }
 		public string Poke { set => this.InvokeLater(() => PokeFaceButton.Text = value); }
 
@@ -79,8 +79,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Controls
 
 		    var rows = new (Label label, Control input, Label units, Button button)[]
 		    {
-		        (PokeByLabel, PokeFaceCount, UnitsLabel1, PokeFaceButton),
-		        (label2, ExtrudeValue, label1, ExtrudeButton)
+		        (PokeByLabel, PokeFaceCount, UnitsLabel1, PokeFaceButton)
 		    };
 
 		    var labelW = rows.Max(r => VertexControlLayout.TextWidth(r.label)) + m;
@@ -110,12 +109,6 @@ namespace Sledge.BspEditor.Tools.Vertex.Controls
 		private void PokeFaceButtonClicked(object sender, EventArgs e)
 		{
 			Oy.Publish("VertexEditFaceTool:Poke", (int) PokeFaceCount.Value);
-		}
-
-		private void ExtrudeButtonClicked(object sender, EventArgs e)
-		{
-			Oy.Publish("VertexEditFaceTool:Extrude", (int)ExtrudeValue.Value);
-
 		}
 	}
 }
