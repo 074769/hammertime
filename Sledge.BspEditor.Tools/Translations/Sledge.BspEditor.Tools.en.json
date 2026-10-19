@@ -175,6 +175,7 @@
             "Show3DWidgets": "Show 3D widgets",
             "AutoSelectBox": "Auto-select box",
             "ShowBoundingBox": "Show bounding box",
+            "ReferenceBox": "Reference Box",
             "MoveWidget": "Move widget",
             "RotateWidget": "Rotate widget",
             "MoveArrowWidget": "Move arrow",

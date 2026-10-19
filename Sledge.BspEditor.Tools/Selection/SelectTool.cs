@@ -178,6 +178,22 @@ namespace Sledge.BspEditor.Tools.Selection
 				ShowBoundingBox = x == "1";
 				_selectionBox.ShowBoundingBox = ShowBoundingBox;
 			});
+			// Reference Box: pins (or removes) a measuring box that stays visible whatever tool is active
+			Oy.Subscribe<string>("SelectTool:ReferenceBoxChanged", x =>
+			{
+				var document = GetDocument();
+				if (document == null) return;
+				var on = x == "1";
+				if (on == Sledge.BspEditor.Rendering.Overlay.ReferenceBoxOverlay.IsOn(document)) return;
+				if (on) Sledge.BspEditor.Rendering.Overlay.ReferenceBoxOverlay.Pin(document, GetReferenceSourceBox(document));
+				else Sledge.BspEditor.Rendering.Overlay.ReferenceBoxOverlay.Clear(document);
+				_selectionBox.Update();
+			});
+			// Each map has its own reference box, keep the checkbox in step with the active one
+			Oy.Subscribe<IDocument>("Document:Activated", d =>
+			{
+				Oy.Publish("SelectTool:SetReferenceBox", Sledge.BspEditor.Rendering.Overlay.ReferenceBoxOverlay.IsOn(d as MapDocument) ? "1" : "0");
+			});
 			Oy.Subscribe<string>("SelectTool:Show3DWidgetsChanged", x =>
 			{
 				Show3DWidgets = x == "1";
@@ -199,6 +215,14 @@ namespace Sledge.BspEditor.Tools.Selection
 					Sledge.BspEditor.Rendering.Overlay.Camera2DOverlay.ShowCameraWidget = ShowCameraWidget;
 				}
 			});
+		}
+
+		/// <summary>The box to pin as the reference box: the selection's bounds, or failing that the box drawn with the Select tool (null if neither).</summary>
+		private Box GetReferenceSourceBox(MapDocument document)
+		{
+			if (!document.Selection.IsEmpty) return document.Selection.GetSelectionBoundingBox();
+			if (_emptyBox.State.Action == BoxAction.Drawn) return new Box(_emptyBox.State.Start, _emptyBox.State.End);
+			return null;
 		}
 
 		private string WidgetTogglesToString()
@@ -370,6 +394,7 @@ namespace Sledge.BspEditor.Tools.Selection
 				IgnoreGroupingChanged(document);
 				SelectionChanged(document);
 			}
+			Oy.Publish("SelectTool:SetReferenceBox", Sledge.BspEditor.Rendering.Overlay.ReferenceBoxOverlay.IsOn(document) ? "1" : "0");
 
 			await base.ToolSelected();
 		}

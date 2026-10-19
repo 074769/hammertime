@@ -24,6 +24,7 @@ namespace Sledge.BspEditor.Tools.Selection
 
 		private WeakReference<MapDocument> _activeDocument;
 		private bool _updatingWidgetToggles;
+		private bool _updatingReferenceBox;
 
 		public SelectToolSidebarPanel()
 		{
@@ -46,6 +47,13 @@ namespace Sledge.BspEditor.Tools.Selection
 			Oy.Subscribe<String>("SelectTool:SetShowBoundingBox", x =>
 			{
 				ShowBoundingBoxCheckbox.Checked = x == "1";
+			});
+
+			Oy.Subscribe<String>("SelectTool:SetReferenceBox", x =>
+			{
+				_updatingReferenceBox = true;
+				try { ReferenceBoxCheckbox.Checked = x == "1"; }
+				finally { _updatingReferenceBox = false; }
 			});
 
 			Oy.Subscribe<String>("SelectTool:SetAutoSelectBox", x =>
@@ -124,6 +132,7 @@ namespace Sledge.BspEditor.Tools.Selection
 				var x2 = x1 + indent;
 				Row(AutoSelectBoxCheckbox, x1);
 				Row(ShowBoundingBoxCheckbox, x1);
+				Row(ReferenceBoxCheckbox, x1);
 				Row(Show3DWidgetsCheckbox, x1);
 				Row(MoveWidgetCheckbox, x2);
 				Row(RotateWidgetCheckbox, x2);
@@ -163,6 +172,7 @@ namespace Sledge.BspEditor.Tools.Selection
 				Show3DWidgetsCheckbox.Text = strings.GetString(prefix, "Show3DWidgets");
 				AutoSelectBoxCheckbox.Text = strings.GetString(prefix, "AutoSelectBox") ?? AutoSelectBoxCheckbox.Text;
 				ShowBoundingBoxCheckbox.Text = strings.GetString(prefix, "ShowBoundingBox") ?? ShowBoundingBoxCheckbox.Text;
+				ReferenceBoxCheckbox.Text = strings.GetString(prefix, "ReferenceBox") ?? ReferenceBoxCheckbox.Text;
 				MoveWidgetCheckbox.Text = strings.GetString(prefix, "MoveWidget") ?? MoveWidgetCheckbox.Text;
 				RotateWidgetCheckbox.Text = strings.GetString(prefix, "RotateWidget") ?? RotateWidgetCheckbox.Text;
 				MoveArrowWidgetCheckbox.Text = strings.GetString(prefix, "MoveArrowWidget") ?? MoveArrowWidgetCheckbox.Text;
@@ -259,6 +269,12 @@ namespace Sledge.BspEditor.Tools.Selection
 		private void ShowBoundingBoxChecked(object sender, EventArgs e)
 		{
 			Oy.Publish("SelectTool:ShowBoundingBoxChanged", ShowBoundingBoxCheckbox.Checked ? "1" : "0");
+		}
+
+		private void ReferenceBoxChecked(object sender, EventArgs e)
+		{
+			if (_updatingReferenceBox) return;
+			Oy.Publish("SelectTool:ReferenceBoxChanged", ReferenceBoxCheckbox.Checked ? "1" : "0");
 		}
 
 		private void AutoSelectBoxChecked(object sender, EventArgs e)

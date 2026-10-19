@@ -48,6 +48,7 @@ namespace Sledge.BspEditor.Tools.Selection
             CameraWidgetCheckbox = new System.Windows.Forms.CheckBox();
             AutoSelectBoxCheckbox = new System.Windows.Forms.CheckBox();
             ShowBoundingBoxCheckbox = new System.Windows.Forms.CheckBox();
+            ReferenceBoxCheckbox = new System.Windows.Forms.CheckBox();
             SuspendLayout();
             // 
             // Show3DWidgetsCheckbox
@@ -161,6 +162,18 @@ namespace Sledge.BspEditor.Tools.Selection
             ShowBoundingBoxCheckbox.Text = "Show bounding box";
             ShowBoundingBoxCheckbox.UseVisualStyleBackColor = true;
             ShowBoundingBoxCheckbox.CheckedChanged += ShowBoundingBoxChecked;
+            // 
+            // ReferenceBoxCheckbox
+            // 
+            ReferenceBoxCheckbox.AutoSize = true;
+            ReferenceBoxCheckbox.Location = new System.Drawing.Point(8, 86);
+            ReferenceBoxCheckbox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
+            ReferenceBoxCheckbox.Name = "ReferenceBoxCheckbox";
+            ReferenceBoxCheckbox.Size = new System.Drawing.Size(140, 19);
+            ReferenceBoxCheckbox.TabIndex = 20;
+            ReferenceBoxCheckbox.Text = "Reference Box";
+            ReferenceBoxCheckbox.UseVisualStyleBackColor = true;
+            ReferenceBoxCheckbox.CheckedChanged += ReferenceBoxChecked;
             // 
             // lblMode
             // 
@@ -276,6 +289,7 @@ namespace Sledge.BspEditor.Tools.Selection
             Controls.Add(CameraWidgetCheckbox);
             Controls.Add(AutoSelectBoxCheckbox);
             Controls.Add(ShowBoundingBoxCheckbox);
+            Controls.Add(ReferenceBoxCheckbox);
             Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             Padding = new System.Windows.Forms.Padding(6, 6, 6, 6);
             Size = new System.Drawing.Size(271, 330);
@@ -295,6 +309,7 @@ namespace Sledge.BspEditor.Tools.Selection
         private System.Windows.Forms.CheckBox CameraWidgetCheckbox;
         private System.Windows.Forms.CheckBox AutoSelectBoxCheckbox;
         private System.Windows.Forms.CheckBox ShowBoundingBoxCheckbox;
+        private System.Windows.Forms.CheckBox ReferenceBoxCheckbox;
         private System.Windows.Forms.Label lblMode;
         private System.Windows.Forms.CheckBox TranslateModeCheckbox;
         private System.Windows.Forms.CheckBox RotateModeCheckbox;
