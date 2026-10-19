@@ -9,7 +9,7 @@ using Sledge.Shell;
 namespace Sledge.BspEditor.Tools.Bevel
 {
     /// <summary>
-    /// Sidebar panel for the bevel tool: "Bevel by [n] units [Bevel]" (the same row the vertex tool has),
+    /// Sidebar panel for the bevel tool: "Bevel by [n] [Bevel]",
     /// the Clamp option, and a line that says what is selected, what will happen, or why it can't.
     /// Only shown while the bevel tool is the active tool.
     ///
@@ -47,14 +47,13 @@ namespace Sledge.BspEditor.Tools.Bevel
                 Dock = DockStyle.Top,
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                ColumnCount = 4,
+                ColumnCount = 3,
                 Padding = new Padding(6)
             };
 
-            // label | number (takes the spare width) | units | button
+            // label | number (takes the spare width) | button
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             for (var i = 0; i < 5; i++) layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
@@ -68,7 +67,6 @@ namespace Sledge.BspEditor.Tools.Bevel
                 MinimumSize = new Size(40, 0),
                 Margin = new Padding(3, 6, 3, 6)
             };
-            var unitsLabel = new Label { Text = "units", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 6, 3, 6) };
             _bevel = new Button { Text = "Bevel", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowOnly, MinimumSize = new Size(58, 27), Anchor = AnchorStyles.Right, Margin = new Padding(3) };
 
             var segmentsLabel = new Label { Text = "Segments", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 6, 3, 6) };
@@ -97,20 +95,19 @@ namespace Sledge.BspEditor.Tools.Bevel
 
             layout.Controls.Add(byLabel, 0, 0);
             layout.Controls.Add(_distance, 1, 0);
-            layout.Controls.Add(unitsLabel, 2, 0);
-            layout.Controls.Add(_bevel, 3, 0);
+            layout.Controls.Add(_bevel, 2, 0);
 
             layout.Controls.Add(segmentsLabel, 0, 1);
             layout.Controls.Add(_segments, 1, 1);
 
             layout.Controls.Add(_clamp, 0, 2);
-            layout.SetColumnSpan(_clamp, 4);
+            layout.SetColumnSpan(_clamp, 3);
 
             layout.Controls.Add(buttons, 0, 3);
-            layout.SetColumnSpan(buttons, 4);
+            layout.SetColumnSpan(buttons, 3);
 
             layout.Controls.Add(_info, 0, 4);
-            layout.SetColumnSpan(_info, 4);
+            layout.SetColumnSpan(_info, 3);
 
             Controls.Add(layout);
 
@@ -118,6 +115,7 @@ namespace Sledge.BspEditor.Tools.Bevel
             tips.SetToolTip(_segments, "How many flat faces each bevel is made of. 1 is a flat chamfer; more give a rounded edge (the profile follows an arc, like Blender's default).");
             tips.SetToolTip(_all, "Select every edge of the selected solids.");
             tips.SetToolTip(_clear, "Deselect all edges (Esc).");
+            tips.SetToolTip(_distance, "Distance along each face, in map units.");
             tips.SetToolTip(_clamp, "Shrinks the distance to the largest one that keeps the solid valid, instead of refusing.");
 
             // The info text wraps to the sidebar's width
