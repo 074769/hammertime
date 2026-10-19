@@ -20,6 +20,7 @@ using Sledge.BspEditor.Tools.Properties;
 using Sledge.Common.Shell;
 using Sledge.Common.Shell.Components;
 using Sledge.Common.Shell.Documents;
+using Sledge.Common.Shell.Hotkeys;
 using Sledge.DataStructures.Geometric;
 using Sledge.Rendering.Cameras;
 using Sledge.Rendering.Overlay;
@@ -36,7 +37,8 @@ using VertexFlags = Sledge.Rendering.Primitives.VertexFlags;
 namespace Sledge.BspEditor.Tools.Extrude
 {
     /// <summary>
-    /// Extrude tool, in two steps that E switches between.
+    /// Extrude tool, in two steps. The tool's own hotkey (Settings > Hotkeys, default Shift+F) activates the tool, and pressing it
+    /// again while the tool is active switches between the steps.
     ///
     /// Select (red): click a face, Ctrl+click to add or remove, or hold the left button and sweep over faces to pick them. Any visible
     /// face can be picked, the solid doesn't have to be selected.
@@ -47,6 +49,7 @@ namespace Sledge.BspEditor.Tools.Extrude
     [Export(typeof(ITool))]
     [Export]
     [OrderHint("PB")]
+    [DefaultHotkey("Shift+F")]
     public class ExtrudeTool : BaseTool
     {
         public static readonly Capability ExtrudeToolCapability = Capability.Create("ExtrudeTool");
@@ -69,7 +72,7 @@ namespace Sledge.BspEditor.Tools.Extrude
         private string _status;
         private float _amount = 1;
 
-        // false: picking faces (red), true: dragging them out (blue). E switches between the two
+        // false: picking faces (red), true: dragging them out (blue). The tool's hotkey switches between the two
         private bool _extrudeMode;
         private bool _painting;
 
@@ -219,12 +222,12 @@ namespace Sledge.BspEditor.Tools.Extrude
 
                 if (!_extrudeMode)
                 {
-                    if (_faces.Count == 0) return "Click a face, or hold the mouse and sweep over faces. Ctrl adds or removes. Then press E to extrude.";
-                    return _faces.Count + (_faces.Count == 1 ? " face picked." : " faces picked.") + " Press E to extrude them.";
+                    if (_faces.Count == 0) return "Click a face, or hold the mouse and sweep over faces. Ctrl adds or removes. Then press the tool hotkey to extrude.";
+                    return _faces.Count + (_faces.Count == 1 ? " face picked." : " faces picked.") + " Press the tool hotkey to extrude them.";
                 }
 
-                if (_faces.Count == 0) return "No faces picked. Press E to go back and pick some.";
-                return _faces.Count + (_faces.Count == 1 ? " face picked." : " faces picked.") + " Drag to extrude, or press Enter for " + Units(_amount) + ". E goes back to picking.";
+                if (_faces.Count == 0) return "No faces picked. Press the tool hotkey to go back and pick some.";
+                return _faces.Count + (_faces.Count == 1 ? " face picked." : " faces picked.") + " Drag to extrude, or press Enter for " + Units(_amount) + ". The tool hotkey goes back to picking.";
             }
         }
 
@@ -428,12 +431,7 @@ namespace Sledge.BspEditor.Tools.Extrude
 
         private void HandleKey(ViewportEvent e)
         {
-            if (e.KeyCode == Keys.E && !e.Control && !e.Shift && !e.Alt)
-            {
-                ToggleMode();
-                e.Handled = true;
-            }
-            else if (e.KeyCode == Keys.Enter)
+            if (e.KeyCode == Keys.Enter)
             {
                 float amount;
                 lock (_lock) amount = _amount;
@@ -448,6 +446,20 @@ namespace Sledge.BspEditor.Tools.Extrude
                 e.Handled = true;
             }
         }
+
+        /// <summary>
+        /// The tool's hotkey is the one set in Settings > Hotkeys for this tool. It normally just activates the tool; while the tool
+        /// is already active it is taken here instead, and switches between picking faces and extruding them.
+        /// </summary>
+        private bool HandleToolHotkey(string hotkey)
+        {
+            if (hotkey != GetName()) return false;
+            ToggleMode();
+            return true;
+        }
+
+        protected override bool FilterHotkey(MapDocument document, MapViewport viewport, PerspectiveCamera camera, string hotkey, Keys keys) => HandleToolHotkey(hotkey);
+        protected override bool FilterHotkey(MapDocument document, MapViewport viewport, OrthographicCamera camera, string hotkey, Keys keys) => HandleToolHotkey(hotkey);
 
         protected override void KeyDown(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e) => HandleKey(e);
         protected override void KeyDown(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e) => HandleKey(e);
@@ -818,7 +830,7 @@ namespace Sledge.BspEditor.Tools.Extrude
             // Which step the tool is in, so it is obvious whether a click picks faces or a drag extrudes them
             if (camera != null)
             {
-                var label = extrude ? "EXTRUDE  (E: back to select)" : "SELECT FACES  (E: extrude)";
+                var label = extrude ? "EXTRUDE  (tool hotkey: back to select)" : "SELECT FACES  (tool hotkey: extrude)";
                 im.AddText(new Vector2(12, 12), faceColour, FontType.Large, label);
             }
 

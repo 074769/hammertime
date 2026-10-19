@@ -9,7 +9,7 @@ using Sledge.Shell;
 namespace Sledge.BspEditor.Tools.Extrude
 {
     /// <summary>
-    /// Sidebar panel for the extrude tool: which step it is in (red select / blue extrude, E switches), "Extrude by [1] units",
+    /// Sidebar panel for the extrude tool: which step it is in (red select / blue extrude, the tool's hotkey switches), "Extrude by [1] units",
     /// and a line that says what is picked or what the drag is doing. The amount is what a drag snaps to, and what Enter extrudes
     /// the picked faces by. Only shown while the extrude tool is active.
     /// Sizes itself to its content and follows the sidebar's width, the same way the bevel panel does.
@@ -50,7 +50,7 @@ namespace Sledge.BspEditor.Tools.Extrude
 
             // The current step, in the same colour the picked faces have in the 3D view
             _mode = new Label { AutoSize = true, Font = new Font(Font, FontStyle.Bold), Margin = new Padding(3, 3, 3, 3) };
-            var hotkey = new Label { Text = "Press E to switch between selecting faces (red) and extruding them (blue).", AutoSize = true, MaximumSize = new Size(210, 0), Margin = new Padding(3, 0, 3, 6) };
+            var hotkey = new Label { Text = "Press this tool's hotkey again to switch between selecting faces (red) and extruding them (blue). Set it in Settings > Hotkeys (default Shift+F).", AutoSize = true, MaximumSize = new Size(210, 0), Margin = new Padding(3, 0, 3, 6) };
 
             var byLabel = new Label { Text = "Extrude by", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 6, 3, 6) };
             _amount = new NumericUpDown
