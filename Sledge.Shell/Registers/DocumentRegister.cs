@@ -167,17 +167,17 @@ namespace Sledge.Shell.Registers
 			}
 		}
 
-		public Task<bool> ExportDocument(IDocument document, string fileName, string loaderHint = "")
+		public Task<bool> ExportDocument(IDocument document, string fileName, string loaderHint = "", object options = null)
 		{
-			return SaveDocument(document, fileName, loaderHint, false);
+			return SaveDocumentInternal(document, fileName, loaderHint, false, options);
 		}
 
-		public Task<bool> SaveDocument(IDocument document, string fileName, string loaderHint = "")
+		public Task<bool> SaveDocument(IDocument document, string fileName, string loaderHint = "", object options = null)
 		{
-			return SaveDocument(document, fileName, loaderHint, true);
+			return SaveDocumentInternal(document, fileName, loaderHint, true, options);
 		}
 
-		private async Task<bool> SaveDocument(IDocument document, string fileName, string loaderHint, bool switchFileName)
+		private async Task<bool> SaveDocumentInternal(IDocument document, string fileName, string loaderHint, bool switchFileName, object options)
 		{
 			if (document == null || fileName == null) return false;
 
@@ -194,7 +194,8 @@ namespace Sledge.Shell.Registers
 
 			await Oy.Publish("Document:BeforeSave", document);
 
-			await loader.Save(document, fileName);
+			if (options != null && loader is IDocumentOptionsSaver optionsSaver) await optionsSaver.Save(document, fileName, options);
+			else await loader.Save(document, fileName);
 
 			// Only publish document saved when the file name is changed
 			// Otherwise we're not actually saving the document's file

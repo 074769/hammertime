@@ -1,42 +1,43 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
-using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Windows.Forms;
-using LogicAndTrick.Oy;
 using Sledge.Common.Shell.Commands;
 using Sledge.Common.Shell.Context;
 using Sledge.Common.Shell.Documents;
 using Sledge.Common.Shell.Menu;
-using Sledge.Common.Shell.Settings;
 using Sledge.Common.Translations;
+using Sledge.Shell.Components;
 using Sledge.Shell.Properties;
+using Sledge.Shell.Registers;
 
 namespace Sledge.Shell.Commands
 {
 	[AutoTranslate]
-	[Export(typeof(ISettingsContainer))]
 	[Export(typeof(ICommand))]
 	[CommandID("File:Export")]
 	[MenuItem("File", "", "File", "L")]
 	[MenuImage(typeof(Resources), nameof(Resources.Menu_Export))]
-	public class Export : ICommand, ISettingsContainer
+	public class Export : ICommand
 	{
 		private readonly IEnumerable<Lazy<IDocumentLoader>> _loaders;
+		private readonly Lazy<DocumentRegister> _documentRegister;
+		private readonly Lazy<SaveAsService> _saveAs;
 
 		public string Name { get; set; } = "Export...";
 		public string Details { get; set; } = "Export...";
-		string ISettingsContainer.Name => "Sledge.Shell.Commands.Export";
-
-		private string _lastExtension = null;
-		public bool ValuesLoaded { get; private set; } = false;
 
 		[ImportingConstructor]
-		public Export([ImportMany] IEnumerable<Lazy<IDocumentLoader>> loaders)
+		public Export(
+			[ImportMany] IEnumerable<Lazy<IDocumentLoader>> loaders,
+			[Import] Lazy<DocumentRegister> documentRegister,
+			[Import] Lazy<SaveAsService> saveAs
+		)
 		{
 			_loaders = loaders;
+			_documentRegister = documentRegister;
+			_saveAs = saveAs;
 		}
 
 		public bool IsInContext(IContext context)
@@ -47,50 +48,18 @@ namespace Sledge.Shell.Commands
 		public async Task Invoke(IContext context, CommandParameters parameters)
 		{
 			var doc = context.Get<IDocument>("ActiveDocument");
-			if (doc != null)
-			{
-				var loaders = _loaders.Select(x => x.Value).Where(x => x.CanSave(doc)).ToList();
+			if (doc == null) return;
 
-				var filter = loaders.SelectMany(x => x.SupportedFileExtensions).Select(x => x.Description + "|" + String.Join(";", x.Extensions.Select(e => "*" + e))).ToList();
+			var formats = _loaders.Select(x => x.Value)
+				.Where(x => x.CanSave(doc))
+				.SelectMany(x => x.SupportedFileExtensions)
+				.ToList();
 
-				var filterIndex = 0;
-				if (!(string.IsNullOrEmpty(_lastExtension) || string.IsNullOrWhiteSpace(_lastExtension)))
-				{
-					filterIndex = filter.FindIndex(f => f.Contains(_lastExtension)) + 1;
-				}
+			var result = _saveAs.Value.Prompt(doc, formats, "Export", "Export");
+			if (result == null) return;
 
-
-				using (var sfd = new SaveFileDialog { Filter = String.Join("|", filter), FilterIndex = filterIndex })
-				{
-					if (sfd.ShowDialog() == DialogResult.OK)
-					{
-						var loader = loaders.FirstOrDefault(x => x.CanLoad(doc.FileName));
-						if (loader != null)
-						{
-							await Oy.Publish("Document:BeforeSave", doc);
-							await loader.Save(doc, sfd.FileName);
-
-						}
-						_lastExtension = Path.GetExtension(sfd.FileName);
-					}
-				}
-			}
-		}
-
-		public IEnumerable<SettingKey> GetKeys()
-		{
-			yield break;
-		}
-
-		public void LoadValues(ISettingsStore store)
-		{
-			_lastExtension = store.Get<string>("extension");
-			ValuesLoaded = true;
-		}
-
-		public void StoreValues(ISettingsStore store)
-		{
-			store.Set("extension", _lastExtension);
+			// Export: writes the file without switching the document over to it
+			await _documentRegister.Value.ExportDocument(doc, result.FileName, "", result.Options);
 		}
 	}
 }

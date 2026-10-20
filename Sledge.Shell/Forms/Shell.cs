@@ -4,6 +4,7 @@ using Sledge.Common.Shell.Documents;
 using Sledge.Common.Shell.Settings;
 using Sledge.Common.Translations;
 using Sledge.Common.Transport;
+using Sledge.Shell.Components;
 using Sledge.Shell.Controls;
 using Sledge.Shell.Registers;
 using System;
@@ -31,6 +32,7 @@ namespace Sledge.Shell.Forms
 
 		private readonly Lazy<Bootstrapper> _bootstrapper;
 		private readonly Lazy<DocumentRegister> _documentRegister;
+		private readonly Lazy<SaveAsService> _saveAs;
 		private readonly Lazy<ITranslationStringProvider> _translation;
 
 		public string Title { get; set; } = "Hammertime Shell";
@@ -47,11 +49,13 @@ namespace Sledge.Shell.Forms
 		public Shell(
 			[Import] Lazy<Bootstrapper> bootstrapper,
 			[Import] Lazy<DocumentRegister> documentRegister,
+			[Import] Lazy<SaveAsService> saveAs,
 			[Import] Lazy<ITranslationStringProvider> translation
 		)
 		{
 			_bootstrapper = bootstrapper;
 			_documentRegister = documentRegister;
+			_saveAs = saveAs;
 			_translation = translation;
 
 			InitializeComponent();
@@ -474,21 +478,17 @@ namespace Sledge.Shell.Forms
 		private async Task<bool> SaveDocument(IDocument doc)
 		{
 			var filename = doc.FileName;
+			object options = null;
 
 			if (String.IsNullOrWhiteSpace(filename) || !Directory.Exists(Path.GetDirectoryName(filename)))
 			{
-				var filter = _documentRegister.Value.GetSupportedFileExtensions(doc)
-					.Select(x => x.Description + "|" + String.Join(";", x.Extensions.Select(ex => "*" + ex)))
-					.ToList();
-
-				using (var sfd = new SaveFileDialog { Filter = String.Join("|", filter) })
-				{
-					if (sfd.ShowDialog() != DialogResult.OK) return false;
-					filename = sfd.FileName;
-				}
+				var result = _saveAs.Value.Prompt(doc, _documentRegister.Value.GetSupportedFileExtensions(doc));
+				if (result == null) return false;
+				filename = result.FileName;
+				options = result.Options;
 			}
 
-			return await _documentRegister.Value.SaveDocument(doc, filename);
+			return await _documentRegister.Value.SaveDocument(doc, filename, "", options);
 		}
 
 		private Task OpenCommandBox(string obj)

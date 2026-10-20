@@ -13,36 +13,34 @@ using Sledge.Common.Shell.Hotkeys;
 using Sledge.Common.Shell.Menu;
 using Sledge.Common.Shell.Settings;
 using Sledge.Common.Translations;
+using Sledge.Shell.Components;
 using Sledge.Shell.Properties;
 using Sledge.Shell.Registers;
 
 namespace Sledge.Shell.Commands
 {
 	[AutoTranslate]
-	[Export(typeof(ISettingsContainer))]
 	[Export(typeof(ICommand))]
 	[CommandID("File:SaveAs")]
 	[DefaultHotkey("Ctrl+Shift+S")]
 	[MenuItem("File", "", "File", "J")]
 	[MenuImage(typeof(Resources), nameof(Resources.Menu_SaveAs))]
-	public class SaveFileAs : ICommand, ISettingsContainer
+	public class SaveFileAs : ICommand
 	{
 		private readonly Lazy<DocumentRegister> _documentRegister;
+		private readonly Lazy<SaveAsService> _saveAs;
 
 		public string Name { get; set; } = "Save As...";
 		public string Details { get; set; } = "Save As...";
-		string ISettingsContainer.Name => "Sledge.Shell.Commands.SaveFileAs";
-
-		private string _lastExtension = null;
-
-		public bool ValuesLoaded { get; private set; }
 
 		[ImportingConstructor]
 		public SaveFileAs(
-			[Import] Lazy<DocumentRegister> documentRegister
+			[Import] Lazy<DocumentRegister> documentRegister,
+			[Import] Lazy<SaveAsService> saveAs
 		)
 		{
 			_documentRegister = documentRegister;
+			_saveAs = saveAs;
 		}
 
 		public bool IsInContext(IContext context)
@@ -55,42 +53,11 @@ namespace Sledge.Shell.Commands
 			var doc = context.Get<IDocument>("ActiveDocument");
 			if (doc != null)
 			{
-				string filename;
+				var result = _saveAs.Value.Prompt(doc, _documentRegister.Value.GetSupportedFileExtensions(doc), "Save As", "Save");
+				if (result == null) return;
 
-				var filter = _documentRegister.Value.GetSupportedFileExtensions(doc)
-					.Select(x => x.Description + "|" + String.Join(";", x.Extensions.Select(ex => "*" + ex)))
-					.ToList();
-				var filterIndex = 0;
-				if (!(string.IsNullOrEmpty(_lastExtension) || string.IsNullOrWhiteSpace(_lastExtension)))
-				{
-					filterIndex = filter.FindIndex(f => f.Contains(_lastExtension)) + 1;
-				}
-
-				using (var sfd = new SaveFileDialog { Filter = String.Join("|", filter), FilterIndex = filterIndex })
-				{
-					if (sfd.ShowDialog() != DialogResult.OK) return;
-					filename = sfd.FileName;
-					_lastExtension = Path.GetExtension(filename);
-				}
-
-				await _documentRegister.Value.SaveDocument(doc, filename);
+				await _documentRegister.Value.SaveDocument(doc, result.FileName, "", result.Options);
 			}
-		}
-
-		public IEnumerable<SettingKey> GetKeys()
-		{
-			yield break;
-		}
-
-		public void LoadValues(ISettingsStore store)
-		{
-			_lastExtension = store.Get<string>("extension");
-			ValuesLoaded = true;
-		}
-
-		public void StoreValues(ISettingsStore store)
-		{
-			store.Set("extension", _lastExtension);
 		}
 	}
 }

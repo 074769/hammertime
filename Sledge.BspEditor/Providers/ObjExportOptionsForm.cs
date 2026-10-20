@@ -10,7 +10,7 @@ namespace Sledge.BspEditor.Providers
 	public class ObjExportOptionsForm : Form
 	{
 		// Remember the last choices for the rest of the session
-		private static readonly ObjExportOptions Last = new ObjExportOptions();
+		internal static readonly ObjExportOptions Last = new ObjExportOptions();
 
 		private readonly CheckBox _selectedOnly;
 		private readonly ComboBox _axis;

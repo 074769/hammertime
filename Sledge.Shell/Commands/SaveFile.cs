@@ -12,6 +12,7 @@ using Sledge.Common.Shell.Documents;
 using Sledge.Common.Shell.Hotkeys;
 using Sledge.Common.Shell.Menu;
 using Sledge.Common.Translations;
+using Sledge.Shell.Components;
 using Sledge.Shell.Properties;
 using Sledge.Shell.Registers;
 
@@ -26,16 +27,19 @@ namespace Sledge.Shell.Commands
     public class SaveFile : ICommand
     {
         private readonly Lazy<DocumentRegister> _documentRegister;
+        private readonly Lazy<SaveAsService> _saveAs;
 
         public string Name { get; set; } = "Save";
         public string Details { get; set; } = "Save";
 
         [ImportingConstructor]
         public SaveFile(
-            [Import] Lazy<DocumentRegister> documentRegister
+            [Import] Lazy<DocumentRegister> documentRegister,
+            [Import] Lazy<SaveAsService> saveAs
         )
         {
             _documentRegister = documentRegister;
+            _saveAs = saveAs;
         }
 
         public bool IsInContext(IContext context)
@@ -49,21 +53,17 @@ namespace Sledge.Shell.Commands
             if (doc != null)
             {
                 var filename = doc.FileName;
+                object options = null;
 
                 if (filename == null || !Directory.Exists(Path.GetDirectoryName(filename)))
                 {
-                    var filter = _documentRegister.Value.GetSupportedFileExtensions(doc)
-                        .Select(x => x.Description + "|" + String.Join(";", x.Extensions.Select(ex => "*" + ex)))
-                        .ToList();
-
-                    using (var sfd = new SaveFileDialog {Filter = String.Join("|", filter)})
-                    {
-                        if (sfd.ShowDialog() != DialogResult.OK) return;
-                        filename = sfd.FileName;
-                    }
+                    var result = _saveAs.Value.Prompt(doc, _documentRegister.Value.GetSupportedFileExtensions(doc));
+                    if (result == null) return;
+                    filename = result.FileName;
+                    options = result.Options;
                 }
 
-                await _documentRegister.Value.SaveDocument(doc, filename);
+                await _documentRegister.Value.SaveDocument(doc, filename, "", options);
             }
         }
     }

@@ -31,7 +31,7 @@ namespace Sledge.BspEditor.Documents
 	/// </summary>
 	[AutoTranslate]
 	[Export(typeof(IDocumentLoader))]
-	public class BspSourceDocumentLoader : IDocumentLoader
+	public class BspSourceDocumentLoader : IDocumentLoader, IDocumentOptionsSaver
 	{
 		private IEnumerable<Lazy<IBspSourceProvider>> _providers;
 		private readonly IEnumerable<Lazy<IBspSourceProcessor>> _processors;
@@ -301,13 +301,22 @@ namespace Sledge.BspEditor.Documents
 		}
 
 		/// <inheritdoc />
-		public async Task Save(IDocument document, string location)
+		public Task Save(IDocument document, string location)
+		{
+			return Save(document, location, null);
+		}
+
+		/// <summary>
+		/// Save with the options picked in the Save As dialog (null = none, fall back to asking where needed).
+		/// </summary>
+		public async Task Save(IDocument document, string location, object options)
 		{
 			var map = (MapDocument)document;
 
-			// OBJ is an export format with its own options; ask before doing any work
-			ObjExportOptions objOptions = null;
-			if (String.Equals(Path.GetExtension(location), ".obj", StringComparison.OrdinalIgnoreCase))
+			// OBJ is an export format with its own options. The Save As dialog normally supplies them;
+			// if it didn't (autosave, scripted export...) ask before doing any work.
+			var objOptions = options as ObjExportOptions;
+			if (objOptions == null && String.Equals(Path.GetExtension(location), ".obj", StringComparison.OrdinalIgnoreCase))
 			{
 				var hasSelection = !map.Selection.IsEmpty;
 				_shell.Value.InvokeSync(() => objOptions = ObjExportOptionsForm.Ask(_shell.Value, hasSelection));
