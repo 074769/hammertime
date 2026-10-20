@@ -48,7 +48,6 @@ namespace Sledge.Shell.Registers
 				foreach (var component in _components)
 				{
 					if (component is Control control) Themer.Track(control);
-					if (component is Form form) Sledge.Shell.Settings.DialogPlacementSettings.Attach(form);
 				}
 			});
 
