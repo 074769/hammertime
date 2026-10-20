@@ -9,6 +9,7 @@ using System.Windows.Forms;
 using LogicAndTrick.Oy;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Modification;
+using Sledge.BspEditor.Linking;
 using Sledge.BspEditor.Modification.Operations.Data;
 using Sledge.BspEditor.Modification.Operations.Selection;
 using Sledge.BspEditor.Modification.Operations.Tree;
@@ -599,10 +600,11 @@ namespace Sledge.BspEditor.Tools.Extrude
             var tops = BuildTops(faces, distance);
             var transaction = new Transaction();
             var parents = new Dictionary<long, IMapObject>();
+            var follower = new LinkFollower(document);
             var created = new List<PickedFace>();
             foreach (var picked in faces)
             {
-                var made = ExtrudeFace(document, transaction, parents, picked, tops[picked]);
+                var made = ExtrudeFace(document, transaction, parents, follower, picked, tops[picked]);
                 if (made != null) created.Add(made);
             }
 
@@ -666,7 +668,7 @@ namespace Sledge.BspEditor.Tools.Extrude
         }
 
         /// <summary>Queues the new solid for one face. Returns its top face (to keep picked), or null if the face can't be extruded.</summary>
-        private static PickedFace ExtrudeFace(MapDocument document, Transaction transaction, Dictionary<long, IMapObject> parents, PickedFace picked, List<Vector3> top)
+        private static PickedFace ExtrudeFace(MapDocument document, Transaction transaction, Dictionary<long, IMapObject> parents, LinkFollower follower, PickedFace picked, List<Vector3> top)
         {
             var face = picked.Face;
             var gen = document.Map.NumberGenerator;
@@ -695,6 +697,15 @@ namespace Sledge.BspEditor.Tools.Extrude
             var covered = MakeFace(gen, bottom, nullTexture.Clone(), false);
             transaction.Add(new RemoveMapObjectData(picked.Solid.ID, new[] { face }));
             transaction.Add(new AddMapObjectData(picked.Solid.ID, new[] { covered }));
+
+            extruded.DescendantsChanged(); // its bounds are needed to place the linked copies
+
+            // Extruding a solid of a link's origin instance: the other instances get the same covered face and their own linked copy of the new solid
+            if (follower.IsFollowed(picked.Solid))
+            {
+                follower.FaceReplaced(transaction.Add, picked.Solid, face, covered);
+                follower.Added(transaction.Add, picked.Solid, extruded);
+            }
 
             AttachNextTo(document, transaction, parents, picked.Solid, extruded);
             extruded.DescendantsChanged();
