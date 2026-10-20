@@ -44,6 +44,7 @@ namespace Sledge.Shell.Registers
 			_shell.InvokeSync(() =>
 			{
 				Themer.Install();
+				Sledge.Shell.Settings.DialogPlacementSettings.Install();
 				Themer.Track(_shell);
 				foreach (var component in _components)
 				{

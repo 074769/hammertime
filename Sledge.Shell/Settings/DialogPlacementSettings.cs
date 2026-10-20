@@ -4,15 +4,18 @@ using System.ComponentModel.Composition;
 using System.Drawing;
 using System.Globalization;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Windows.Forms;
+using LogicAndTrick.Oy;
 using Sledge.Common.Shell.Settings;
 
 namespace Sledge.Shell.Settings
 {
     /// <summary>
-    /// Remembers where the user put each dialog window (Object Properties, Texture Application,
-    /// UV Mapping, Settings, Map Information, ...) and restores it the next time the editor starts.
-    /// DialogRegister calls <see cref="Attach"/> for every registered dialog form.
+    /// Remembers where the user put each pop-up window (Object Properties, Texture Application,
+    /// UV Mapping, Settings, Compile, Transform, ...) and restores it the next time it opens.
+    /// DialogRegister calls <see cref="Attach"/> for every registered dialog and <see cref="Install"/>
+    /// once; any other pop-up is picked up on its first paint.
     /// </summary>
     [Export(typeof(ISettingsContainer))]
     public class DialogPlacementSettings : ISettingsContainer
@@ -21,9 +24,20 @@ namespace Sledge.Shell.Settings
 
         private static readonly object Lock = new object();
         private static readonly Dictionary<string, Rectangle> Placements = new Dictionary<string, Rectangle>();
+        private static readonly ConditionalWeakTable<Form, object> Attached = new ConditionalWeakTable<Form, object>();
+        private static readonly List<WeakReference<Form>> TrackedForms = new List<WeakReference<Form>>();
+        private static bool _installed;
+        private static volatile bool _loaded;
+        private static Timer _saveTimer;
+
+        // Windows that place themselves, remember themselves, or aren't movable pop-ups
+        private static readonly HashSet<string> Excluded = new HashSet<string>
+        {
+            "ModelBrowserDialog", "ViewportWindow", "SplashForm", "CommandBox", "ExceptionWindow"
+        };
 
         public string Name => "Sledge.Shell.DialogPlacement";
-        public bool ValuesLoaded { get; private set; }
+        public bool ValuesLoaded => _loaded;
 
         public IEnumerable<SettingKey> GetKeys()
         {
@@ -42,7 +56,23 @@ namespace Sledge.Shell.Settings
                     if (TryParse(store.Get<string>(key), out var rect)) Placements[name] = rect;
                 }
             }
-            ValuesLoaded = true;
+            _loaded = true;
+
+            // Dialogs register at startup, before the settings file is read: apply the saved
+            // positions to every dialog that is already attached and not on screen yet.
+            List<Form> forms;
+            lock (Lock)
+            {
+                forms = TrackedForms.Select(w => w.TryGetTarget(out var f) ? f : null).Where(f => f != null).ToList();
+            }
+            foreach (var form in forms)
+            {
+                var f = form;
+                OnUiThread(f, () =>
+                {
+                    if (!f.IsDisposed && !f.Visible) Restore(f);
+                });
+            }
         }
 
         public void StoreValues(ISettingsStore store)
@@ -62,30 +92,81 @@ namespace Sledge.Shell.Settings
         }
 
         /// <summary>
-        /// Restore the saved position of a dialog and start tracking it. Call on the UI thread.
+        /// Call once on the UI thread at startup. Pop-up windows that aren't registered dialogs
+        /// (browsers, compile/transform/export windows, prompts...) are picked up on their first paint.
+        /// </summary>
+        public static void Install()
+        {
+            if (_installed) return;
+            _installed = true;
+            Application.AddMessageFilter(new NewWindowFilter());
+        }
+
+        private sealed class NewWindowFilter : IMessageFilter
+        {
+            private const int WmPaint = 0x000F;
+
+            public bool PreFilterMessage(ref Message m)
+            {
+                if (m.Msg != WmPaint) return false;
+                var form = (Control.FromHandle(m.HWnd)?.TopLevelControl) as Form;
+                if (form == null || !ShouldTrack(form)) return false;
+                Attach(form);
+                return false;
+            }
+        }
+
+        private static bool ShouldTrack(Form form)
+        {
+            if (form.IsDisposed || !form.TopLevel || form.IsMdiChild) return false;
+            if (form is Forms.Shell) return false;
+            if (form.FormBorderStyle == FormBorderStyle.None) return false;
+            if (form.WindowState != FormWindowState.Normal) return false;
+            return !Excluded.Contains(form.GetType().Name);
+        }
+
+        /// <summary>
+        /// Restore the saved position of a window and start tracking it. Call on the UI thread.
         /// </summary>
         public static void Attach(Form form)
         {
             if (form == null) return;
-            var name = form.GetType().FullName;
-
-            Rectangle saved;
-            bool hasSaved;
-            lock (Lock) hasSaved = Placements.TryGetValue(name, out saved);
-
-            if (hasSaved && IsUsable(saved))
+            lock (Lock)
             {
-                var sizable = form.FormBorderStyle == FormBorderStyle.Sizable
-                              || form.FormBorderStyle == FormBorderStyle.SizableToolWindow;
-                var size = sizable ? ClampSize(form, saved.Size) : form.Size;
-                form.StartPosition = FormStartPosition.Manual;
-                form.Bounds = new Rectangle(saved.Location, size);
+                if (Attached.TryGetValue(form, out _)) return;
+                Attached.Add(form, new object());
+                if (!Excluded.Contains(form.GetType().Name)) TrackedForms.Add(new WeakReference<Form>(form));
             }
+            if (Excluded.Contains(form.GetType().Name)) return;
 
-            Action capture = () => Capture(form, name);
-            form.LocationChanged += (s, e) => capture();
-            form.SizeChanged += (s, e) => capture();
-            form.VisibleChanged += (s, e) => capture();
+            Restore(form);
+
+            var name = form.GetType().FullName;
+            form.LocationChanged += (s, e) => Capture(form, name);
+            form.SizeChanged += (s, e) => Capture(form, name);
+            form.ResizeEnd += (s, e) => ScheduleSave();
+            form.VisibleChanged += (s, e) =>
+            {
+                Capture(form, name);
+                if (!form.Visible) ScheduleSave();
+            };
+        }
+
+        private static void Restore(Form form)
+        {
+            var name = form.GetType().FullName;
+            Rectangle saved;
+            lock (Lock)
+            {
+                if (!Placements.TryGetValue(name, out saved)) return;
+            }
+            if (!IsUsable(saved)) return;
+
+            var sizable = form.FormBorderStyle == FormBorderStyle.Sizable
+                          || form.FormBorderStyle == FormBorderStyle.SizableToolWindow;
+            var size = sizable ? ClampSize(form, saved) : form.Size;
+            form.StartPosition = FormStartPosition.Manual;
+            form.Bounds = new Rectangle(saved.Location, size);
         }
 
         private static void Capture(Form form, string name)
@@ -96,12 +177,35 @@ namespace Sledge.Shell.Settings
             lock (Lock) Placements[name] = rect;
         }
 
-        private static Size ClampSize(Form form, Size size)
+        /// <summary>Write the settings file shortly after a window was moved, instead of only at shutdown.</summary>
+        private static void ScheduleSave()
+        {
+            if (!_loaded) return;
+            if (_saveTimer == null)
+            {
+                _saveTimer = new Timer { Interval = 1500 };
+                _saveTimer.Tick += (s, e) =>
+                {
+                    _saveTimer.Stop();
+                    Oy.Publish("Settings:Save");
+                };
+            }
+            _saveTimer.Stop();
+            _saveTimer.Start();
+        }
+
+        private static void OnUiThread(Form form, Action action)
+        {
+            if (form.IsHandleCreated && form.InvokeRequired) form.BeginInvoke(action);
+            else action();
+        }
+
+        private static Size ClampSize(Form form, Rectangle saved)
         {
             var min = form.MinimumSize;
-            var area = Screen.FromPoint(new Point(form.Left, form.Top)).WorkingArea;
-            var w = Math.Min(Math.Max(size.Width, Math.Max(min.Width, 100)), area.Width);
-            var h = Math.Min(Math.Max(size.Height, Math.Max(min.Height, 100)), area.Height);
+            var area = Screen.FromPoint(saved.Location).WorkingArea;
+            var w = Math.Min(Math.Max(saved.Width, Math.Max(min.Width, 100)), area.Width);
+            var h = Math.Min(Math.Max(saved.Height, Math.Max(min.Height, 100)), area.Height);
             return new Size(w, h);
         }
 
