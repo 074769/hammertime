@@ -106,7 +106,7 @@ namespace Sledge.Shell.Settings
         {
             private const int WmPaint = 0x000F;
 
-            public bool PreFilterMessage(ref Message m)
+            public bool PreFilterMessage(ref System.Windows.Forms.Message m)
             {
                 if (m.Msg != WmPaint) return false;
                 var form = (Control.FromHandle(m.HWnd)?.TopLevelControl) as Form;
