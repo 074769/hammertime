@@ -93,12 +93,12 @@ namespace Sledge.Providers.Model.Mdl10.Combine
 		/// <param name="model">A parsed GoldSrc .mdl.</param>
 		/// <param name="body">Body value as used by the entity's "body" key (mixed-radix over body parts, same as MdlModel.Render).</param>
 		/// <param name="skin">Skin family index, as used by the entity's "skin" key.</param>
-		public static BindPoseMesh Extract(MdlFile model, int body = 0, int skin = 0)
+		public static BindPoseMesh Extract(MdlFile model, int body = 0, int skin = 0, int sequence = -1)
 		{
 			var result = new BindPoseMesh();
 			if (model == null || model.Bones == null || model.BodyParts == null) return result;
 
-			var boneWorld = BuildBindPose(model);
+			var boneWorld = BuildPose(model, sequence);
 			var skinFamily = model.Skins != null && model.Skins.Count > 0
 				? model.Skins[skin % model.Skins.Count].Textures
 				: new short[0];
@@ -165,6 +165,32 @@ namespace Sledge.Providers.Model.Mdl10.Combine
 		/// World-space bone matrices for the reference pose. Uses the same rotation convention
 		/// as MdlFile.GetTransforms (angles swapped between yaw and pitch), without frame deltas.
 		/// </summary>
+		/// <summary>
+		/// Index of the sequence the renderer starts an entity on: "idle", else the first sequence starting with "idle", else 0.
+		/// </summary>
+		public static int DefaultSequence(MdlFile model)
+		{
+			if (model.Sequences == null || model.Sequences.Count == 0) return -1;
+			for (var i = 0; i < model.Sequences.Count; i++)
+				if (string.Equals(model.Sequences[i].Header.Name, "idle", StringComparison.InvariantCultureIgnoreCase)) return i;
+			for (var i = 0; i < model.Sequences.Count; i++)
+				if (model.Sequences[i].Header.Name != null && model.Sequences[i].Header.Name.StartsWith("idle", StringComparison.InvariantCultureIgnoreCase)) return i;
+			return 0;
+		}
+
+		/// <summary>
+		/// Bone transforms for frame 0 of a sequence, the pose an entity shows when it starts. Falls back to the reference pose.
+		/// </summary>
+		private static Matrix4x4[] BuildPose(MdlFile model, int sequence)
+		{
+			if (sequence < 0 || sequence >= (model.Sequences?.Count ?? 0)) sequence = DefaultSequence(model);
+			if (sequence < 0 || model.Sequences[sequence].Header.NumFrames <= 0) return BuildBindPose(model);
+
+			var transforms = new Matrix4x4[model.Bones.Count];
+			model.GetTransforms(sequence, 0, 0, ref transforms);
+			return transforms;
+		}
+
 		private static Matrix4x4[] BuildBindPose(MdlFile model)
 		{
 			var count = model.Bones.Count;

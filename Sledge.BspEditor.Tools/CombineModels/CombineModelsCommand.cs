@@ -99,6 +99,7 @@ namespace Sledge.BspEditor.Tools.CombineModels
 					Placement = placement,
 					Mesh = placed,
 					SrcTex = placed.TextureIndices.Distinct().ToList(),
+					TextureKeys = placed.TextureIndices.Distinct().Select(i => CombineWriter.TextureKey(mdl.Textures[i])).Distinct().ToList(),
 					UniqueVertices = placed.Vertices.Select(v => v.Position).Distinct().Count(),
 				});
 			}
@@ -186,6 +187,8 @@ namespace Sledge.BspEditor.Tools.CombineModels
 					IsSelected = false,
 				};
 				entity.EntityData.Set("model", modelName);
+				// An explicit angles key lets the editor rotate the entity; the engine then turns the whole group around the pivot.
+				entity.EntityData.Set("angles", "0 0 0");
 				if (first.RenderMode != 0) entity.EntityData.Set("rendermode", first.RenderMode);
 				if (first.RenderAmt != 255) entity.EntityData.Set("renderamt", first.RenderAmt);
 				if (first.RenderFx != 0) entity.EntityData.Set("renderfx", first.RenderFx);

@@ -18,7 +18,7 @@ namespace Sledge.Providers.Model.Mdl10.Combine
 		public MdlFile Src;
 		public BindPoseMesh Mesh;      // already transformed into combined origin space
 		public List<int> SrcTex;       // source texture indices used by skin 0, in order
-		public int TexBase;            // first combined texture index for this member
+		public Dictionary<int, int> TexMap; // source texture index -> combined texture index
 	}
 
 	public static class CombineWriter
@@ -49,16 +49,29 @@ namespace Sledge.Providers.Model.Mdl10.Combine
 			BitConverter.GetBytes(-1).CopyTo(boneBlk, 32);                                  // parent
 			for (int k = 0; k < 6; k++) BitConverter.GetBytes(-1).CopyTo(boneBlk, 40 + 4 * k); // bone controllers
 			for (int k = 0; k < 6; k++) BitConverter.GetBytes(0f).CopyTo(boneBlk, 64 + 4 * k);  // position and rotation
-			byte[] animBlk = srcBytes.Skip(388).Take(AnimSize).ToArray();
+			// Zeroed: the combined model has no root animation. A zero channel offset means no motion, so the root stays at its reference pose.
+			byte[] animBlk = new byte[AnimSize];
 			byte[] seqBlk = srcBytes.Skip(404).Take(SeqSize).ToArray();
 			byte[] seqgBlk = srcBytes.Skip(580).Take(SeqGroupSize).ToArray();
 
-			// Combined texture table: each member contributes the textures its skin 0 uses.
+			// Combined texture table: identical textures are stored once and shared by every member that uses them.
 			var textures = new List<MdlTexture>();
+			var keyToIndex = new Dictionary<string, int>();
 			foreach (var m in members)
 			{
-				m.TexBase = textures.Count;
-				foreach (var idx in m.SrcTex) textures.Add(m.Src.Textures[idx]);
+				m.TexMap = new Dictionary<int, int>();
+				foreach (var idx in m.SrcTex)
+				{
+					var tex = m.Src.Textures[idx];
+					var key = TextureKey(tex);
+					if (!keyToIndex.TryGetValue(key, out var combined))
+					{
+						combined = textures.Count;
+						keyToIndex[key] = combined;
+						textures.Add(tex);
+					}
+					m.TexMap[idx] = combined;
+				}
 			}
 			int nt = textures.Count;
 
@@ -95,7 +108,7 @@ namespace Sledge.Providers.Model.Mdl10.Combine
 				var groups = new SortedDictionary<int, List<int>>();
 				for (int t = 0; t < triCount; t++)
 				{
-					var tex = m.TexBase + m.SrcTex.IndexOf(corners[t * 3].TextureIndex);
+					var tex = m.TexMap[corners[t * 3].TextureIndex];
 					if (!groups.TryGetValue(tex, out var list)) { list = new List<int>(); groups[tex] = list; }
 					list.Add(t);
 				}
@@ -278,6 +291,18 @@ namespace Sledge.Providers.Model.Mdl10.Combine
 			bw.Flush();
 			if (ms.Length != total) throw new Exception($"layout mismatch: wrote {ms.Length}, expected {total}");
 			return ms.ToArray();
+		}
+
+		/// <summary>
+		/// Identity of a texture for sharing: its pixels, palette, size and flags. The name is not part of it.
+		/// </summary>
+		public static string TextureKey(MdlTexture t)
+		{
+			using (var sha = System.Security.Cryptography.SHA256.Create())
+			{
+				var hash = Convert.ToBase64String(sha.ComputeHash(t.Data.Concat(t.Palette).ToArray()));
+				return $"{(int)t.Header.Flags}|{t.Header.Width}|{t.Header.Height}|{hash}";
+			}
 		}
 
 		static void WriteVec(BinaryWriter bw, Vector3 v) { bw.Write(v.X); bw.Write(v.Y); bw.Write(v.Z); }

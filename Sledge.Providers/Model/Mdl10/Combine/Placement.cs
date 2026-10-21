@@ -68,6 +68,8 @@ namespace Sledge.Providers.Model.Mdl10.Combine
 		public Placement Placement;
 		public BindPoseMesh Mesh;
 		public List<int> SrcTex;
+		/// <summary>Identity of each texture this member uses; shared textures count once per model.</summary>
+		public List<string> TextureKeys;
 		public int UniqueVertices;
 	}
 
@@ -75,7 +77,7 @@ namespace Sledge.Providers.Model.Mdl10.Combine
 	{
 		public string RenderKey;
 		public List<PreparedMember> Members = new List<PreparedMember>();
-		public int TextureCount => Members.Sum(m => m.SrcTex.Count);
+		public int TextureCount => Members.SelectMany(m => m.TextureKeys).Distinct().Count();
 	}
 
 	public static class CombinePlanner
@@ -107,9 +109,11 @@ namespace Sledge.Providers.Model.Mdl10.Combine
 						throw new InvalidOperationException(
 							$"'{m.Placement.Name}' uses {m.SrcTex.Count} textures, above the {maxTextures} per-model limit.");
 
+					var keys = current == null ? new HashSet<string>() : new HashSet<string>(current.Members.SelectMany(x => x.TextureKeys));
+					int newTextures = m.TextureKeys.Count(k => !keys.Contains(k));
 					bool full = current == null
 						|| current.Members.Count + 1 > maxBodyParts
-						|| current.TextureCount + m.SrcTex.Count > maxTextures;
+						|| keys.Count + newTextures > maxTextures;
 					if (full)
 					{
 						current = new CombinedModelPlan { RenderKey = group.Key };
