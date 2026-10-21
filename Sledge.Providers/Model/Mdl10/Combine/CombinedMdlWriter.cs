@@ -12,6 +12,8 @@ namespace Sledge.Providers.Model.Mdl10.Combine
 	public class CombineMember
 	{
 		public string Path;
+		/// <summary>Source .mdl bytes. Used when set, so the writer works without a file on disk.</summary>
+		public byte[] SourceBytes;
 		public string Name;
 		public MdlFile Src;
 		public BindPoseMesh Mesh;      // already transformed into combined origin space
@@ -40,8 +42,13 @@ namespace Sledge.Providers.Model.Mdl10.Combine
 		public static byte[] Build(List<CombineMember> members, string modelName)
 		{
 			// Source bones, animation, sequence and sequence group blocks are copied from member 0.
-			var srcBytes = File.ReadAllBytes(members[0].Path);
-			byte[] boneBlk = srcBytes.Skip(244).Take(BoneSize).ToArray();
+			var srcBytes = members[0].SourceBytes ?? File.ReadAllBytes(members[0].Path);
+			// Combined models use one identity root bone; the baked geometry is already in model space.
+			var boneBlk0 = srcBytes.Skip(244).Take(BoneSize).ToArray();
+			byte[] boneBlk = boneBlk0;
+			BitConverter.GetBytes(-1).CopyTo(boneBlk, 32);                                  // parent
+			for (int k = 0; k < 6; k++) BitConverter.GetBytes(-1).CopyTo(boneBlk, 40 + 4 * k); // bone controllers
+			for (int k = 0; k < 6; k++) BitConverter.GetBytes(0f).CopyTo(boneBlk, 64 + 4 * k);  // position and rotation
 			byte[] animBlk = srcBytes.Skip(388).Take(AnimSize).ToArray();
 			byte[] seqBlk = srcBytes.Skip(404).Take(SeqSize).ToArray();
 			byte[] seqgBlk = srcBytes.Skip(580).Take(SeqGroupSize).ToArray();

@@ -16,7 +16,6 @@ namespace Sledge.Providers.Model.Mdl10.Combine
 		public Vector3 Origin;
 		/// <summary>Entity angles in degrees, as stored in the map: pitch, yaw, roll.</summary>
 		public Vector3 Angles;
-		public float Scale = 1f;
 		public int Body;
 		public int Skin;
 		public int RenderMode;
@@ -31,11 +30,11 @@ namespace Sledge.Providers.Model.Mdl10.Combine
 	public static class PlacementMath
 	{
 		/// <summary>
-		/// Applies an entity placement to model-space geometry using the engine's AngleMatrix
+		/// Applies an entity placement (origin and angles only) to model-space geometry using the engine's AngleMatrix
 		/// convention: yaw about Z, pitch as elevation (positive is nose down), roll about the forward axis.
 		/// </summary>
 		/// <param name="negatePitch">Flip the pitch sign. Only for checking the in-game result.</param>
-		public static BindPoseMesh Place(BindPoseMesh mesh, Vector3 origin, Vector3 anglesDeg, float scale, bool negatePitch = false)
+		public static BindPoseMesh Place(BindPoseMesh mesh, Vector3 origin, Vector3 anglesDeg, bool negatePitch = false)
 		{
 			var pitch = (negatePitch ? -anglesDeg.X : anglesDeg.X) * (float)Math.PI / 180f;
 			var yaw = anglesDeg.Y * (float)Math.PI / 180f;
@@ -53,7 +52,8 @@ namespace Sledge.Providers.Model.Mdl10.Combine
 			var result = new BindPoseMesh();
 			foreach (var v in mesh.Vertices)
 			{
-				var p = (v.Position.X * fwd + v.Position.Y * right + v.Position.Z * up) * scale + origin;
+				// Scale is not applied: GoldSrc model scale is set in the QC ($scale) and is already in the compiled geometry.
+				var p = v.Position.X * fwd + v.Position.Y * right + v.Position.Z * up + origin;
 				var n = v.Normal.X * fwd + v.Normal.Y * right + v.Normal.Z * up;
 				result.Vertices.Add(new BindVertex
 				{
