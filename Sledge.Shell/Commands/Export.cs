@@ -55,7 +55,7 @@ namespace Sledge.Shell.Commands
 				.SelectMany(x => x.SupportedFileExtensions)
 				.ToList();
 
-			var result = _saveAs.Value.Prompt(doc, formats, "Export", "Export");
+			var result = _saveAs.Value.Prompt(doc, formats, "Export", "Export", "export");
 			if (result == null) return;
 
 			// Export: writes the file without switching the document over to it

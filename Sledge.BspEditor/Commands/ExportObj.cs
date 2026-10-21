@@ -46,7 +46,7 @@ namespace Sledge.BspEditor.Commands
 
         protected override async Task Invoke(MapDocument document, CommandParameters parameters)
         {
-            var result = _saveAs.Value.Prompt(document, ObjFormat, "Export as OBJ", "Export");
+            var result = _saveAs.Value.Prompt(document, ObjFormat, "Export as OBJ", "Export", "obj");
             if (result == null) return;
 
             var options = result.Options as ObjExportOptions ?? new ObjExportOptions();

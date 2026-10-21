@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 using Sledge.Common.Shell.Documents;
+using Newtonsoft.Json;
 using Sledge.Common.Shell.Settings;
 using Sledge.Shell.Forms;
 
@@ -36,8 +37,21 @@ namespace Sledge.Shell.Components
         private readonly IEnumerable<Lazy<ISaveOptionsProvider>> _optionProviders;
         private readonly Lazy<System.Windows.Forms.Form> _shell;
 
-        private string _lastExtension;
-        private string _lastFolder;
+        private class Remembered
+        {
+            public string Folder { get; set; }
+            public string Extension { get; set; }
+        }
+
+        // The last folder/format per context ("" = Save As / Save, "obj" = Export as OBJ, "export" = File > Export...)
+        private readonly Dictionary<string, Remembered> _remembered = new Dictionary<string, Remembered>(StringComparer.OrdinalIgnoreCase);
+
+        private Remembered Recall(string contextKey)
+        {
+            contextKey = contextKey ?? "";
+            if (!_remembered.TryGetValue(contextKey, out var r)) _remembered[contextKey] = r = new Remembered();
+            return r;
+        }
 
         string ISettingsContainer.Name => "Sledge.Shell.SaveAs";
         public bool ValuesLoaded { get; private set; }
@@ -59,8 +73,15 @@ namespace Sledge.Shell.Components
         /// <param name="formats">The formats to offer</param>
         /// <param name="title">Window title</param>
         /// <param name="actionText">Text of the confirm button</param>
-        public SaveAsResult Prompt(IDocument document, IEnumerable<FileExtensionInfo> formats, string title = "Save As", string actionText = "Save")
+        /// <param name="contextKey">
+        /// Null for the normal Save / Save As (starts in the document's own folder).
+        /// Any other value gives that kind of export its own remembered folder and format,
+        /// which is tried before the document's folder.
+        /// </param>
+        public SaveAsResult Prompt(IDocument document, IEnumerable<FileExtensionInfo> formats, string title = "Save As", string actionText = "Save", string contextKey = null)
         {
+            var memory = Recall(contextKey);
+
             var entries = new List<SaveAsDialog.FormatEntry>();
             foreach (var info in formats)
             {
@@ -75,16 +96,19 @@ namespace Sledge.Shell.Components
             var docFile = document.FileName;
             var docFolder = SafeDirectory(docFile);
 
-            var folder = docFolder != null && Directory.Exists(docFolder) ? docFolder
-                : !String.IsNullOrEmpty(_lastFolder) && Directory.Exists(_lastFolder) ? _lastFolder
-                : System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments);
+            var docFolderOk = docFolder != null && Directory.Exists(docFolder);
+            var memoryOk = !String.IsNullOrEmpty(memory.Folder) && Directory.Exists(memory.Folder);
+            var folder = contextKey == null
+                ? (docFolderOk ? docFolder : memoryOk ? memory.Folder : null)
+                : (memoryOk ? memory.Folder : docFolderOk ? docFolder : null);
+            if (folder == null) folder = System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments);
 
             var name = !String.IsNullOrWhiteSpace(docFile) ? Path.GetFileNameWithoutExtension(docFile) : CleanName(document.Name);
             if (String.IsNullOrWhiteSpace(name)) name = "untitled";
 
             // Prefer the document's own format, then whatever was used last
             var docExt = String.IsNullOrWhiteSpace(docFile) ? null : Path.GetExtension(docFile);
-            var extension = entries.Any(x => String.Equals(x.Extension, docExt, StringComparison.OrdinalIgnoreCase)) ? docExt : _lastExtension;
+            var extension = entries.Any(x => String.Equals(x.Extension, docExt, StringComparison.OrdinalIgnoreCase)) ? docExt : memory.Extension;
 
             var providers = _optionProviders.Select(x => x.Value).ToList();
 
@@ -105,8 +129,8 @@ namespace Sledge.Shell.Components
 
             if (result != null)
             {
-                _lastExtension = result.Extension;
-                _lastFolder = SafeDirectory(result.FileName) ?? _lastFolder;
+                memory.Extension = result.Extension;
+                memory.Folder = SafeDirectory(result.FileName) ?? memory.Folder;
             }
             return result;
         }
@@ -132,15 +156,31 @@ namespace Sledge.Shell.Components
 
         public void LoadValues(ISettingsStore store)
         {
-            _lastExtension = store.Get<string>("extension");
-            _lastFolder = store.Get<string>("folder");
+            var main = Recall(null);
+            main.Extension = store.Get<string>("extension");
+            main.Folder = store.Get<string>("folder");
+
+            try
+            {
+                var json = store.Get<string>("contexts");
+                var others = String.IsNullOrWhiteSpace(json) ? null : JsonConvert.DeserializeObject<Dictionary<string, Remembered>>(json);
+                if (others != null) foreach (var kv in others) _remembered[kv.Key] = kv.Value ?? new Remembered();
+            }
+            catch
+            {
+                // Unreadable saved paths just fall back to defaults
+            }
             ValuesLoaded = true;
         }
 
         public void StoreValues(ISettingsStore store)
         {
-            store.Set("extension", _lastExtension);
-            store.Set("folder", _lastFolder);
+            var main = Recall(null);
+            store.Set("extension", main.Extension);
+            store.Set("folder", main.Folder);
+
+            var others = _remembered.Where(x => x.Key != "").ToDictionary(x => x.Key, x => x.Value);
+            store.Set("contexts", JsonConvert.SerializeObject(others));
         }
     }
 }
