@@ -1,6 +1,7 @@
 using Sledge.BspEditor.Commands;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Modification;
+using Sledge.BspEditor.Modification.Operations.Selection;
 using Sledge.BspEditor.Modification.Operations.Tree;
 using Sledge.BspEditor.Primitives.MapObjectData;
 using Sledge.BspEditor.Primitives.MapObjects;
@@ -214,6 +215,9 @@ namespace Sledge.BspEditor.Tools.CombineModels
 
 				await MapDocumentOperation.Perform(document, new Attach(document.Map.Root.ID, entity));
 			}
+
+			// Clear the selection so the next combine starts clean. A leftover info_target would pull the next combined model to it.
+			await MapDocumentOperation.Perform(document, new Deselect(document.Selection.ToList()));
 
 			var names = string.Join("\n", outputs.Select(o => o.modelName));
 			MessageBox.Show($"Wrote {outputs.Count} combined model(s):\n{names}\n\nThe original entities were left in place.",
