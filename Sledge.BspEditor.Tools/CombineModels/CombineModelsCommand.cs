@@ -19,6 +19,7 @@ using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using MapEntity = Sledge.BspEditor.Primitives.MapObjects.Entity;
 
 namespace Sledge.BspEditor.Tools.CombineModels
 {
@@ -40,7 +41,7 @@ namespace Sledge.BspEditor.Tools.CombineModels
 
 		protected async override Task Invoke(MapDocument document, CommandParameters parameters)
 		{
-			var entities = document.Selection.OfType<Entity>().Where(IsModelEntity).ToList();
+			var entities = document.Selection.OfType<MapEntity>().Where(IsModelEntity).ToList();
 			if (entities.Count < 2)
 			{
 				MessageBox.Show("Select at least two model entities (cycler or cycler_sprite using a .mdl) to combine.",
@@ -163,7 +164,7 @@ namespace Sledge.BspEditor.Tools.CombineModels
 			foreach (var (modelName, fullPath, plan) in outputs)
 			{
 				var first = plan.Members[0].Placement;
-				var entity = new Entity(document.Map.NumberGenerator.Next("MapObject"))
+				var entity = new MapEntity(document.Map.NumberGenerator.Next("MapObject"))
 				{
 					Data =
 					{
@@ -189,7 +190,7 @@ namespace Sledge.BspEditor.Tools.CombineModels
 				"Combine models", MessageBoxButtons.OK, MessageBoxIcon.Information);
 		}
 
-		private static bool IsModelEntity(Entity e)
+		private static bool IsModelEntity(MapEntity e)
 		{
 			var data = e.EntityData;
 			if (data == null) return false;
@@ -199,7 +200,7 @@ namespace Sledge.BspEditor.Tools.CombineModels
 			return !string.IsNullOrWhiteSpace(model) && model.EndsWith(".mdl", StringComparison.InvariantCultureIgnoreCase);
 		}
 
-		private static Vector3 EntityOrigin(Entity e)
+		private static Vector3 EntityOrigin(MapEntity e)
 		{
 			return e.Data.GetOne<Origin>()?.Location ?? e.BoundingBox.Center;
 		}
