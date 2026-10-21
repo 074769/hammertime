@@ -30,35 +30,27 @@ namespace Sledge.Providers.Model.Mdl10.Combine
 	public static class PlacementMath
 	{
 		/// <summary>
-		/// Applies an entity placement (origin and angles only) to model-space geometry using the engine's AngleMatrix
-		/// convention: yaw about Z, pitch as elevation (positive is nose down), roll about the forward axis.
+		/// Applies an entity placement (origin and angles only) to model-space geometry.
+		/// Uses the same transform the model renderer applies to placed entities
+		/// (MdlModelRenderable.GetModelTransformation), so the baked model matches the originals.
+		/// Map angles are pitch, yaw, roll in degrees.
 		/// </summary>
-		/// <param name="negatePitch">Flip the pitch sign. Only for checking the in-game result.</param>
-		public static BindPoseMesh Place(BindPoseMesh mesh, Vector3 origin, Vector3 anglesDeg, bool negatePitch = false)
+		public static BindPoseMesh Place(BindPoseMesh mesh, Vector3 origin, Vector3 anglesDeg)
 		{
-			var pitch = (negatePitch ? -anglesDeg.X : anglesDeg.X) * (float)Math.PI / 180f;
-			var yaw = anglesDeg.Y * (float)Math.PI / 180f;
-			var roll = anglesDeg.Z * (float)Math.PI / 180f;
-
-			float cp = (float)Math.Cos(pitch), sp = (float)Math.Sin(pitch);
-			float cy = (float)Math.Cos(yaw), sy = (float)Math.Sin(yaw);
-			float cr = (float)Math.Cos(roll), sr = (float)Math.Sin(roll);
-
-			// Columns of the rotation: where the model's X, Y and Z axes end up.
-			var fwd = new Vector3(cp * cy, cp * sy, -sp);
-			var right = new Vector3(sr * sp * cy - cr * sy, sr * sp * sy + cr * cy, sr * cp);
-			var up = new Vector3(cr * sp * cy + sr * sy, cr * sp * sy - sr * cy, cr * cp);
+			var a = anglesDeg * (float)Math.PI / 180f;
+			var yawMatrix = Matrix4x4.CreateRotationY(-a.X);
+			var pitchMatrix = Matrix4x4.CreateRotationX(a.Z);
+			var rollMatrix = Matrix4x4.CreateRotationZ(a.Y);
+			var rotation = pitchMatrix * yawMatrix * rollMatrix;
 
 			var result = new BindPoseMesh();
 			foreach (var v in mesh.Vertices)
 			{
 				// Scale is not applied: GoldSrc model scale is set in the QC ($scale) and is already in the compiled geometry.
-				var p = v.Position.X * fwd + v.Position.Y * right + v.Position.Z * up + origin;
-				var n = v.Normal.X * fwd + v.Normal.Y * right + v.Normal.Z * up;
 				result.Vertices.Add(new BindVertex
 				{
-					Position = p,
-					Normal = BindPoseMesh.SafeNormalize(n),
+					Position = Vector3.Transform(v.Position, rotation) + origin,
+					Normal = BindPoseMesh.SafeNormalize(Vector3.TransformNormal(v.Normal, rotation)),
 					Uv = v.Uv,
 					TextureIndex = v.TextureIndex,
 				});

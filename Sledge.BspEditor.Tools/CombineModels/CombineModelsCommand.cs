@@ -142,7 +142,17 @@ namespace Sledge.BspEditor.Tools.CombineModels
 						MessageBoxButtons.OK, MessageBoxIcon.Error);
 					return;
 				}
-				outputs.Add((relative, fullPath, plans[i]));
+				// Entity model keys start at the models folder (models/...), not at the game or install folder.
+				var segments = relative.Split('/');
+				var modelsIndex = Array.FindIndex(segments, x => string.Equals(x, "models", StringComparison.InvariantCultureIgnoreCase));
+				if (modelsIndex < 0)
+				{
+					MessageBox.Show($"'{fullPath}' is not inside a models folder of the game. Save it under models\\ so the entity can reference it.",
+						"Combine models", MessageBoxButtons.OK, MessageBoxIcon.Error);
+					return;
+				}
+				var modelKey = string.Join("/", segments.Skip(modelsIndex));
+				outputs.Add((modelKey, fullPath, plans[i]));
 			}
 
 			foreach (var (modelName, fullPath, plan) in outputs)
