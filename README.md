@@ -6,7 +6,7 @@ Hammertime
 ---
 
 Hammertime is an open-source Fork of Sledge which is an open-source Alternative to Valve's Hammer Editor for the Goldsource engine.
-It is written in .NET and uses [Veldrid][2] for rendering, with DirectX 10.
+It is written in .NET and uses [Veldrid][2] for rendering, with DirectX 11.
 
 Hammertime supports Goldsource mapping.
 
