@@ -44,7 +44,9 @@ namespace Sledge.BspEditor.Tools.CombineModels
 
 		protected async override Task Invoke(MapDocument document, CommandParameters parameters)
 		{
-			var entities = document.Selection.OfType<MapEntity>().Where(IsModelEntity).ToList();
+			// Include entities inside selected groups, so a grouped info_target or model is still found.
+			var selected = document.Selection.SelectMany(x => x.FindAll()).OfType<MapEntity>().Distinct().ToList();
+			var entities = selected.Where(IsModelEntity).ToList();
 			if (entities.Count < 2)
 			{
 				MessageBox.Show("Select at least two model entities (cycler or cycler_sprite using a .mdl) to combine.",
@@ -57,7 +59,7 @@ namespace Sledge.BspEditor.Tools.CombineModels
 
 			// Pivot: a selected info_target is the custom origin. Without one, the average of the models' own origins.
 			// Members are baked relative to the pivot either way.
-			var customOrigin = document.Selection.OfType<MapEntity>().FirstOrDefault(IsInfoTarget);
+			var customOrigin = selected.FirstOrDefault(IsInfoTarget);
 			Vector3 pivot;
 			if (customOrigin != null)
 			{
