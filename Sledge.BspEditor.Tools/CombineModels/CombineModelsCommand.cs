@@ -19,6 +19,7 @@ using System.ComponentModel.Composition;
 using System.IO;
 using System.Linq;
 using System.Numerics;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using MapEntity = Sledge.BspEditor.Primitives.MapObjects.Entity;
@@ -151,7 +152,23 @@ namespace Sledge.BspEditor.Tools.CombineModels
 			var outputs = new List<(string modelName, string fullPath, CombinedModelPlan plan)>();
 			for (int i = 0; i < plans.Count; i++)
 			{
-				var fileName = $"combined_{Shorten(plans[i].Members[0].Placement.Name, 40)}_{i:00}.mdl";
+				var plan = plans[i];
+				var members = plan.Members.Select(m => new CombineMember
+				{
+					Path = m.Placement.ModelPath,
+					Name = m.Placement.Name,
+					Src = models[m.Placement.ModelPath],
+					SourceBytes = sources[m.Placement.ModelPath],
+					Mesh = m.Mesh,
+					SrcTex = m.SrcTex,
+				}).ToList();
+				var baseName = $"combined_{Shorten(plan.Members[0].Placement.Name, 40)}_{i:00}";
+				var bytes = CombineWriter.Build(members, baseName + ".mdl");
+
+				// The name carries a hash of the contents. The editor caches models by path, so writing the same file
+				// name again would keep showing the old geometry after a rebake.
+				var hash = Convert.ToHexString(SHA256.HashData(bytes)).Substring(0, 8).ToLowerInvariant();
+				var fileName = $"{baseName}_{hash}.mdl";
 				var fullPath = IOPath.Combine(dialog.SelectedPath, fileName);
 				var relative = IOPath.GetRelativePath(baseDir, fullPath).Replace('\\', '/');
 				if (relative.StartsWith("..") || IOPath.IsPathRooted(relative))
@@ -170,21 +187,8 @@ namespace Sledge.BspEditor.Tools.CombineModels
 					return;
 				}
 				var modelKey = string.Join("/", segments.Skip(modelsIndex));
-				outputs.Add((modelKey, fullPath, plans[i]));
-			}
-
-			foreach (var (modelName, fullPath, plan) in outputs)
-			{
-				var members = plan.Members.Select(m => new CombineMember
-				{
-					Path = m.Placement.ModelPath,
-					Name = m.Placement.Name,
-					Src = models[m.Placement.ModelPath],
-					SourceBytes = sources[m.Placement.ModelPath],
-					Mesh = m.Mesh,
-					SrcTex = m.SrcTex,
-				}).ToList();
-				File.WriteAllBytes(fullPath, CombineWriter.Build(members, IOPath.GetFileName(fullPath)));
+				File.WriteAllBytes(fullPath, bytes);
+				outputs.Add((modelKey, fullPath, plan));
 			}
 
 			// One combined entity per file, at the pivot, with the render settings shared by its members.
