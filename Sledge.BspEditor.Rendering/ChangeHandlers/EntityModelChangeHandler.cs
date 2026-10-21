@@ -121,9 +121,18 @@ namespace Sledge.BspEditor.Rendering.ChangeHandlers
                 : string.Equals(model?.Name, name, StringComparison.InvariantCultureIgnoreCase) && model?.Renderable != null;
         }
 
+        /// <summary>
+        /// A solid whose faces all use the "origin" texture: a pivot marker for the model.
+        /// </summary>
+        private static bool IsOriginBrush(object o)
+        {
+            return o is Solid s && s.Faces.Any() && s.Faces.All(f => string.Equals(f.Texture.Name, "origin", StringComparison.InvariantCultureIgnoreCase));
+        }
+
         private static ModelDetails GetModelDetails(Entity entity, GameData gd)
         {
-            if (entity.Hierarchy.HasChildren || String.IsNullOrWhiteSpace(entity.EntityData.Name)) return null;
+            // Origin brushes mark the model's pivot and are not part of the model, so they must not hide it.
+            if (entity.Hierarchy.Any(x => !IsOriginBrush(x)) || String.IsNullOrWhiteSpace(entity.EntityData.Name)) return null;
             var cls = gd?.GetClass(entity.EntityData.Name);
             if (cls == null) return null;
 

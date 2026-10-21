@@ -7,6 +7,7 @@ using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.Common;
 using Sledge.Common.Shell.Commands;
 using Sledge.Common.Shell.Menu;
+using Sledge.Common.Shell.Settings;
 using Sledge.Common.Translations;
 using Sledge.FileSystem;
 using Sledge.Providers.Model.Mdl10.Combine;
@@ -31,9 +32,10 @@ namespace Sledge.BspEditor.Tools.CombineModels
 	/// </summary>
 	[AutoTranslate]
 	[Export(typeof(ICommand))]
+	[Export(typeof(ISettingsContainer))]
 	[CommandID("Tools:CombineModels")]
 	[MenuItem("Tools", "", "CombineModels", "")]
-	public class CombineModelsCommand : BaseCommand
+	public class CombineModelsCommand : BaseCommand, ISettingsContainer
 	{
 		public override string Name { get; set; } = "Combine models";
 		public override string Details { get; set; } = "Bake selected model entities into one combined .mdl";
@@ -53,9 +55,18 @@ namespace Sledge.BspEditor.Tools.CombineModels
 			var env = document.Environment;
 			var baseDir = env.BaseDirectory;
 
-			// Pivot: the average of the selected entities' origins. Members are baked relative to it.
-			var origins = entities.Select(EntityOrigin).ToList();
-			var pivot = new Vector3(origins.Average(o => o.X), origins.Average(o => o.Y), origins.Average(o => o.Z));
+			// Each model's pivot is its origin brush (a child solid with every face on the "origin" texture), or its
+			// entity origin when it has none. The combined entity sits at the average pivot.
+			var pivots = entities.Select(PivotOf).ToList();
+			var pivot = new Vector3(pivots.Average(o => o.X), pivots.Average(o => o.Y), pivots.Average(o => o.Z));
+
+			var withoutOrigin = entities.Where(e => OriginBrush(e) == null).ToList();
+			if (withoutOrigin.Count > 0)
+			{
+				var list = string.Join("\n", withoutOrigin.Select(e => "  " + ModelName(e)));
+				MessageBox.Show("No origin point detected, using default origin (middle of bounding box) for:\n" + list,
+					"Combine models", MessageBoxButtons.OK, MessageBoxIcon.Information);
+			}
 
 			var models = new Dictionary<string, MdlFile>(StringComparer.InvariantCultureIgnoreCase);
 			var sources = new Dictionary<string, byte[]>(StringComparer.InvariantCultureIgnoreCase);
@@ -202,6 +213,41 @@ namespace Sledge.BspEditor.Tools.CombineModels
 			var names = string.Join("\n", outputs.Select(o => o.modelName));
 			MessageBox.Show($"Wrote {outputs.Count} combined model(s):\n{names}\n\nThe original entities were left in place.",
 				"Combine models", MessageBoxButtons.OK, MessageBoxIcon.Information);
+		}
+
+		private static Solid OriginBrush(MapEntity e)
+		{
+			return e.FindAll().OfType<Solid>()
+				.FirstOrDefault(s => s.Faces.Any() && s.Faces.All(f => string.Equals(f.Texture.Name, "origin", StringComparison.InvariantCultureIgnoreCase)));
+		}
+
+		private static Vector3 PivotOf(MapEntity e)
+		{
+			return OriginBrush(e)?.BoundingBox.Center ?? EntityOrigin(e);
+		}
+
+		private static string ModelName(MapEntity e)
+		{
+			return e.EntityData.Get<string>("model", null) ?? e.EntityData.Name;
+		}
+
+		public bool ValuesLoaded => true;
+
+		string ISettingsContainer.Name => "Sledge.BspEditor.Tools.CombineModels";
+
+		IEnumerable<SettingKey> ISettingsContainer.GetKeys()
+		{
+			yield break;
+		}
+
+		void ISettingsContainer.LoadValues(ISettingsStore store)
+		{
+			_lastDirectory = store.Get<string>("lastDirectory");
+		}
+
+		void ISettingsContainer.StoreValues(ISettingsStore store)
+		{
+			store.Set<string>("lastDirectory", _lastDirectory);
 		}
 
 		private static bool IsModelEntity(MapEntity e)
