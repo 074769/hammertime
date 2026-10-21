@@ -55,16 +55,19 @@ namespace Sledge.BspEditor.Tools.CombineModels
 			var env = document.Environment;
 			var baseDir = env.BaseDirectory;
 
-			// Each model's pivot is its origin brush (a child solid with every face on the "origin" texture), or its
-			// entity origin when it has none. The combined entity sits at the average pivot.
-			var pivots = entities.Select(PivotOf).ToList();
-			var pivot = new Vector3(pivots.Average(o => o.X), pivots.Average(o => o.Y), pivots.Average(o => o.Z));
-
-			var withoutOrigin = entities.Where(e => OriginBrush(e) == null).ToList();
-			if (withoutOrigin.Count > 0)
+			// Pivot: a selected info_target is the custom origin. Without one, the average of the models' own origins.
+			// Members are baked relative to the pivot either way.
+			var customOrigin = document.Selection.OfType<MapEntity>().FirstOrDefault(IsInfoTarget);
+			Vector3 pivot;
+			if (customOrigin != null)
 			{
-				var list = string.Join("\n", withoutOrigin.Select(e => "  " + ModelName(e)));
-				MessageBox.Show("No origin point detected, using default origin (middle of bounding box) for:\n" + list,
+				pivot = EntityOrigin(customOrigin);
+			}
+			else
+			{
+				var origins = entities.Select(EntityOrigin).ToList();
+				pivot = new Vector3(origins.Average(o => o.X), origins.Average(o => o.Y), origins.Average(o => o.Z));
+				MessageBox.Show("No custom origin point found, select info_target together with models for custom origin point",
 					"Combine models", MessageBoxButtons.OK, MessageBoxIcon.Information);
 			}
 
@@ -215,20 +218,9 @@ namespace Sledge.BspEditor.Tools.CombineModels
 				"Combine models", MessageBoxButtons.OK, MessageBoxIcon.Information);
 		}
 
-		private static Solid OriginBrush(MapEntity e)
+		private static bool IsInfoTarget(MapEntity e)
 		{
-			return e.FindAll().OfType<Solid>()
-				.FirstOrDefault(s => s.Faces.Any() && s.Faces.All(f => string.Equals(f.Texture.Name, "origin", StringComparison.InvariantCultureIgnoreCase)));
-		}
-
-		private static Vector3 PivotOf(MapEntity e)
-		{
-			return OriginBrush(e)?.BoundingBox.Center ?? EntityOrigin(e);
-		}
-
-		private static string ModelName(MapEntity e)
-		{
-			return e.EntityData.Get<string>("model", null) ?? e.EntityData.Name;
+			return string.Equals(e.EntityData?.Name, "info_target", StringComparison.InvariantCultureIgnoreCase);
 		}
 
 		public bool ValuesLoaded => true;
