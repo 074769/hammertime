@@ -20,6 +20,7 @@ using System.Numerics;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using MapEntity = Sledge.BspEditor.Primitives.MapObjects.Entity;
+using IOPath = System.IO.Path;
 
 namespace Sledge.BspEditor.Tools.CombineModels
 {
@@ -80,7 +81,7 @@ namespace Sledge.BspEditor.Tools.CombineModels
 				var placement = new Placement
 				{
 					ModelPath = modelName,
-					Name = Shorten(Path.GetFileNameWithoutExtension(modelName), 63),
+					Name = Shorten(IOPath.GetFileNameWithoutExtension(modelName), 63),
 					Origin = EntityOrigin(e) - pivot,
 					Angles = data.GetVector3("angles") ?? Vector3.Zero,
 					Body = body,
@@ -133,9 +134,9 @@ namespace Sledge.BspEditor.Tools.CombineModels
 			for (int i = 0; i < plans.Count; i++)
 			{
 				var fileName = $"combined_{Shorten(plans[i].Members[0].Placement.Name, 40)}_{i:00}.mdl";
-				var fullPath = Path.Combine(dialog.SelectedPath, fileName);
-				var relative = Path.GetRelativePath(baseDir, fullPath).Replace('\\', '/');
-				if (relative.StartsWith("..") || Path.IsPathRooted(relative))
+				var fullPath = IOPath.Combine(dialog.SelectedPath, fileName);
+				var relative = IOPath.GetRelativePath(baseDir, fullPath).Replace('\\', '/');
+				if (relative.StartsWith("..") || IOPath.IsPathRooted(relative))
 				{
 					MessageBox.Show($"'{fullPath}' is outside the game folder '{baseDir}'.", "Combine models",
 						MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -155,7 +156,7 @@ namespace Sledge.BspEditor.Tools.CombineModels
 					Mesh = m.Mesh,
 					SrcTex = m.SrcTex,
 				}).ToList();
-				File.WriteAllBytes(fullPath, CombineWriter.Build(members, Path.GetFileName(fullPath)));
+				File.WriteAllBytes(fullPath, CombineWriter.Build(members, IOPath.GetFileName(fullPath)));
 			}
 
 			// One combined entity per file, at the pivot, with the render settings shared by its members.
