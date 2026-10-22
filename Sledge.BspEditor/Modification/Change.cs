@@ -131,6 +131,23 @@ namespace Sledge.BspEditor.Modification
         }
 
         /// <summary>
+        /// Report that an object's children changed. The object and every ancestor
+        /// have a different bounding box now, so their visuals (entity boxes, names,
+        /// sprite and model placement) must be rebuilt, which only happens for objects
+        /// reported as updated.
+        /// </summary>
+        public Change UpdateWithAncestors(IMapObject o)
+        {
+            var p = o;
+            while (p != null)
+            {
+                Update(p);
+                p = p.Hierarchy.Parent;
+            }
+            return this;
+        }
+
+        /// <summary>
         /// Report object-data types that were added, removed, or replaced during
         /// the change, without adding any object updates.
         /// </summary>

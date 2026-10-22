@@ -44,6 +44,9 @@ namespace Sledge.BspEditor.Modification.Operations.Tree
             }
             _objectsToAttach = null;
 
+            // The parent gained children, so its bounding box (and its ancestors') changed
+            ch.UpdateWithAncestors(par);
+
             return ch;
         }
 
@@ -65,6 +68,9 @@ namespace Sledge.BspEditor.Modification.Operations.Tree
                 o.Hierarchy.Parent = null;
             }
             _attachedIds = null;
+
+            // The parent lost children, so its bounding box (and its ancestors') changed
+            ch.UpdateWithAncestors(par);
 
             return ch;
         }

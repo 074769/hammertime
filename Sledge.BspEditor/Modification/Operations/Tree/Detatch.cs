@@ -45,6 +45,9 @@ namespace Sledge.BspEditor.Modification.Operations.Tree
 			}
 			_idsToDetatch = null;
 
+			// The parent lost children, so its bounding box (and its ancestors') changed
+			ch.UpdateWithAncestors(par);
+
 			return ch;
 		}
 
@@ -66,6 +69,9 @@ namespace Sledge.BspEditor.Modification.Operations.Tree
 				o.Hierarchy.Parent = par;
 			}
 			_detatchedObjects = null;
+
+			// The parent gained children again, so its bounding box (and its ancestors') changed
+			ch.UpdateWithAncestors(par);
 
 			return ch;
 		}
