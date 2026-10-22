@@ -161,6 +161,58 @@ namespace Sledge.BspEditor.Rendering.Resources
 		}
 
 		/// <summary>
+		/// Forget loaded models whose path matches the filter and free their GPU data, so the next
+		/// request reads them from disk again. Renderables still using a model must be destroyed first.
+		/// Source models upload their materials into the shared texture cache by name and that cache
+		/// is not freed with the model, so those textures are released here too.
+		/// </summary>
+		/// <param name="environment">The environment to unload from</param>
+		/// <param name="filter">Which model paths to unload</param>
+		/// <returns>How many released textures were also in use by map geometry, which must then be rebuilt</returns>
+		public async Task<int> UnloadModelsAsync(IEnvironment environment, Func<string, bool> filter)
+		{
+			if (environment?.ID == null || filter == null) return 0;
+			EnsureEnvironment(environment);
+			var mlist = _models[environment.ID];
+			var rlist = _resources[environment.ID];
+			var tlist = _textures[environment.ID];
+
+			var sharedReleased = 0;
+			var victims = mlist.Where(x => filter(x.Name)).ToList();
+			foreach (var victim in victims)
+			{
+				mlist.Remove(victim);
+
+				// Mdl10 models embed their textures and free them with the model. Source models return
+				// material names instead; resolve them exactly as GetModel does so the right cache entry is dropped.
+				var materials = victim.Model.GetTextureName();
+				if (materials != null && materials.Length > 0)
+				{
+					var tc = await environment.GetTextureCollection();
+					foreach (var material in materials)
+					{
+						if (string.IsNullOrEmpty(material)) continue;
+						var item = await tc.GetTextureItem(material);
+						if (item == null) continue;
+
+						_engine.Value.DestroyTextureByName($"{environment.ID}::{item.Name}");
+
+						// Map faces only re-upload a texture once it is no longer marked as uploaded
+						var used = tlist.Where(x =>
+							string.Equals(x, item.Name, StringComparison.InvariantCultureIgnoreCase) ||
+							string.Equals(x, material, StringComparison.InvariantCultureIgnoreCase)).ToList();
+						foreach (var u in used) tlist.Remove(u);
+						if (used.Count > 0) sharedReleased++;
+					}
+				}
+
+				_engine.Value.DestroyResource(victim.Model);
+				rlist.Remove(victim.Model);
+			}
+			return sharedReleased;
+		}
+
+		/// <summary>
 		/// Upload any resources that have been collected to the collection.
 		/// </summary>
 		/// <param name="environment">The environment to load from</param>
