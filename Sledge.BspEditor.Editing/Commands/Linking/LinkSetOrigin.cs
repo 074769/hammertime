@@ -31,7 +31,7 @@ namespace Sledge.BspEditor.Editing.Commands.Linking
 
         protected override bool IsInContext(IContext context, MapDocument document)
         {
-            return base.IsInContext(context, document) && GetCandidates(document).Count > 0;
+            return base.IsInContext(context, document) && GetCandidates(document).Count > 0 && !Sledge.BspEditor.Storage.StorageRules.SelectionHasStored(document);
         }
 
         /// <summary>
@@ -54,6 +54,7 @@ namespace Sledge.BspEditor.Editing.Commands.Linking
 
         protected override async Task Invoke(MapDocument document, CommandParameters parameters)
         {
+            if (Sledge.BspEditor.Storage.StorageRules.SelectionHasStored(document)) return; // storage objects can't be linked
             // One origin per link: if the selection has several instances of one link, the first one wins
             var chosen = new Dictionary<long, long>();
             foreach (var o in GetCandidates(document))

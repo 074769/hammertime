@@ -314,6 +314,7 @@ namespace Sledge.BspEditor.Tools.Selection
 				b.AddSeparator();
 
 				LinkContextMenu.Populate(b, document);
+				Sledge.BspEditor.Editing.Commands.StorageCommands.StorageContextMenu.Populate(b, document);
 				RefreshModelContextMenu.Populate(b, document);
 
 				if (b.Viewport.Is2D)

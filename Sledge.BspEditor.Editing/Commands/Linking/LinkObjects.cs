@@ -43,11 +43,12 @@ namespace Sledge.BspEditor.Editing.Commands.Linking
 
         protected override bool IsInContext(IContext context, MapDocument document)
         {
-            return base.IsInContext(context, document) && !document.Selection.IsEmpty;
+            return base.IsInContext(context, document) && !document.Selection.IsEmpty && !Sledge.BspEditor.Storage.StorageRules.SelectionHasStored(document);
         }
 
         protected override async Task Invoke(MapDocument document, CommandParameters parameters)
         {
+            if (Sledge.BspEditor.Storage.StorageRules.SelectionHasStored(document)) return; // storage objects can't be linked
             var targets = document.Selection.GetSelectedParents().OrderBy(x => x.ID).ToList();
             if (targets.Count == 0) return;
 

@@ -44,12 +44,13 @@ namespace Sledge.BspEditor.Editing.Commands.Linking
         protected override bool IsInContext(IContext context, MapDocument document)
         {
             return base.IsInContext(context, document)
-                   && !document.Selection.IsEmpty
+                   && !document.Selection.IsEmpty && !Sledge.BspEditor.Storage.StorageRules.SelectionHasStored(document)
                    && document.Map.Data.Get<LinkedObjectsVisgroup>().Any();
         }
 
         protected override async Task Invoke(MapDocument document, CommandParameters parameters)
         {
+            if (Sledge.BspEditor.Storage.StorageRules.SelectionHasStored(document)) return; // storage objects can't be linked
             var linkId = await LinkAddTo.ChooseLink(document, parameters, Title, GroupLabel, OK, Cancel);
             if (linkId == 0) return;
 

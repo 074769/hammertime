@@ -22,6 +22,9 @@ namespace Sledge.BspEditor.Editing.Commands.Linking
             var selected = document.Selection.GetSelectedParents().ToList();
             if (selected.Count == 0) return;
 
+            // Storage objects can't be linked
+            if (selected.Any(Sledge.BspEditor.Storage.StorageRules.IsStored)) return;
+
             builder.AddCommand("BspEditor:Tools:LinkObjects");
 
             // Only offer links that still have objects

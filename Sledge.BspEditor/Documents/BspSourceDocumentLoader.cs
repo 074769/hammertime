@@ -24,6 +24,7 @@ using Sledge.Common.Translations;
 using Sledge.Common.Transport;
 using Sledge.Shell;
 
+using Sledge.BspEditor.Storage;
 namespace Sledge.BspEditor.Documents
 {
 	/// <summary>
@@ -346,6 +347,10 @@ namespace Sledge.BspEditor.Documents
 
 			await ProcessBeforeSave(map);
 
+			// Storage objects stay out of every map file, whichever format is written
+			var detachedStorage = StorageRules.DetachVisible(map);
+			try
+			{
 			using (var stream = new MemoryStream())
 			{
 				foreach (var provider in _providers.Where(x => CanSave(x.Value, location)))
@@ -374,6 +379,11 @@ namespace Sledge.BspEditor.Documents
 				}
 			}
 			throw new NotSupportedException(FileTypeNotSupported);
+			}
+			finally
+			{
+				StorageRules.Reattach(detachedStorage);
+			}
 		}
 
 		/// <summary>

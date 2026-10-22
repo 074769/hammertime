@@ -9,6 +9,7 @@ using Sledge.BspEditor.Primitives.MapData;
 using Sledge.BspEditor.Primitives.MapObjectData;
 using Sledge.BspEditor.Primitives.MapObjects;
 
+using Sledge.BspEditor.Storage;
 namespace Sledge.BspEditor.Linking
 {
     /// <summary>
@@ -21,7 +22,9 @@ namespace Sledge.BspEditor.Linking
     /// </summary>
     public static class LinkSidecar
     {
+        // Older builds kept links in this file next to the map; they are read once and then removed
         public const string Suffix = ".links.json";
+        public const string SectionName = "Links";
 
         // How far (in map units) a bounding box coordinate can differ and still be the same object.
         // Formats that rebuild brushes from planes (.map) can shift vertices by a fraction of a unit.
@@ -29,7 +32,6 @@ namespace Sledge.BspEditor.Linking
 
         private static readonly string[] NativeExtensions = { ".smf" };
 
-        private static readonly JsonSerializerOptions Json = new JsonSerializerOptions { WriteIndented = true };
 
         private class MemberData
         {
@@ -60,6 +62,26 @@ namespace Sledge.BspEditor.Linking
             return mapFileName + Suffix;
         }
 
+        private static FileData ReadLegacy(string fileName)
+        {
+            var path = GetPath(fileName);
+            if (!File.Exists(path)) return null;
+            try
+            {
+                return JsonSerializer.Deserialize<FileData>(File.ReadAllText(path));
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        private static void RemoveLegacy(string fileName)
+        {
+            var path = GetPath(fileName);
+            if (File.Exists(path)) File.Delete(path);
+        }
+
         private static bool IsNative(string fileName)
         {
             var ext = System.IO.Path.GetExtension(fileName) ?? "";
@@ -79,7 +101,6 @@ namespace Sledge.BspEditor.Linking
             var fileName = document?.FileName;
             if (string.IsNullOrWhiteSpace(fileName)) return;
 
-            var path = GetPath(fileName);
             try
             {
                 var members = LinkedObjects.GetMembers(document);
@@ -87,7 +108,8 @@ namespace Sledge.BspEditor.Linking
                 // Nothing to remember (or the format remembers it itself): don't leave an out of date file behind
                 if (members.Count == 0 || IsNative(fileName))
                 {
-                    if (File.Exists(path)) File.Delete(path);
+                    HammertimeSidecar.Remove(fileName, SectionName);
+                    RemoveLegacy(fileName);
                     return;
                 }
 
@@ -122,7 +144,8 @@ namespace Sledge.BspEditor.Linking
                     data.Groups.Add(g);
                 }
 
-                File.WriteAllText(path, JsonSerializer.Serialize(data, Json));
+                HammertimeSidecar.Set(fileName, SectionName, data);
+                RemoveLegacy(fileName);
             }
             catch (Exception)
             {
@@ -141,18 +164,7 @@ namespace Sledge.BspEditor.Linking
             // The map format already gave us its links (native format)
             if (document.Map.Data.Get<LinkGroup>().Any()) return;
 
-            var path = GetPath(fileName);
-            if (!File.Exists(path)) return;
-
-            FileData data;
-            try
-            {
-                data = JsonSerializer.Deserialize<FileData>(File.ReadAllText(path));
-            }
-            catch (Exception)
-            {
-                return;
-            }
+            var data = HammertimeSidecar.Get<FileData>(fileName, SectionName) ?? ReadLegacy(fileName);
             if (data?.Groups == null || data.Groups.Count == 0) return;
 
             // Candidates: every object that can be linked and isn't already, sorted so we can search by position
