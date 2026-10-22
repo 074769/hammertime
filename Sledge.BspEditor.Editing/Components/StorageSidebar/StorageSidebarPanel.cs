@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Linq;
 using System.Threading.Tasks;
@@ -18,8 +19,8 @@ using Sledge.Shell;
 namespace Sledge.BspEditor.Editing.Components.StorageSidebar
 {
     /// <summary>
-    /// The Storage section of the sidebar, below Visgroups. Lists the storage groups of the active map,
-    /// with a checkbox per group to show or hide it. Groups can be added, renamed and deleted.
+    /// The Storage section of the sidebar, below Visgroups. Lists the storage groups of the active map.
+    /// Clicking a group selects it (for rename or delete); its checkbox shows or hides it.
     /// </summary>
     [Export(typeof(ISidebarComponent))]
     [Export(typeof(IInitialiseHook))]
@@ -29,7 +30,15 @@ namespace Sledge.BspEditor.Editing.Components.StorageSidebar
         private readonly WeakReference<MapDocument> _document = new WeakReference<MapDocument>(null);
         private bool _refreshing;
 
-        private readonly CheckedListBox _list = new CheckedListBox { Dock = DockStyle.Fill, CheckOnClick = true, IntegralHeight = false };
+        // Clicking a row's text selects it; clicking its checkbox shows or hides the group. Tag holds the group ID.
+        private readonly ListView _list = new ListView
+        {
+            Dock = DockStyle.Fill,
+            View = View.List,
+            CheckBoxes = true,
+            MultiSelect = false,
+            HideSelection = false
+        };
         private readonly Label _hint = new Label { Dock = DockStyle.Top, Height = 40, Text = "Checked groups are shown in the map. Storage is never saved into the map file." };
         private readonly FlowLayoutPanel _buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, WrapContents = false };
         private readonly Button _new = new Button { Text = "New", AutoSize = true };
@@ -47,12 +56,14 @@ namespace Sledge.BspEditor.Editing.Components.StorageSidebar
             _buttons.Controls.AddRange(new Control[] { _new, _rename, _delete });
 
             _list.ItemCheck += ListItemCheck;
-            _list.MouseDoubleClick += (s, e) => RenameSelected();
+            _list.ItemActivate += (s, e) => RenameSelected();
+            _list.SelectedIndexChanged += (s, e) => UpdateButtons();
             _new.Click += (s, e) => NewGroup();
             _rename.Click += (s, e) => RenameSelected();
             _delete.Click += (s, e) => DeleteSelected();
 
             CreateHandle();
+            UpdateButtons();
         }
 
         public bool IsInContext(IContext context) => true;
@@ -85,32 +96,59 @@ namespace Sledge.BspEditor.Editing.Components.StorageSidebar
             return _document.TryGetTarget(out var md) ? md : null;
         }
 
+        private StorageGroup SelectedGroup()
+        {
+            var doc = Current();
+            if (doc == null || _list.SelectedItems.Count == 0) return null;
+            return StorageRules.GetGroup(doc, (long)_list.SelectedItems[0].Tag);
+        }
+
+        /// <summary>
+        /// Updates the rows in place, so the selection survives changes made elsewhere (undo, moves, etc.).
+        /// </summary>
         private void Refresh()
         {
             var doc = Current();
+            var groups = doc == null
+                ? new List<StorageGroup>()
+                : StorageRules.Groups(doc).OrderBy(x => x.ID).ToList();
+            var ids = new HashSet<long>(groups.Select(x => x.ID));
+
             _refreshing = true;
             try
             {
-                _list.BeginUpdate();
-                _list.Items.Clear();
-                if (doc != null)
+                for (var i = _list.Items.Count - 1; i >= 0; i--)
                 {
-                    foreach (var g in StorageRules.Groups(doc).OrderBy(x => x.ID))
-                    {
-                        _list.Items.Add(g, g.Visible);
-                    }
+                    if (!ids.Contains((long)_list.Items[i].Tag)) _list.Items.RemoveAt(i);
                 }
-                _list.EndUpdate();
+
+                foreach (var g in groups)
+                {
+                    var item = _list.Items.Cast<ListViewItem>().FirstOrDefault(x => (long)x.Tag == g.ID);
+                    if (item == null)
+                    {
+                        item = new ListViewItem { Tag = g.ID };
+                        _list.Items.Add(item);
+                    }
+                    item.Text = g.Name + "  (" + g.Objects.Count + ")";
+                    item.Checked = g.Visible;
+                }
             }
             finally
             {
                 _refreshing = false;
             }
 
-            var enabled = doc != null;
-            _new.Enabled = enabled;
-            _rename.Enabled = enabled;
-            _delete.Enabled = enabled;
+            UpdateButtons();
+        }
+
+        private void UpdateButtons()
+        {
+            var hasDocument = Current() != null;
+            var hasSelection = _list.SelectedItems.Count > 0;
+            _new.Enabled = hasDocument;
+            _rename.Enabled = hasDocument && hasSelection;
+            _delete.Enabled = hasDocument && hasSelection;
         }
 
         private async void ListItemCheck(object sender, ItemCheckEventArgs e)
@@ -118,11 +156,10 @@ namespace Sledge.BspEditor.Editing.Components.StorageSidebar
             if (_refreshing) return;
 
             var doc = Current();
-            var group = _list.Items[e.Index] as StorageGroup;
-            if (doc == null || group == null) return;
+            if (doc == null || e.Index < 0 || e.Index >= _list.Items.Count) return;
 
             var show = e.NewValue == CheckState.Checked;
-            await MapDocumentOperation.Perform(doc, new SetStorageVisible(group.ID, show));
+            await MapDocumentOperation.Perform(doc, new SetStorageVisible((long)_list.Items[e.Index].Tag, show));
         }
 
         private async void NewGroup()
@@ -146,7 +183,7 @@ namespace Sledge.BspEditor.Editing.Components.StorageSidebar
         private async void RenameSelected()
         {
             var doc = Current();
-            var group = _list.SelectedItem as StorageGroup;
+            var group = SelectedGroup();
             if (doc == null || group == null) return;
 
             using (var qf = new QuickForm("Rename storage group").TextBox("Name", "Name", group.Name).OkCancel("OK", "Cancel"))
@@ -163,7 +200,7 @@ namespace Sledge.BspEditor.Editing.Components.StorageSidebar
         private async void DeleteSelected()
         {
             var doc = Current();
-            var group = _list.SelectedItem as StorageGroup;
+            var group = SelectedGroup();
             if (doc == null || group == null) return;
 
             if (group.Objects.Count > 0)

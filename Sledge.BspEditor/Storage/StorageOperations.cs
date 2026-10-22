@@ -18,7 +18,6 @@ namespace Sledge.BspEditor.Storage
         private readonly long _groupId;
         private readonly List<IMapObject> _objects;
         private readonly Dictionary<IMapObject, IMapObject> _parents = new Dictionary<IMapObject, IMapObject>();
-        private readonly HashSet<IMapObject> _detached = new HashSet<IMapObject>();
 
         public bool Trivial => false;
 
@@ -31,7 +30,6 @@ namespace Sledge.BspEditor.Storage
         public async Task<Change> Perform(MapDocument document)
         {
             var ch = new Change(document);
-            _detached.Clear();
 
             var group = StorageRules.GetGroup(document, _groupId);
             if (group == null) return ch;
@@ -51,7 +49,6 @@ namespace Sledge.BspEditor.Storage
                     ch.Remove(o);
                     ch.RemoveRange(o.FindAll());
                     o.Hierarchy.Parent = null;
-                    _detached.Add(o);
                 }
             }
 
@@ -59,6 +56,10 @@ namespace Sledge.BspEditor.Storage
             return ch;
         }
 
+        /// <summary>
+        /// Puts the objects back where they came from. This works whether or not the group has been shown
+        /// since the move, because showing and hiding a group aren't undo steps of their own.
+        /// </summary>
         public async Task<Change> Reverse(MapDocument document)
         {
             var ch = new Change(document);
@@ -69,9 +70,17 @@ namespace Sledge.BspEditor.Storage
                 group?.Objects.Remove(o);
                 o.Data.Remove(x => x is StorageID);
 
-                if (_detached.Contains(o))
+                var original = _parents[o];
+                if (o.Hierarchy.Parent != original)
                 {
-                    o.Hierarchy.Parent = _parents[o];
+                    if (o.Hierarchy.Parent != null)
+                    {
+                        ch.Remove(o);
+                        ch.RemoveRange(o.FindAll());
+                        o.Hierarchy.Parent = null;
+                    }
+
+                    o.Hierarchy.Parent = original;
                     ch.Add(o);
                     ch.AddRange(o.FindAll());
                 }
@@ -81,7 +90,6 @@ namespace Sledge.BspEditor.Storage
                 }
             }
 
-            _detached.Clear();
             if (group != null) ch.Update(group);
             return ch;
         }
@@ -148,7 +156,8 @@ namespace Sledge.BspEditor.Storage
         private readonly long _groupId;
         private readonly bool _visible;
 
-        public bool Trivial => false;
+        // Not an undo step: showing or hiding a group is a view change, not an edit
+        public bool Trivial => true;
 
         public SetStorageVisible(long groupId, bool visible)
         {
