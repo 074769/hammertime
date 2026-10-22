@@ -103,7 +103,13 @@ namespace Sledge.BspEditor.Storage
             {
                 foreach (var so in _formatter.Deserialize(ms))
                 {
-                    var obj = _factory.Deserialise(so) as IMapObject;
+                    var loaded = _factory.Deserialise(so) as IMapObject;
+                    if (loaded == null) continue;
+
+                    // Formats like RMF give every object a new id when they load, so the ids saved in the sidecar
+                    // can clash with the map's own objects (the hierarchy is keyed by id, so one would replace the other).
+                    // Copying gives the object and its faces fresh ids from this map's generator.
+                    var obj = loaded.Copy(document.Map.NumberGenerator) as IMapObject;
                     if (obj == null) continue;
 
                     var id = obj.Data.GetOne<StorageID>();
