@@ -221,7 +221,9 @@ namespace Sledge.BspEditor.Tools.Spin
                 }
             }
 
-            if (bestScore < faces.Count) return false;
+            // Solids that aren't extruded (sloped, triangulated pieces) don't fit; they are swept as a hull instead.
+            // The direction only has to fit the solids that are extruded.
+            if (bestScore < 2) return false;
 
             // A stable sign, so the same piece always gives the same direction
             var largest = Math.Abs(tangent.X) >= Math.Abs(tangent.Y) && Math.Abs(tangent.X) >= Math.Abs(tangent.Z) ? tangent.X
@@ -496,6 +498,87 @@ namespace Sledge.BspEditor.Tools.Spin
             m.M33 -= 2f * normal.Z * normal.Z;
 
             return Matrix4x4.CreateTranslation(-pivot) * m * Matrix4x4.CreateTranslation(pivot);
+        }
+
+        #endregion
+
+        #region Swept hull (solids that are not extruded profiles)
+
+        /// <summary>
+        /// The faces of the convex hull of a set of points, each wound outward (the first three vertices give the
+        /// outward normal). Null if the points don't make a solid. Meant for a few dozen points.
+        /// </summary>
+        public static List<List<Vector3>> ConvexHullFaces(IReadOnlyList<Vector3> input)
+        {
+            const float onPlane = 0.01f;
+
+            var pts = new List<Vector3>();
+            foreach (var p in input)
+            {
+                if (!pts.Any(q => (q - p).LengthSquared() < 1e-4f)) pts.Add(p);
+            }
+            if (pts.Count < 4) return null;
+
+            var centre = pts.Aggregate(Vector3.Zero, (a, b) => a + b) / pts.Count;
+
+            var planes = new List<(Vector3 N, float D)>();
+            for (var i = 0; i < pts.Count - 2; i++)
+            {
+                for (var j = i + 1; j < pts.Count - 1; j++)
+                {
+                    for (var k = j + 1; k < pts.Count; k++)
+                    {
+                        var n = Vector3.Cross(pts[j] - pts[i], pts[k] - pts[i]);
+                        var length = n.Length();
+                        if (length < 1e-3f) continue;
+                        n /= length;
+                        var d = Vector3.Dot(n, pts[i]);
+                        if (Vector3.Dot(n, centre) - d > 0) { n = -n; d = -d; }
+
+                        var ok = true;
+                        for (var m = 0; m < pts.Count && ok; m++) ok = Vector3.Dot(n, pts[m]) - d <= onPlane;
+                        if (!ok) continue;
+                        if (planes.Any(x => Vector3.Dot(x.N, n) > 0.9999f && Math.Abs(x.D - d) < 0.02f)) continue;
+                        planes.Add((n, d));
+                    }
+                }
+            }
+            if (planes.Count < 4) return null;
+
+            var faces = new List<List<Vector3>>();
+            foreach (var (n, d) in planes)
+            {
+                var onFace = pts.Where(p => Math.Abs(Vector3.Dot(n, p) - d) <= onPlane).ToList();
+                if (onFace.Count < 3) return null;
+
+                var middle = onFace.Aggregate(Vector3.Zero, (a, b) => a + b) / onFace.Count;
+                var axisU = (onFace[0] - middle).Normalise();
+                var axisW = Vector3.Cross(n, axisU);
+                var ordered = onFace.OrderBy(p => Math.Atan2(Vector3.Dot(p - middle, axisW), Vector3.Dot(p - middle, axisU))).ToList();
+
+                // Points in the middle of an edge would make the first three vertices a degenerate plane
+                for (var m = ordered.Count - 1; m >= 0 && ordered.Count > 3; m--)
+                {
+                    var before = ordered[(m + ordered.Count - 1) % ordered.Count];
+                    var after = ordered[(m + 1) % ordered.Count];
+                    if (Vector3.Cross(ordered[m] - before, after - before).Length() < 1e-2f) ordered.RemoveAt(m);
+                }
+                if (ordered.Count < 3) return null;
+
+                if (Vector3.Dot(FaceNormal(ordered), n) < 0) ordered.Reverse();
+                faces.Add(ordered);
+            }
+            return faces;
+        }
+
+        /// <summary>The angle of a point around the pivot, in degrees relative to the profile line, or null if it is on the axis.</summary>
+        public static float? AngleOffset(Vector3 point, Vector3 pivot, Vector3 axis, Vector3 u, Vector3 v, float profileAngle)
+        {
+            var relative = point - pivot;
+            var planar = relative - axis * Vector3.Dot(relative, axis);
+            if (planar.Length() < 1e-3f) return null;
+            var angle = (float) (Math.Atan2(Vector3.Dot(relative, v), Vector3.Dot(relative, u)) * 180d / Math.PI) - profileAngle;
+            return ((angle % 360f) + 540f) % 360f - 180f;
         }
 
         #endregion
