@@ -61,16 +61,11 @@ namespace Sledge.BspEditor.Editing.Commands
 			Entity existing = null;
 			var confirmed = false;
 
+			// With ignore grouping the selection is made of loose pieces (possibly from several entities). Pieces never
+			// trigger the merge list: they are always moved into a new entity (like Move to World, then Tie to entity).
+			// Only entities that are actually selected can be chosen as the destination to merge into.
 			var tf = document.Map.Data.GetOne<SelectionOptions>();
 			var ignoreGrouping = tf?.IgnoreGrouping ?? false;
-			if (ignoreGrouping)
-			{
-				// With ignore grouping, the selected objects can come from several entities. If they do, the entities
-				// they came from can be chosen as the destination. If they all come from one entity and no other entity
-				// is selected, nothing is chosen and they are moved into a new entity.
-				var parents = document.Selection.Select(x => x.Hierarchy.Parent).OfType<Entity>().Distinct().ToList();
-				if (parents.Count > 1) existingEntities.AddRange(parents.Where(x => !existingEntities.Contains(x)));
-			}
 
 			if (!ignoreGrouping && existingEntities.Count == 0 && document.Selection.Count == 1 && document.Selection.First().Hierarchy.Parent is Entity ent)
 			{
