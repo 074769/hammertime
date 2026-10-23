@@ -498,7 +498,7 @@ namespace Sledge.BspEditor.Tools.Spin
             {
                 MessageBox.Show(
                     $"{failed} solid(s) of the start piece could not be spun, so nothing was changed. "
-                    + "Check them for faces that are broken or flat.",
+                    + "Every solid needs two end caps, and every other face must be parallel to the extrusion direction.",
                     "Spin Tool",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
@@ -531,7 +531,7 @@ namespace Sledge.BspEditor.Tools.Spin
             if (!plan.Pieces && failed > 0)
             {
                 MessageBox.Show(
-                    $"{failed} solid(s) could not be spun and were left unchanged. Check them for faces that are broken or flat.",
+                    $"{failed} solid(s) could not be spun and were left unchanged. Every solid needs two end caps, and every other face must be parallel to the extrusion direction.",
                     "Spin Tool",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
@@ -585,114 +585,6 @@ namespace Sledge.BspEditor.Tools.Spin
         /// can't be swept without changing its shape; nothing is changed then.
         /// </summary>
         private static SolidSpin SpinSolid(Solid solid, Plan plan, bool mirror, UniqueNumberGenerator generator)
-        {
-            // Extruded solids are lofted from their cross-section; anything else (sloped, triangulated
-            // pieces) is swept as the hull of the solid at each step
-            return SpinExtruded(solid, plan, mirror, generator) ?? SpinHull(solid, plan, generator);
-        }
-
-        /// <summary>
-        /// Sweeps a solid that isn't an extruded profile: piece j is the convex hull of the solid turned to step j
-        /// and to step j + 1. The first piece starts from the solid itself, and in the start/end mode the last copy
-        /// stops where the arch ends. Neighbouring pieces overlap by one copy of the solid, so there are no gaps.
-        /// </summary>
-        private static SolidSpin SpinHull(Solid solid, Plan plan, UniqueNumberGenerator generator)
-        {
-            try
-            {
-                var parent = solid.Hierarchy.Parent.ID;
-                var faces = solid.Faces.ToList();
-                if (faces.Count < 4) return null;
-
-                var frame = plan.Frame;
-                var vertices = faces.SelectMany(x => x.Vertices).ToList();
-
-                // How far (degrees, in the sweep direction) the solid reaches past the start line
-                var direction = Math.Sign(plan.Delta);
-                if (direction == 0) return null;
-                var total = plan.Sweep;
-                if (plan.Pieces)
-                {
-                    var reach = 0f;
-                    foreach (var vertex in vertices)
-                    {
-                        var offset = SpinGeometry.AngleOffset(vertex, plan.Pivot, frame.Axis, frame.U, frame.V, plan.A0);
-                        if (offset.HasValue) reach = Math.Max(reach, offset.Value * direction);
-                    }
-                    total = plan.Sweep - reach * direction;
-                    if (Math.Abs(total) < 0.01f || Math.Sign(total) != direction) return null;
-                }
-
-                var steps = plan.Steps;
-                var rotations = Enumerable.Range(0, steps + 1)
-                    .Select(k => SpinGeometry.Rotation(plan.Pivot, frame.Axis, total * k / steps))
-                    .ToList();
-
-                var pieces = new List<Solid>();
-                for (var j = 0; j < steps; j++)
-                {
-                    var points = vertices.Select(x => Vector3.Transform(x, rotations[j]))
-                        .Concat(vertices.Select(x => Vector3.Transform(x, rotations[j + 1])))
-                        .ToList();
-                    var outlines = SpinGeometry.ConvexHullFaces(points);
-                    if (outlines == null) return null;
-
-                    var piece = new Solid(generator.Next("MapObject")) { IsSelected = true };
-                    foreach (var outline in outlines)
-                    {
-                        var normal = SpinGeometry.FaceNormal(outline);
-                        var face = new Face(generator.Next("Face"));
-                        face.Vertices.AddRange(outline);
-
-                        // The texture of the original face that points the same way, turned to this step
-                        var best = -1f;
-                        Face source = null;
-                        Matrix4x4 sourceRotation = Matrix4x4.Identity;
-                        foreach (var step in new[] { j, j + 1 })
-                        {
-                            foreach (var original in faces)
-                            {
-                                var dot = Vector3.Dot(Vector3.TransformNormal(original.Plane.Normal, rotations[step]), normal);
-                                if (dot > best + 1e-4f)
-                                {
-                                    best = dot;
-                                    source = original;
-                                    sourceRotation = rotations[step];
-                                }
-                            }
-                        }
-
-                        face.Texture = source.Texture.Clone();
-                        face.Texture.TransformUniform(sourceRotation);
-                        if (best < 0.9999f) face.Texture.AlignToNormal(normal);
-                        piece.Data.Add(face);
-                    }
-
-                    foreach (var data in solid.Data.Where(x => !(x is Face)))
-                    {
-                        piece.Data.Add((IMapObjectData) data.Clone());
-                    }
-                    pieces.Add(piece);
-                }
-
-                var result = new SolidSpin();
-                result.Operations.Add(new Detatch(parent, solid));
-                result.Removed.Add(solid.ID);
-                result.Pieces.AddRange(pieces);
-                foreach (var piece in pieces)
-                {
-                    result.Operations.Add(new Attach(parent, piece));
-                    result.Added.Add(piece.ID);
-                }
-                return result;
-            }
-            catch (Exception)
-            {
-                return null;
-            }
-        }
-
-        private static SolidSpin SpinExtruded(Solid solid, Plan plan, bool mirror, UniqueNumberGenerator generator)
         {
             try
             {
