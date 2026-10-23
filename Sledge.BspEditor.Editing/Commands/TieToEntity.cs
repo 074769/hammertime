@@ -52,24 +52,27 @@ namespace Sledge.BspEditor.Editing.Commands
 
 		protected override async Task Invoke(MapDocument document, CommandParameters parameters)
 		{
-			var existingEntities = document.Selection.OfType<Entity>().ToList();
+			// Entities that were selected directly. Only these are merged into the chosen entity and destroyed.
+			var selectedEntities = document.Selection.OfType<Entity>().ToList();
+
+			// Entities that can be chosen as the destination
+			var existingEntities = selectedEntities.ToList();
 
 			Entity existing = null;
 			var confirmed = false;
 
 			var tf = document.Map.Data.GetOne<SelectionOptions>();
-			if (tf?.IgnoreGrouping ?? false)
+			var ignoreGrouping = tf?.IgnoreGrouping ?? false;
+			if (ignoreGrouping)
 			{
-				var parents = document.Selection.Select(x => x.Hierarchy.Parent).Where(x => x is Entity).Select(x => x as Entity).Distinct().ToList();
-				if (existingEntities.Count == 0 && document.Selection.Count > 0 && parents.Count == 1)
-				{
-					await Oy.Publish("Context:Add", new ContextInfo("BspEditor:ObjectProperties"));
-					return;
-				}
-				existingEntities.AddRange(parents);
+				// With ignore grouping, the selected objects can come from several entities. If they do, the entities
+				// they came from can be chosen as the destination. If they all come from one entity and no other entity
+				// is selected, nothing is chosen and they are moved into a new entity.
+				var parents = document.Selection.Select(x => x.Hierarchy.Parent).OfType<Entity>().Distinct().ToList();
+				if (parents.Count > 1) existingEntities.AddRange(parents.Where(x => !existingEntities.Contains(x)));
 			}
 
-			if (existingEntities.Count == 0 && document.Selection.Count == 1 && document.Selection.First().Hierarchy.Parent is Entity ent)
+			if (!ignoreGrouping && existingEntities.Count == 0 && document.Selection.Count == 1 && document.Selection.First().Hierarchy.Parent is Entity ent)
 			{
 				await Oy.Publish("Context:Add", new ContextInfo("BspEditor:ObjectProperties"));
 				return;
@@ -157,8 +160,8 @@ namespace Sledge.BspEditor.Editing.Commands
 				ops.Add(new Attach(document.Map.Root.ID, existing));
 			}
 
-			// Any other entities in the selection should be destroyed
-			foreach (var entity in existingEntities.Where(x => !ReferenceEquals(x, existing)))
+			// Any other selected entities should be destroyed
+			foreach (var entity in selectedEntities.Where(x => !ReferenceEquals(x, existing)))
 			{
 				var children = entity.Hierarchy.Where(x => !(x is Entity)).ToList();
 				ops.Add(new Detatch(entity.ID, children));
@@ -166,16 +169,32 @@ namespace Sledge.BspEditor.Editing.Commands
 				ops.Add(new Detatch(entity.Hierarchy.Parent.ID, entity));
 			}
 
-			// All other parents should be added to the entity
-			foreach (var obj in document.Selection.GetSelectedParents().Except(existingEntities))
+			// Selected objects that are not already in the entity are moved into it
+			var moved = document.Selection.GetSelectedParents()
+				.Except(selectedEntities)
+				.Where(x => !ReferenceEquals(x.Hierarchy.Parent, existing))
+				.ToList();
+			foreach (var obj in moved)
 			{
 				ops.Add(new Detatch(obj.Hierarchy.Parent.ID, obj));
 				ops.Add(new Attach(existing.ID, obj));
 			}
 
+			// An entity that has nothing left after the move is removed
+			var movedSet = new HashSet<IMapObject>(moved);
+			var sources = moved.Select(x => x.Hierarchy.Parent).OfType<Entity>()
+				.Where(x => !ReferenceEquals(x, existing) && !selectedEntities.Contains(x))
+				.Distinct()
+				.ToList();
+			foreach (var source in sources)
+			{
+				if (source.Hierarchy.Any(x => !movedSet.Contains(x))) continue;
+				ops.Add(new Detatch(source.Hierarchy.Parent.ID, source));
+			}
+
 			if (ops.Any())
 			{
-				ops.Add(new Select(document.Selection.Except(existingEntities).Union(new[] { existing })));
+				ops.Add(new Select(document.Selection.Except(selectedEntities).Union(new[] { existing })));
 				await MapDocumentOperation.Perform(document, new Transaction(ops));
 				await Oy.Publish("Context:Add", new ContextInfo("BspEditor:ObjectProperties"));
 			}
