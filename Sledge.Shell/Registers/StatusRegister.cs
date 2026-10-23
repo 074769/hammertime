@@ -42,7 +42,7 @@ namespace Sledge.Shell.Registers
 
         public void Add(IStatusItem item)
         {
-            var si = new StatusBarItem(item);
+            var si = new StatusBarItem(item, _shell);
             _items.Add(si);
             _shell.InvokeLater(() => _shell.StatusStrip.Items.Add(si.Label));
         }
@@ -60,10 +60,12 @@ namespace Sledge.Shell.Registers
         {
             public IStatusItem Item { get; set; }
             public ToolStripStatusLabel Label { get; set; }
+            private readonly Control _owner;
 
-            public StatusBarItem(IStatusItem item)
+            public StatusBarItem(IStatusItem item, Control owner)
             {
                 Item = item;
+                _owner = owner;
                 item.TextChanged += TextChanged;
                 Label = new ToolStripStatusLabel
                 {
@@ -78,7 +80,7 @@ namespace Sledge.Shell.Registers
 
             private void TextChanged(object sender, string text)
             {
-                Label.Owner.InvokeLater(() =>
+                _owner.InvokeLater(() =>
                 {
                     Label.Text = text;
                 });
@@ -86,7 +88,7 @@ namespace Sledge.Shell.Registers
 
             public void ContextChanged(IContext context)
             {
-                Label.Owner.InvokeLater(() =>
+                _owner.InvokeLater(() =>
                 {
                     Label.Visible = Item.IsInContext(context);
                 });
