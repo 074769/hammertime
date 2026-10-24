@@ -60,7 +60,9 @@
                 "AddHeight": "Add height",
                 "CurvedRamp": "Curved ramp",
                 "TiltAngle": "Tilt angle",
-                "TiltInterpolation": "Tilt interpolation"
+                "TiltInterpolation": "Tilt interpolation",
+                "OuterOffset": "Outer offset",
+                "InnerOffset": "Inner offset"
             },
             "BlockBrush": {
                 "Name": "Block"

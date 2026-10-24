@@ -32,6 +32,8 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
         private BooleanControl _curvedRamp;
         private NumericControl _tiltAngle;
         private BooleanControl _tiltInterp;
+        private NumericControl _outerOffset;
+        private NumericControl _innerOffset;
 
         private const decimal Atan2 = 63.4m;
 
@@ -43,6 +45,8 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
         public string CurvedRamp { get; set; }
         public string TiltAngle { get; set; }
         public string TiltInterpolation { get; set; }
+        public string OuterOffset { get; set; }
+        public string InnerOffset { get; set; }
 
         public async Task OnInitialise()
         {
@@ -54,6 +58,8 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
             _curvedRamp = new BooleanControl(this) { LabelText = CurvedRamp, Checked = false };
             _tiltAngle = new NumericControl(this) { LabelText = TiltAngle, Minimum = -Atan2, Maximum = Atan2, Value = 0, Enabled = false, Precision = 1 };
             _tiltInterp = new BooleanControl(this) { LabelText = TiltInterpolation, Checked = false, Enabled = false };
+            _outerOffset = new NumericControl(this) { LabelText = OuterOffset, Minimum = -1024, Maximum = 1024, Value = 0, Precision = 1 };
+            _innerOffset = new NumericControl(this) { LabelText = InnerOffset, Minimum = -1024, Maximum = 1024, Value = 0, Precision = 1 };
 
             _curvedRamp.ValuesChanged += (s, b) => _tiltAngle.Enabled = _tiltInterp.Enabled = _curvedRamp.GetValue();
         }
@@ -71,6 +77,8 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
             yield return _curvedRamp;
             yield return _tiltAngle;
             yield return _tiltInterp;
+            yield return _outerOffset;
+            yield return _innerOffset;
         }
 
         private Solid MakeSolid(UniqueNumberGenerator generator, IEnumerable<Vector3[]> faces, string texture, Color col)
@@ -91,6 +99,11 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
             return solid;
         }
 
+        private static IEnumerable<Vector3[]> Shifted(IEnumerable<Vector3[]> faces, Vector3 shift)
+        {
+            return faces.Select(f => f.Select(p => p + shift).ToArray());
+        }
+
         public IEnumerable<IMapObject> Create(UniqueNumberGenerator generator, Box box, string texture, int roundDecimals)
         {
             var numSides = (int)_numSides.GetValue();
@@ -106,6 +119,11 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
             var tiltAngle = curvedRamp ? (float) _tiltAngle.GetValue() : 0;
             if (Math.Abs(Math.Abs(tiltAngle % 180) - 90) < 0.001f) yield break;
             var tiltInterp = curvedRamp && _tiltInterp.GetValue();
+            // Vertical offsets for the outer and inner edges. Moving one edge relative to the other slopes the wall.
+            var outerOffset = (float) _outerOffset.GetValue();
+            var innerOffset = (float) _innerOffset.GetValue();
+            // Offset walls are not planar quads, so they are split into triangular prisms like the curved ramp
+            var triangulate = curvedRamp || outerOffset != 0 || innerOffset != 0;
             
             // Very similar to the pipe brush, except with options for start angle, arc, height and tilt
             var width = box.Width;
@@ -133,12 +151,12 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
                 
                 var xval = box.Center.X + majorOut * (float) Math.Cos(a);
                 var yval = box.Center.Y + minorOut * (float) Math.Sin(a);
-                var zval = box.Start.Z + (curvedRamp ? h + tiltHeight : 0);
+                var zval = box.Start.Z + (curvedRamp ? h + tiltHeight : 0) + outerOffset;
                 outer[i] = new Vector3(xval, yval, zval).Round(roundDecimals);
 
                 xval = box.Center.X + majorIn * (float) Math.Cos(a);
                 yval = box.Center.Y + minorIn * (float) Math.Sin(a);
-                zval = box.Start.Z + (curvedRamp ? h - tiltHeight : 0);
+                zval = box.Start.Z + (curvedRamp ? h - tiltHeight : 0) + innerOffset;
                 inner[i] = new Vector3(xval, yval, zval).Round(roundDecimals);
             }
 
@@ -150,8 +168,11 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
                 var faces = new List<Vector3[]>();
 
                 // Since we are triangulating/splitting each arch segment, we need to generate 2 brushes per side
-                if (curvedRamp)
+                if (triangulate)
                 {
+                    // Without a curved ramp the whole segment is stepped by add height, like the plain arch
+                    var segmentShift = curvedRamp ? Vector3.Zero : i * addHeight * Vector3.UnitZ;
+
                     // The splitting orientation depends on the curving direction of the arch
                     if (addHeight >= 0)
                     {
@@ -169,7 +190,7 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
                         faces.Add(new[] { inner[i+1] + z, outer[i] + z,   inner[i] + z    });
                         faces.Add(new[] { inner[i],       outer[i],       inner[i+1]      });
                     }
-                    yield return MakeSolid(generator, faces, texture, colour);
+                    yield return MakeSolid(generator, Shifted(faces, segmentShift), texture, colour);
 
                     faces.Clear();
 
@@ -189,7 +210,7 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
                         faces.Add(new[] { outer[i] + z,   inner[i+1] + z, outer[i+1] + z  });
                         faces.Add(new[] { outer[i+1],     inner[i+1],     outer[i]        });
                     }
-                    yield return MakeSolid(generator, faces, texture, colour);
+                    yield return MakeSolid(generator, Shifted(faces, segmentShift), texture, colour);
                 }
                 else
                 {
