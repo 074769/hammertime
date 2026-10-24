@@ -56,7 +56,7 @@ namespace Sledge.BspEditor.Editing.Problems
 			var oldFaces = solid.Faces.ToList();
 			if (oldFaces.Count == 0) return null;
 
-			var polyhedron = new Polyhedron(solid.GetPolygons().Select(p => p.Plane));
+			var polyhedron = PlanePolyhedron.Build(solid.GetPolygons().Select(p => p.Plane));
 			var newSolid = new Solid(document.Map.NumberGenerator.Next("MapObject"));
 
 			newSolid.Data.AddRange(solid.Data.Where(data => data is not Face));

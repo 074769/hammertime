@@ -210,7 +210,7 @@ namespace Sledge.BspEditor.Providers
 				{
 					if (!faces.Any()) return null;
 
-					var poly = new Polyhedron(faces.Select(x => x.Plane));
+					var poly = PlanePolyhedron.Build(faces.Select(x => x.Plane));
 					var ret = new Solid(generator.Next("MapObject"));
 					ret.Data.Add(new ObjectColor(Colour.GetRandomBrushColour()));
 

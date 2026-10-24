@@ -391,7 +391,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 			foreach (var solid in objects)
 			{
 				var currentSolid = solid.Copy;
-				var poly = new Polyhedron(currentSolid.Faces.Select(x => x.Plane));
+				var poly = PlanePolyhedron.Build(currentSolid.Faces.Select(x => x.Plane));
 				List<MutableFace> facesToRemove = new List<MutableFace>();
 
 				var groupedFaces = currentSolid.Faces.GroupBy(x => x.Plane);
