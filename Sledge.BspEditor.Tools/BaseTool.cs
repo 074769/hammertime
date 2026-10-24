@@ -112,7 +112,7 @@ namespace Sledge.BspEditor.Tools
             var gridData = GetDocument()?.Map.Data.GetOne<GridData>();
             var useGrid = !KeyboardState.Ctrl && gridData?.SnapToGrid != false;
             var grid = gridData?.Grid;
-            var val = grid != null && !useGrid ? grid.AddStep(Vector3.Zero, Vector3.One) : Vector3.One;
+            var val = grid != null && useGrid ? grid.AddStep(Vector3.Zero, Vector3.One) : Vector3.One;
             switch (k)
             {
                 case Keys.Left:

@@ -102,10 +102,19 @@ namespace Sledge.DataStructures.Geometric
                 var v1 = Vertices[i];
                 var v2 = Vertices[(i + 1) % Vertices.Count];
                 var v3 = Vertices[(i + 2) % Vertices.Count];
-                var l1 = (v1 - v2).Normalise();
-                var l2 = (v3 - v2).Normalise();
+                var edge1 = v1 - v2;
+                var edge2 = v3 - v2;
+
+                // Duplicate vertex (zero-length edge) or a spike where the edges fold back on each other
+                if (edge1.LengthSquared() < 1e-12f || edge2.LengthSquared() < 1e-12f) return false;
+                var l1 = edge1.Normalise();
+                var l2 = edge2.Normalise();
+                if (l1.Dot(l2) > 0.999999f) return false;
+
+                // Reflex corner: the turn goes the wrong way around the plane normal.
+                // A flat corner (cross ~ 0) is a straight edge, which is still convex, so it is allowed.
                 var cross = l1.Cross(l2);
-                if (plane.OnPlane(v2 + cross, epsilon) < 0.0001m) return false;
+                if (plane.OnPlane(v2 + cross, epsilon) < 0) return false;
             }
             return true;
         }

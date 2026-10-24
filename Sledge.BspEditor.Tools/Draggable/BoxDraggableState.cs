@@ -124,7 +124,7 @@ namespace Sledge.BspEditor.Tools.Draggable
 		}
 		public override void Drag(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e, Vector3 lastPosition, Vector3 position)
 		{
-			State.End = (position);
+			State.End = Tool.SnapIfNeeded(position);
 
 			base.Drag(document, viewport, camera, e, lastPosition, position);
 		}
@@ -166,15 +166,33 @@ namespace Sledge.BspEditor.Tools.Draggable
 
         public override void Drag(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e, Vector3 lastPosition, Vector3 position)
         {
-            State.End = Tool.SnapIfNeeded(camera.Expand(position)) + camera.GetUnusedCoordinate(State.End);
+            State.End = SnapOrthoEnd(document, camera, position);
             base.Drag(document, viewport, camera, e, lastPosition, position);
+        }
+
+        /// <summary>
+        /// Snaps the end point on the visible axes AND the hidden axis of the ortho view.
+        /// The hidden axis used to keep the remembered (possibly off-grid) size, so the box
+        /// height/depth never snapped. It can also never collapse to zero thickness.
+        /// </summary>
+        private Vector3 SnapOrthoEnd(MapDocument document, OrthographicCamera camera, Vector3 position)
+        {
+            var hiddenStart = camera.GetUnusedValue(State.Start);
+            var hiddenDirection = camera.GetUnusedValue(State.End) < hiddenStart ? -1f : 1f;
+            var end = Tool.SnapIfNeeded(camera.Expand(position) + camera.GetUnusedCoordinate(State.End));
+            if (camera.GetUnusedValue(end) == hiddenStart)
+            {
+                var step = document.Map.Data.GetOne<GridData>()?.Grid?.AddStep(Vector3.Zero, Vector3.One).X ?? 1f;
+                end += camera.GetUnusedCoordinate(Vector3.One * (hiddenDirection * step));
+            }
+            return end;
         }
 
         public override void EndDrag(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e, Vector3 position)
         {
             State.Viewport = null;
             State.Action = BoxAction.Drawn;
-            State.End = Tool.SnapIfNeeded(camera.Expand(position)) + camera.GetUnusedCoordinate(State.End);
+            State.End = SnapOrthoEnd(document, camera, position);
             State.FixBounds();
             base.EndDrag(document, viewport, camera, e, position);
         }
