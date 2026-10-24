@@ -34,6 +34,7 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
         private BooleanControl _tiltInterp;
         private BooleanControl _outerOffset;
         private BooleanControl _innerOffset;
+        private BooleanControl _fitSelection;
 
         private const decimal Atan2 = 63.4m;
 
@@ -47,6 +48,7 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
         public string TiltInterpolation { get; set; }
         public string OuterOffset { get; set; }
         public string InnerOffset { get; set; }
+        public string FitSelection { get; set; }
 
         public async Task OnInitialise()
         {
@@ -60,6 +62,7 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
             _tiltInterp = new BooleanControl(this) { LabelText = TiltInterpolation, Checked = false, Enabled = false };
             _outerOffset = new BooleanControl(this) { LabelText = OuterOffset, Checked = false, Enabled = false };
             _innerOffset = new BooleanControl(this) { LabelText = InnerOffset, Checked = false, Enabled = false };
+            _fitSelection = new BooleanControl(this) { LabelText = FitSelection, Checked = false };
 
             // The offset checkboxes only apply to curved ramps
             _curvedRamp.ValuesChanged += (s, b) => _tiltAngle.Enabled = _tiltInterp.Enabled = _outerOffset.Enabled = _innerOffset.Enabled = _curvedRamp.GetValue();
@@ -80,6 +83,7 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
             yield return _tiltInterp;
             yield return _outerOffset;
             yield return _innerOffset;
+            yield return _fitSelection;
         }
 
         private Solid MakeSolid(UniqueNumberGenerator generator, IEnumerable<Vector3[]> faces, string texture, Color col)
@@ -98,6 +102,31 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
             }
             solid.DescendantsChanged();
             return solid;
+        }
+
+        /// <summary>
+        /// Bounds of the unit arc measured clockwise from 12 o'clock, where a point is (sin t, cos t).
+        /// The extremes lie at the start, at the end, or at a multiple of 90 degrees in between.
+        /// </summary>
+        private static (double MinX, double MaxX, double MinY, double MaxY) UnitArcBounds(double start, double sweep)
+        {
+            const double quarter = Math.PI / 2;
+            var end = start + sweep;
+            var angles = new List<double> { start, end };
+            for (var k = Math.Ceiling(start / quarter); k * quarter <= end; k++) angles.Add(k * quarter);
+
+            var xs = angles.Select(t => Math.Sin(t)).ToList();
+            var ys = angles.Select(t => Math.Cos(t)).ToList();
+            return (xs.Min(), xs.Max(), ys.Min(), ys.Max());
+        }
+
+        /// <summary>
+        /// The arch is swept clockwise, which reverses the winding of every face. The faces are flipped so
+        /// their normals still point out of the solid.
+        /// </summary>
+        private static IEnumerable<Vector3[]> ReverseWinding(IEnumerable<Vector3[]> faces)
+        {
+            return faces.Select(f => Enumerable.Reverse(f).ToArray()).ToList();
         }
 
         /// <summary>
@@ -157,20 +186,38 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
             var slopeInner = curvedRamp && _innerOffset.GetValue();
             // Both edges dropped onto the bottom would leave no wall at all
             if (slopeOuter && slopeInner) yield break;
+            var fitSelection = _fitSelection.GetValue();
             
             // Very similar to the pipe brush, except with options for start angle, arc, height and tilt
             var width = box.Width;
             var length = box.Length;
             var height = box.Height;
 
-            var majorOut = width / 2;
-            var majorIn = majorOut - wallWidth;
-            var minorOut = length / 2;
-            var minorIn = minorOut - wallWidth;
-
             var start = (float) MathHelper.DegreesToRadians(startAngle);
             var tilt = (float) MathHelper.DegreesToRadians(tiltAngle);
             var angle = (float) MathHelper.DegreesToRadians(arc) / numSides;
+
+            // Centre and radii of the outer edge. Fit Selection stretches the arc so its outer edge fills the box,
+            // so a 90 degree arc fits the box exactly. Otherwise the arc is the full ellipse inscribed in the box.
+            var centreX = box.Center.X;
+            var centreY = box.Center.Y;
+            var majorOut = width / 2;
+            var minorOut = length / 2;
+            if (fitSelection)
+            {
+                var bounds = UnitArcBounds(start, MathHelper.DegreesToRadians(arc));
+                var spanX = bounds.MaxX - bounds.MinX;
+                var spanY = bounds.MaxY - bounds.MinY;
+                if (spanX > 1e-6 && spanY > 1e-6)
+                {
+                    majorOut = (float) (width / spanX);
+                    minorOut = (float) (length / spanY);
+                    centreX = box.Start.X - (float) bounds.MinX * majorOut;
+                    centreY = box.Start.Y - (float) bounds.MinY * minorOut;
+                }
+            }
+            var majorIn = majorOut - wallWidth;
+            var minorIn = minorOut - wallWidth;
 
             // Calculate the coordinates of the inner and outer ellipses' points
             var outer = new Vector3[numSides + 1];
@@ -182,13 +229,14 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
                 var interp = tiltInterp ? (float) Math.Cos(Math.PI / numSides * (i - numSides / 2f)) : 1;
                 var tiltHeight = wallWidth / 2 * interp * (float) Math.Tan(tilt);
                 
-                var xval = box.Center.X + majorOut * (float) Math.Cos(a);
-                var yval = box.Center.Y + minorOut * (float) Math.Sin(a);
+                // Angles run clockwise from 12 o'clock
+                var xval = centreX + majorOut * (float) Math.Sin(a);
+                var yval = centreY + minorOut * (float) Math.Cos(a);
                 var zval = box.Start.Z + (curvedRamp ? h + tiltHeight : 0);
                 outer[i] = new Vector3(xval, yval, zval).Round(roundDecimals);
 
-                xval = box.Center.X + majorIn * (float) Math.Cos(a);
-                yval = box.Center.Y + minorIn * (float) Math.Sin(a);
+                xval = centreX + majorIn * (float) Math.Sin(a);
+                yval = centreY + minorIn * (float) Math.Cos(a);
                 zval = box.Start.Z + (curvedRamp ? h - tiltHeight : 0);
                 inner[i] = new Vector3(xval, yval, zval).Round(roundDecimals);
             }
@@ -247,7 +295,7 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
                         faces.Add(new[] { inner[i+1] + z, outer[i] + z,   inner[i] + z    });
                         faces.Add(new[] { inner[i],       outer[i],       inner[i+1]      });
                     }
-                    yield return MakeSolid(generator, faces, texture, colour);
+                    yield return MakeSolid(generator, ReverseWinding(faces), texture, colour);
 
                     faces.Clear();
 
@@ -267,7 +315,7 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
                         faces.Add(new[] { outer[i] + z,   inner[i+1] + z, outer[i+1] + z  });
                         faces.Add(new[] { outer[i+1],     inner[i+1],     outer[i]        });
                     }
-                    yield return MakeSolid(generator, faces, texture, colour);
+                    yield return MakeSolid(generator, ReverseWinding(faces), texture, colour);
                 }
                 else
                 {
@@ -278,7 +326,7 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
                     faces.Add(new[] { inner[i],       inner[i] + z,   outer[i] + z,   outer[i]     }.Select(x => x + h).ToArray());
                     faces.Add(new[] { inner[i+1] + z, outer[i+1] + z, outer[i] + z,   inner[i] + z }.Select(x => x + h).ToArray());
                     faces.Add(new[] { inner[i],       outer[i],       outer[i+1],     inner[i+1]   }.Select(x => x + h).ToArray());
-                    yield return MakeSolid(generator, faces, texture, colour);
+                    yield return MakeSolid(generator, ReverseWinding(faces), texture, colour);
                 }
             }
         }

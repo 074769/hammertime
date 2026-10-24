@@ -62,7 +62,8 @@
                 "TiltAngle": "Tilt angle",
                 "TiltInterpolation": "Tilt interpolation",
                 "OuterOffset": "Outer offset",
-                "InnerOffset": "Inner offset"
+                "InnerOffset": "Inner offset",
+                "FitSelection": "Fit selection"
             },
             "BlockBrush": {
                 "Name": "Block"
