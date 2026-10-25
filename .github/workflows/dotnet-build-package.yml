@@ -16,11 +16,11 @@ jobs:
       matrix:
         arch: [x86, x64]
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v7
       with:
         submodules: true
     - name: Setup .NET
-      uses: actions/setup-dotnet@v3
+      uses: actions/setup-dotnet@v6
       with:
         dotnet-version: 6.0.x
     - name: Restore dependencies
@@ -54,12 +54,12 @@ jobs:
       with:
         script-file: ./Build/Sledge.Editor.New.Installer.nsi
     - name: Create Zip File
-      uses: vimtor/action-zip@v1.1
+      uses: vimtor/action-zip@v1.3
       with:
         files: ./bin/
         dest: ./HammerTime.${{ matrix.arch }}.zip
     - name: Save Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: build-${{ matrix.arch }}
         path: |
@@ -72,12 +72,12 @@ jobs:
     needs: build
     steps:
     - name: Download x86 artifact
-      uses: actions/download-artifact@v5
+      uses: actions/download-artifact@v8
       with: 
         name: build-x86
         path: ./dist/x86
     - name: Download x64 artifact
-      uses: actions/download-artifact@v5
+      uses: actions/download-artifact@v8
       with: 
         name: build-x64
         path: ./dist/x64
