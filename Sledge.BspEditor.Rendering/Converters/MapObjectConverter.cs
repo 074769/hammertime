@@ -7,6 +7,7 @@ using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.BspEditor.Rendering.Resources;
 using Sledge.BspEditor.Rendering.Scene;
+using Sledge.Rendering.Resources;
 
 namespace Sledge.BspEditor.Rendering.Converters
 {
@@ -35,41 +36,38 @@ namespace Sledge.BspEditor.Rendering.Converters
 
         public async Task Convert(MapDocument document, SceneBuilder builder, IEnumerable<IMapObject> affected, ResourceCollector resourceCollector)
         {
-            var objs = document.Map.Root.FindAll();
+            var objs = document.Map.Root.FindAll().ToList();
 
-            if (affected != null)
-            {
-                var groups = affected.Select(x => x.ID / 200).ToHashSet();
-                foreach (var g in groups)
-                {
-                    resourceCollector.RemoveRenderables(builder.GetRenderablesForGroup(g));
-                    builder.DeleteGroup(g);
-                }
-                objs = objs.Where(x => groups.Contains(x.ID / 200)).ToList();
-            }
+            // A full rebuild covers every group in the map. An incremental one covers the groups that changed,
+            // including groups that are now empty, so those get cleared too.
+            var groupKeys = (affected ?? objs).Select(x => x.ID / 200).Distinct().OrderBy(x => x).ToList();
+            var byGroup = objs.ToLookup(x => x.ID / 200);
 
             var converters = _converters.Select(x => x.Value).OrderBy(x => (int) x.Priority).ToList();
             var groupConverters = _groupConverters.Select(x => x.Value).OrderBy(x => (int) x.Priority).ToList();
 
-            foreach (var g in objs.GroupBy(x => x.ID / 200))
+            // Rebuild every group into its own staging buffer. The current buffers stay on screen until all of
+            // them are ready, so no group disappears while its textures are loading.
+            var staged = new List<(long Key, BufferBuilder Buffer, ResourceCollector Collector)>();
+            foreach (var key in groupKeys)
             {
-                builder.EnsureGroupExists(g.Key);
-                var buffer = builder.GetBufferForGroup(g.Key);
+                var groupObjects = byGroup[key].ToList();
+                var buffer = builder.CreateStagingBuffer();
                 var collector = new ResourceCollector();
 
                 foreach (var gc in groupConverters)
                 {
                     try
                     {
-                        await gc.Convert(buffer, document, g, collector);
+                        await gc.Convert(buffer, document, groupObjects, collector);
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Trace.TraceError($"Group scene conversion failed for group {g.Key}: {ex}");
+                        System.Diagnostics.Trace.TraceError($"Group scene conversion failed for group {key}: {ex}");
                     }
                 }
 
-                foreach (var obj in g)
+                foreach (var obj in groupObjects)
                 {
                     foreach (var converter in converters)
                     {
@@ -80,8 +78,7 @@ namespace Sledge.BspEditor.Rendering.Converters
                         }
                         catch (Exception ex)
                         {
-                            // One bad object must not blank its whole group: the group was already cleared above,
-                            // and an exception here would otherwise leave every object in it invisible until reopen.
+                            // One bad object must not stop the rest of its group from drawing
                             System.Diagnostics.Trace.TraceError($"Scene conversion failed for object {obj.ID}: {ex}");
                             break;
                         }
@@ -89,10 +86,15 @@ namespace Sledge.BspEditor.Rendering.Converters
                     }
                 }
 
-                builder.RemoveRenderablesFromGroup(g.Key, collector.GetRenderablesToRemove());
-                builder.AddRenderablesToGroup(g.Key, collector.GetRenderablesToAdd());
+                staged.Add((key, buffer, collector));
+            }
 
-                resourceCollector.Merge(collector);
+            // Every group is ready: swap them in together
+            foreach (var s in staged)
+            {
+                resourceCollector.RemoveRenderables(builder.GetRenderablesForGroup(s.Key));
+                builder.SwapGroup(s.Key, s.Buffer, s.Collector.GetRenderablesToAdd());
+                resourceCollector.Merge(s.Collector);
             }
 
             builder.Complete();

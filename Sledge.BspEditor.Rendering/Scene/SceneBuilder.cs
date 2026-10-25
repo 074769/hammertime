@@ -10,9 +10,17 @@ namespace Sledge.BspEditor.Rendering.Scene
     public class SceneBuilder : IDisposable
     {
         private readonly EngineInterface _engine;
+        private readonly object _lock = new object();
 
         private readonly Dictionary<long, BufferBuilder> _bufferBuilders;
-        public IEnumerable<BufferBuilder> BufferBuilders => _bufferBuilders.Values;
+
+        /// <summary>
+        /// A snapshot of the group buffers. The scene draws from this while the converter may be swapping groups.
+        /// </summary>
+        public IEnumerable<BufferBuilder> BufferBuilders
+        {
+            get { lock (_lock) return _bufferBuilders.Values.ToList(); }
+        }
         public IRenderable SceneBuilderRenderable { get; }
 
         private readonly Dictionary<long, HashSet<IRenderable>> _renderables;
@@ -70,6 +78,33 @@ namespace Sledge.BspEditor.Rendering.Scene
             if (_renderables.ContainsKey(group))
             {
                 _renderables.Remove(group);
+            }
+        }
+
+        /// <summary>
+        /// Creates a buffer for rebuilding a group. It is not part of the scene until <see cref="SwapGroup"/> is called.
+        /// </summary>
+        public BufferBuilder CreateStagingBuffer()
+        {
+            return _engine.CreateBufferBuilder(BufferSize.Medium);
+        }
+
+        /// <summary>
+        /// Replaces a group's geometry in one step. The old buffer stays in the scene until the new one is complete,
+        /// so the group is never missing while it is being rebuilt.
+        /// </summary>
+        public void SwapGroup(long group, BufferBuilder buffer, IEnumerable<IRenderable> renderables)
+        {
+            lock (_lock)
+            {
+                buffer.Complete();
+
+                if (_bufferBuilders.TryGetValue(group, out var old) && !ReferenceEquals(old, buffer))
+                {
+                    old.Dispose();
+                }
+                _bufferBuilders[group] = buffer;
+                _renderables[group] = new HashSet<IRenderable>(renderables);
             }
         }
 
