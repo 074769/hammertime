@@ -1,4 +1,5 @@
 ﻿using System.Drawing;
+using System.Runtime.Versioning;
 using System.Windows.Forms;
 
 namespace Sledge.QuickForms.Items
@@ -12,6 +13,7 @@ namespace Sledge.QuickForms.Items
 
         private readonly Label _label;
 
+	    [SupportedOSPlatform("windows")]
 	    public QuickFormLabel(string text)
 		{
 		    _label = new Label
