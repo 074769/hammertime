@@ -1122,7 +1122,7 @@ namespace HammerTime.Source.Providers
                         Vertices.Clear();
                         break;
                     }
-                    Vertices.Add(pt);
+                    Vertices.Add(pt.Value);
                 }
             }
 
