@@ -53,6 +53,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Selection
                 var selection = new HashSet<Solid>(document.Selection.OfType<Solid>());
                 var toSelect = selection.Except(_selectedSolids.Select(x => x.Real)).ToList();
                 var toDeselect = _selectedSolids.Select(x => x.Real).Except(selection).ToList();
+                VertexLog.Info($"Update: document selects {selection.Count} solid(s); adding {toSelect.Count} (ids {string.Join(",", toSelect.Select(x => x.ID))}), removing {toDeselect.Count} (ids {string.Join(",", toDeselect.Select(x => x.ID))})");
 
                 if (toSelect.Any())
                 {
@@ -84,11 +85,13 @@ namespace Sledge.BspEditor.Tools.Vertex.Selection
 
             lock (_lock)
             {
+                VertexLog.Info($"Commit: {_selectedSolids.Count(x => x.IsDirty)} dirty of {_selectedSolids.Count} selected solid(s)");
                 foreach (var solid in _selectedSolids.Where(x => x.IsDirty))
                 {
                     // An edit that left NaN / infinity in a solid would wreck it (and every copy of it): drop that edit instead
                     if (solid.Copy.Faces.Any(f => f.Vertices.Any(v => !IsFinite(v.Position))))
                     {
+                        VertexLog.Warning($"Commit: dropped non-finite edit on solid {solid.Real.ID}");
                         solid.Reset();
                         continue;
                     }
@@ -125,6 +128,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Selection
             {
                 foreach (var solid in _selectedSolids.Where(x => !x.IsDirty && set.Contains(x.Real)).ToList())
                 {
+                    VertexLog.Info($"Reset working copy of solid {solid.Real.ID} (map changed underneath it)");
                     solid.Reset();
                     any = true;
                 }
