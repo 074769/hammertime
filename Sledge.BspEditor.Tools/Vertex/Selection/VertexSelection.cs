@@ -24,6 +24,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Selection
         public async Task Clear(MapDocument document)
         {
             var tran = new Transaction();
+            Task pending = null;
 
             lock (_lock)
             {
@@ -37,9 +38,12 @@ namespace Sledge.BspEditor.Tools.Vertex.Selection
 
                     _selectedSolids.Clear();
                 }
+
+                // Queued while the lock is held, so the map sees the changes in the same order the selection changed
+                if (!tran.IsEmpty) pending = MapDocumentOperation.Perform(document, tran);
             }
 
-            if (!tran.IsEmpty) await MapDocumentOperation.Perform(document, tran);
+            if (pending != null) await pending;
         }
 
         public async Task Update(MapDocument document)
@@ -47,6 +51,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Selection
             if (document == null) return;
             
             var tran = new Transaction();
+            Task pending = null;
 
             lock (_lock)
             {
@@ -74,14 +79,18 @@ namespace Sledge.BspEditor.Tools.Vertex.Selection
                 var rem = _selectedSolids.Where(s => toDeselect.Contains(s.Real));
                 _selectedSolids.ExceptWith(rem);
                 _selectedSolids.UnionWith(toSelect.Select(s => new VertexSolid(s)));
+
+                // Queued while the lock is held, so concurrent updates reach the map in the order they changed the selection
+                if (!tran.IsEmpty) pending = MapDocumentOperation.Perform(document, tran);
             }
 
-            if (!tran.IsEmpty) await MapDocumentOperation.Perform(document, tran);
+            if (pending != null) await pending;
         }
 
         public async Task Commit(MapDocument document)
         {
             var tran = new Transaction();
+            Task pending = null;
 
             lock (_lock)
             {
@@ -101,12 +110,12 @@ namespace Sledge.BspEditor.Tools.Vertex.Selection
                     tran.Add(new AddMapObjectData(solid.Real.ID, solid.Copy.Faces.Select(x => x.ToFace(document.Map.NumberGenerator))));
                     solid.Reset();
                 }
+
+                // Queued while the lock is held, so the write-back is ordered with any selection change that follows it
+                if (!tran.IsEmpty) pending = MapDocumentOperation.Perform(document, tran);
             }
 
-            if (!tran.IsEmpty)
-            {
-                await MapDocumentOperation.Perform(document, tran);
-            }
+            if (pending != null) await pending;
         }
 
         private static bool IsFinite(System.Numerics.Vector3 v)
