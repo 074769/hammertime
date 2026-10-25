@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
+using System.Runtime.Versioning;
 using System.Windows.Forms;
 
 namespace Sledge.QuickForms.Items
@@ -16,6 +17,7 @@ namespace Sledge.QuickForms.Items
         private readonly Label _label;
         private readonly ComboBox _comboBox;
 
+        [SupportedOSPlatform("windows")]
         public QuickFormComboBox(string text, IEnumerable<object> items)
         {
             _label = new Label
