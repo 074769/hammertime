@@ -66,7 +66,8 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 			{
 				RenderBoxText = false,
 				BoxColour = Color.Orange,
-				FillColour = Color.FromArgb(64, Color.DodgerBlue)
+				FillColour = Color.FromArgb(64, Color.DodgerBlue),
+				HiddenAxisBounds = GetSelectedObjectBounds
 			};
 			_boxState.DragStarted += (sender, args) =>
 			{
@@ -771,6 +772,15 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 
 			Select(clicked, toggle);
 			if (clicked.Any()) e.Handled = true;
+		}
+
+		/// <summary>
+		/// Bounds of every solid being edited, used so a box drawn in an ortho view covers the whole object on the hidden axis.
+		/// </summary>
+		private Box GetSelectedObjectBounds()
+		{
+			var points = Selection?.SelectMany(s => s.Copy.Faces.SelectMany(f => f.Vertices.Select(v => v.Position))).ToList();
+			return points == null || !points.Any() ? null : new Box(points);
 		}
 
 		public bool SelectPointsInBox(Box box, bool toggle)

@@ -26,6 +26,12 @@ namespace Sledge.BspEditor.Tools.Draggable
         public Color FillColour { get; set; }
         public Box RememberedDimensions { get; set; }
 
+        /// <summary>
+        /// Optional. When set, a box drawn in an orthographic view is stretched along that view's hidden axis to cover these bounds,
+        /// so the box spans the whole object instead of one grid step.
+        /// </summary>
+        public Func<Box> HiddenAxisBounds { get; set; }
+
 		private bool _canDragInPerspective;
 
 		internal BoxState State { get; set; }
@@ -161,12 +167,30 @@ namespace Sledge.BspEditor.Tools.Draggable
             var wid = RememberedDimensions == null ? Vector3.Zero : camera.GetUnusedCoordinate(RememberedDimensions.End - RememberedDimensions.Start);
             State.Start = Tool.SnapIfNeeded(camera.Expand(position) + st);
             State.End = State.Start + wid;
+            SpanHiddenAxis(camera);
             base.StartDrag(document, viewport, camera, e, position);
+        }
+
+        /// <summary>
+        /// Stretches the box along the ortho view's hidden axis to the bounds from <see cref="HiddenAxisBounds"/>.
+        /// </summary>
+        private void SpanHiddenAxis(OrthographicCamera camera)
+        {
+            var bounds = HiddenAxisBounds?.Invoke();
+            if (bounds == null || bounds.IsEmpty()) return;
+
+            var mask = camera.GetUnusedCoordinate(Vector3.One);
+            var low = camera.GetUnusedValue(Vector3.Min(bounds.Start, bounds.End));
+            var high = camera.GetUnusedValue(Vector3.Max(bounds.Start, bounds.End));
+
+            State.Start = State.Start - camera.GetUnusedCoordinate(State.Start) + mask * low;
+            State.End = State.End - camera.GetUnusedCoordinate(State.End) + mask * high;
         }
 
         public override void Drag(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e, Vector3 lastPosition, Vector3 position)
         {
             State.End = SnapOrthoEnd(document, camera, position);
+            SpanHiddenAxis(camera);
             base.Drag(document, viewport, camera, e, lastPosition, position);
         }
 
@@ -193,6 +217,7 @@ namespace Sledge.BspEditor.Tools.Draggable
             State.Viewport = null;
             State.Action = BoxAction.Drawn;
             State.End = SnapOrthoEnd(document, camera, position);
+            SpanHiddenAxis(camera);
             State.FixBounds();
             base.EndDrag(document, viewport, camera, e, position);
         }
