@@ -26,8 +26,12 @@ namespace Sledge.Shell.Registers
 	public class ToolRegister : IStartupHook, IHotkeyProvider
 	{
 		// The tool register needs direct access to the shell
+		#pragma warning disable CS0649
 		[Import] private Forms.Shell _shell;
+		#pragma warning restore CS0649
+		#pragma warning disable CS0649
 		[ImportMany] private IEnumerable<Lazy<ITool>> _tools;
+		#pragma warning restore CS0649
 
 		public async Task OnStartup()
 		{

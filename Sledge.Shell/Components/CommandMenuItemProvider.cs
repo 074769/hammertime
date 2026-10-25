@@ -23,7 +23,9 @@ namespace Sledge.Shell.Components
             _hotkeys = hotkeys.Value;
         }
 
+        #pragma warning disable CS0067
         public event EventHandler MenuItemsChanged;
+        #pragma warning restore CS0067
 
         public IEnumerable<IMenuItem> GetMenuItems()
         {

@@ -50,7 +50,7 @@ namespace Sledge.Shell.Forms
             this.InvokeLater(() => {
                SaveAllButton.Text = translation.GetString(typeof(SaveChangesForm).FullName + ".SaveAll");
                DiscardButton.Text = translation.GetString(typeof(SaveChangesForm).FullName + ".DiscardAll");
-               CancelButton.Text = translation.GetString(typeof(SaveChangesForm).FullName + ".Cancel");
+               btnCancel.Text = translation.GetString(typeof(SaveChangesForm).FullName + ".Cancel");
                UnsavedChangesLabel.Text = translation.GetString(typeof(SaveChangesForm).FullName + ".UnsavedChangesMessage");
                Text = translation.GetString(typeof(SaveChangesForm).FullName + ".Title");
             });

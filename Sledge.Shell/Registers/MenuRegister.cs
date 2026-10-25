@@ -25,11 +25,19 @@ namespace Sledge.Shell.Registers
 	[Export(typeof(IInitialiseHook))]
 	internal class MenuRegister : IStartupHook, IInitialiseHook
 	{
+		#pragma warning disable CS0649
 		[Import] private Forms.Shell _shell;
+		#pragma warning restore CS0649
+		#pragma warning disable CS0649
 		[Import] private IContext _context;
+		#pragma warning restore CS0649
 
+		#pragma warning disable CS0649
 		[ImportMany] private IEnumerable<Lazy<IMenuItemProvider>> _itemProviders;
+		#pragma warning restore CS0649
+		#pragma warning disable CS0649
 		[ImportMany] private IEnumerable<Lazy<IMenuMetadataProvider>> _metaDataProviders;
+		#pragma warning restore CS0649
 
 		public Task OnStartup()
 		{

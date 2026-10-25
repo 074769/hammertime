@@ -25,8 +25,12 @@ namespace Sledge.Shell.Registers
 	[Export(typeof(ISettingsContainer))]
 	public class DialogRegister : IStartupHook, ISettingsContainer
 	{
+		#pragma warning disable CS0649
 		[Import] private Forms.Shell _shell;
+		#pragma warning restore CS0649
+		#pragma warning disable CS0649
 		[ImportMany] private IEnumerable<Lazy<IDialog>> _dialogs;
+		#pragma warning restore CS0649
 		private static DialogRegister _instance;
 		private bool _useDarkMode = false;
 		public async Task OnStartup()

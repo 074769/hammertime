@@ -29,7 +29,7 @@
 		private void InitializeComponent()
 		{
 			SettingsPanel = new Sledge.Shell.Controls.SettingsScrollPanel();
-			CancelButton = new System.Windows.Forms.Button();
+			btnCancel = new System.Windows.Forms.Button();
 			OKButton = new System.Windows.Forms.Button();
 			GroupList = new System.Windows.Forms.TreeView();
 			SuspendLayout();
@@ -47,17 +47,17 @@
 			SettingsPanel.Size = new System.Drawing.Size(840, 474);
 			SettingsPanel.TabIndex = 7;
 			// 
-			// CancelButton
+			// btnCancel
 			// 
-			CancelButton.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
-			CancelButton.Location = new System.Drawing.Point(950, 495);
-			CancelButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
-			CancelButton.Name = "CancelButton";
-			CancelButton.Size = new System.Drawing.Size(88, 27);
-			CancelButton.TabIndex = 8;
-			CancelButton.Text = "Cancel";
-			CancelButton.UseVisualStyleBackColor = true;
-			CancelButton.Click += CancelClicked;
+			btnCancel.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
+			btnCancel.Location = new System.Drawing.Point(950, 495);
+			btnCancel.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
+			btnCancel.Name = "btnCancel";
+			btnCancel.Size = new System.Drawing.Size(88, 27);
+			btnCancel.TabIndex = 8;
+			btnCancel.Text = "Cancel";
+			btnCancel.UseVisualStyleBackColor = true;
+			btnCancel.Click += CancelClicked;
 			// 
 			// OKButton
 			// 
@@ -88,7 +88,7 @@
 			ClientSize = new System.Drawing.Size(1051, 535);
 			Controls.Add(GroupList);
 			Controls.Add(OKButton);
-			Controls.Add(CancelButton);
+			Controls.Add(btnCancel);
 			Controls.Add(SettingsPanel);
 			Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
 			MaximizeBox = false;
@@ -101,7 +101,7 @@
 
 		#endregion
 		private Sledge.Shell.Controls.SettingsScrollPanel SettingsPanel;
-        private System.Windows.Forms.Button CancelButton;
+        private System.Windows.Forms.Button btnCancel;
         private System.Windows.Forms.Button OKButton;
         private System.Windows.Forms.TreeView GroupList;
     }

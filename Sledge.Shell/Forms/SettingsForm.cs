@@ -43,8 +43,8 @@ namespace Sledge.Shell.Forms
 
         public string Cancel
         {
-            get => CancelButton.Text;
-            set => this.InvokeLater(() => CancelButton.Text = value);
+            get => btnCancel.Text;
+            set => this.InvokeLater(() => btnCancel.Text = value);
         }
 
         [ImportingConstructor]

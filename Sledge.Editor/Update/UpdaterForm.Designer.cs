@@ -30,7 +30,7 @@
 		{
 			StatusLabel = new System.Windows.Forms.Label();
 			ProgressBar = new System.Windows.Forms.ProgressBar();
-			CancelButton = new System.Windows.Forms.Button();
+			btnCancel = new System.Windows.Forms.Button();
 			StartButton = new System.Windows.Forms.Button();
 			ReleaseDetails = new System.Windows.Forms.TextBox();
 			ReleaseNotesLink = new System.Windows.Forms.LinkLabel();
@@ -59,17 +59,17 @@
 			ProgressBar.Style = System.Windows.Forms.ProgressBarStyle.Continuous;
 			ProgressBar.TabIndex = 1;
 			// 
-			// CancelButton
+			// btnCancel
 			// 
-			CancelButton.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
-			CancelButton.Location = new System.Drawing.Point(363, 269);
-			CancelButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
-			CancelButton.Name = "CancelButton";
-			CancelButton.Size = new System.Drawing.Size(88, 27);
-			CancelButton.TabIndex = 2;
-			CancelButton.Text = "Cancel";
-			CancelButton.UseVisualStyleBackColor = true;
-			CancelButton.Click += CancelButtonClicked;
+			btnCancel.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
+			btnCancel.Location = new System.Drawing.Point(363, 269);
+			btnCancel.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
+			btnCancel.Name = "btnCancel";
+			btnCancel.Size = new System.Drawing.Size(88, 27);
+			btnCancel.TabIndex = 2;
+			btnCancel.Text = "Cancel";
+			btnCancel.UseVisualStyleBackColor = true;
+			btnCancel.Click += CancelButtonClicked;
 			// 
 			// StartButton
 			// 
@@ -139,7 +139,7 @@
 			Controls.Add(ReleaseNotesLink);
 			Controls.Add(ReleaseDetails);
 			Controls.Add(StartButton);
-			Controls.Add(CancelButton);
+			Controls.Add(btnCancel);
 			Controls.Add(ProgressBar);
 			Controls.Add(StatusLabel);
 			FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
@@ -160,7 +160,7 @@
 
 		private System.Windows.Forms.Label StatusLabel;
         private System.Windows.Forms.ProgressBar ProgressBar;
-        private System.Windows.Forms.Button CancelButton;
+        private System.Windows.Forms.Button btnCancel;
         private System.Windows.Forms.Button StartButton;
         private System.Windows.Forms.TextBox ReleaseDetails;
         private System.Windows.Forms.LinkLabel ReleaseNotesLink;

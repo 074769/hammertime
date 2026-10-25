@@ -22,8 +22,12 @@ namespace Sledge.Shell.Registers
     public class CommandRegister : IStartupHook, IActivatorProvider
     {
         // Store the context (the command register is one of the few things that should need static access to the context)
+        #pragma warning disable CS0649
         [Import] private IContext _context;
+        #pragma warning restore CS0649
+        #pragma warning disable CS0649
         [ImportMany] private IEnumerable<Lazy<ICommand>> _importedCommands;
+        #pragma warning restore CS0649
         
         public Task OnStartup()
         {

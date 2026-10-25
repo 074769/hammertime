@@ -92,8 +92,8 @@ namespace Sledge.Shell.Settings.Editors
 				WrapContents = false,
 				Padding = new Padding(0, 6, 0, 0)
 			};
-			_up = MakeButton("Move up", (s, e) => Move(-1));
-			_down = MakeButton("Move down", (s, e) => Move(1));
+			_up = MakeButton("Move up", (s, e) => MoveSelected(-1));
+			_down = MakeButton("Move down", (s, e) => MoveSelected(1));
 			_chooseIcon = MakeButton("Choose icon...", (s, e) => ChooseIcon());
 			_resetIcon = MakeButton("Default icon", (s, e) => ResetIcon());
 			_resetAll = MakeButton("Reset all", (s, e) => ResetAll());
@@ -204,7 +204,7 @@ namespace Sledge.Shell.Settings.Editors
 			Changed();
 		}
 
-		private void Move(int delta)
+		private void MoveSelected(int delta)
 		{
 			if (_list.SelectedIndices.Count != 1) return;
 			var idx = _list.SelectedIndices[0];

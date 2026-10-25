@@ -16,9 +16,13 @@ namespace Sledge.Shell.Registers
     public class StatusRegister : IInitialiseHook
     {
         // The menu register needs direct access to the shell
+        #pragma warning disable CS0649
         [Import] private Forms.Shell _shell;
+        #pragma warning restore CS0649
 
+        #pragma warning disable CS0649
         [ImportMany] private IEnumerable<Lazy<IStatusItem>> _statusItems;
+        #pragma warning restore CS0649
         
         public Task OnInitialise()
         {

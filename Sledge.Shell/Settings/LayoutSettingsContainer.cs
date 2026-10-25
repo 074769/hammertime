@@ -14,7 +14,9 @@ namespace Sledge.Shell.Settings
 	[Export(typeof(ISettingsContainer))]
 	public class LayoutSettingsContainer : ISettingsContainer
 	{
+		#pragma warning disable CS0649
 		[Import] private Forms.Shell _shell;
+		#pragma warning restore CS0649
 
 		// Settings provider
 

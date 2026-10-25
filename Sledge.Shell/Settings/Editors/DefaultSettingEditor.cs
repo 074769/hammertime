@@ -7,7 +7,9 @@ namespace Sledge.Shell.Settings.Editors
 {
     public class DefaultSettingEditor : UserControl, ISettingEditor
     {
+        #pragma warning disable CS0067
         public event EventHandler<SettingKey> OnValueChanged;
+        #pragma warning restore CS0067
         public string Label { get; set; }
 
         public object Value

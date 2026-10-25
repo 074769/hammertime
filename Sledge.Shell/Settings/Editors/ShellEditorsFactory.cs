@@ -11,7 +11,9 @@ namespace Sledge.Shell.Settings.Editors
     [Export(typeof(ISettingEditorFactory))]
     public class ShellEditorsFactory : ISettingEditorFactory
     {
+        #pragma warning disable CS0649
         [Import] private Lazy<TranslationStringsCatalog> _catalog;
+        #pragma warning restore CS0649
 
         public string OrderHint => "W";
 

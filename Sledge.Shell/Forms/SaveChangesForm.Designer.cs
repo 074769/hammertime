@@ -28,24 +28,24 @@
         /// </summary>
         private void InitializeComponent()
         {
-            this.CancelButton = new System.Windows.Forms.Button();
+            this.btnCancel = new System.Windows.Forms.Button();
             this.DiscardButton = new System.Windows.Forms.Button();
             this.SaveAllButton = new System.Windows.Forms.Button();
             this.DocumentList = new System.Windows.Forms.ListBox();
             this.UnsavedChangesLabel = new System.Windows.Forms.Label();
             this.SuspendLayout();
             // 
-            // CancelButton
+            // btnCancel
             // 
-            this.CancelButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.CancelButton.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-            this.CancelButton.Location = new System.Drawing.Point(269, 185);
-            this.CancelButton.Name = "CancelButton";
-            this.CancelButton.Size = new System.Drawing.Size(75, 23);
-            this.CancelButton.TabIndex = 0;
-            this.CancelButton.Text = "Cancel";
-            this.CancelButton.UseVisualStyleBackColor = true;
-            this.CancelButton.Click += new System.EventHandler(this.CancelClicked);
+            this.btnCancel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
+            this.btnCancel.DialogResult = System.Windows.Forms.DialogResult.Cancel;
+            this.btnCancel.Location = new System.Drawing.Point(269, 185);
+            this.btnCancel.Name = "btnCancel";
+            this.btnCancel.Size = new System.Drawing.Size(75, 23);
+            this.btnCancel.TabIndex = 0;
+            this.btnCancel.Text = "Cancel";
+            this.btnCancel.UseVisualStyleBackColor = true;
+            this.btnCancel.Click += new System.EventHandler(this.CancelClicked);
             // 
             // DiscardButton
             // 
@@ -102,7 +102,7 @@
             this.Controls.Add(this.DocumentList);
             this.Controls.Add(this.SaveAllButton);
             this.Controls.Add(this.DiscardButton);
-            this.Controls.Add(this.CancelButton);
+            this.Controls.Add(this.btnCancel);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
@@ -117,7 +117,7 @@
 
         #endregion
 
-        private System.Windows.Forms.Button CancelButton;
+        private System.Windows.Forms.Button btnCancel;
         private System.Windows.Forms.Button DiscardButton;
         private System.Windows.Forms.Button SaveAllButton;
         private System.Windows.Forms.ListBox DocumentList;

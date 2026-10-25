@@ -42,7 +42,7 @@
 			label8 = new System.Windows.Forms.Label();
 			InfoTextBox = new System.Windows.Forms.TextBox();
 			SubmitButton = new System.Windows.Forms.Button();
-			CancelButton = new System.Windows.Forms.Button();
+			btnCancel = new System.Windows.Forms.Button();
 			label3 = new System.Windows.Forms.Label();
 			applicationBranch = new System.Windows.Forms.TextBox();
 			SuspendLayout();
@@ -187,17 +187,17 @@
 			SubmitButton.UseVisualStyleBackColor = true;
 			SubmitButton.Click += SubmitButtonClicked;
 			// 
-			// CancelButton
+			// btnCancel
 			// 
-			CancelButton.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left;
-			CancelButton.Location = new System.Drawing.Point(14, 477);
-			CancelButton.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
-			CancelButton.Name = "CancelButton";
-			CancelButton.Size = new System.Drawing.Size(141, 27);
-			CancelButton.TabIndex = 4;
-			CancelButton.Text = "Don't Submit Error :(";
-			CancelButton.UseVisualStyleBackColor = true;
-			CancelButton.Click += CancelButtonClicked;
+			btnCancel.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left;
+			btnCancel.Location = new System.Drawing.Point(14, 477);
+			btnCancel.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
+			btnCancel.Name = "btnCancel";
+			btnCancel.Size = new System.Drawing.Size(141, 27);
+			btnCancel.TabIndex = 4;
+			btnCancel.Text = "Don't Submit Error :(";
+			btnCancel.UseVisualStyleBackColor = true;
+			btnCancel.Click += CancelButtonClicked;
 			// 
 			// label3
 			// 
@@ -227,7 +227,8 @@
 			ClientSize = new System.Drawing.Size(565, 517);
 			Controls.Add(applicationBranch);
 			Controls.Add(label3);
-			Controls.Add(CancelButton);
+			Controls.Add(btnCancel);
+			CancelButton = btnCancel;
 			Controls.Add(SubmitButton);
 			Controls.Add(InfoTextBox);
 			Controls.Add(label8);
@@ -267,7 +268,7 @@
         private System.Windows.Forms.Label label8;
         private System.Windows.Forms.TextBox InfoTextBox;
         private System.Windows.Forms.Button SubmitButton;
-        private System.Windows.Forms.Button CancelButton;
+        private System.Windows.Forms.Button btnCancel;
 		private System.Windows.Forms.Label label3;
 		private System.Windows.Forms.TextBox applicationBranch;
 	}
