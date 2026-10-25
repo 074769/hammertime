@@ -1,5 +1,6 @@
 ﻿using System.ComponentModel.Composition;
 using System.Threading.Tasks;
+using LogicAndTrick.Oy;
 using Sledge.BspEditor.Commands;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Editing.Properties;
@@ -24,6 +25,9 @@ namespace Sledge.BspEditor.Editing.History
 
         protected override async Task Invoke(MapDocument document, CommandParameters parameters)
         {
+            // Tools drop their live state (e.g. a vertex selection) before the history moves
+            await Oy.Publish<MapDocument>("MapDocument:BeforeHistoryChange", document);
+
             var stack = document.Map.Data.GetOne<HistoryStack>();
             if (stack == null) return;
             if (stack.CanUndo()) await MapDocumentOperation.Reverse(document, stack.UndoOperation());

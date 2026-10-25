@@ -103,6 +103,8 @@ namespace Sledge.BspEditor.Tools.Vertex
 					Invalidate();
 				}
 			});
+			// Undo/redo: commit the working copies and deselect everything first, so the history change never runs under a live selection
+			yield return Oy.Subscribe<MapDocument>("MapDocument:BeforeHistoryChange", async d => await ClearForHistoryChange(d));
 			yield return Oy.Subscribe<Type>("VertexTool:SetSubTool", t =>
 			{
 				CurrentSubTool = _subTools.Select(x => x.Value).FirstOrDefault(x => x.GetType() == t);
@@ -137,6 +139,19 @@ namespace Sledge.BspEditor.Tools.Vertex
 
 			if (ct != null) await ct.ToolDeselected();
 			await base.ToolDeselected();
+		}
+
+		private async Task ClearForHistoryChange(MapDocument document)
+		{
+			if (!Active || document == null || document != GetDocument()) return;
+
+			await _selection.Commit(document);
+			await _selection.Clear(document);
+			await MapDocumentOperation.Bypass(document, new Deselect(document.Map.Root.FindAll()));
+
+			var ct = CurrentSubTool;
+			if (ct != null) await ct.SelectionChanged();
+			Invalidate();
 		}
 
 		private async Task SelectionChanged()
