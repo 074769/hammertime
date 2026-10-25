@@ -212,12 +212,16 @@ namespace Sledge.BspEditor.Environment.Goldsource
 			IncludeToolsDirectoryInEnvironment = IncludeToolsDirectoryInEnvironment = true;
 		}
 
+		private static readonly string[] InternalWads = new[] { "cached.wad", "fonts.wad", "gfx.wad", "tempdecal.wad" };
+
 		private async Task<TextureCollection> MakeTextureCollectionAsync()
 		{
 			var wadRefs = _wadProvider.GetPackagesInFile(Root).Where(x => !ExcludedWads.Contains(x.Name, StringComparer.InvariantCultureIgnoreCase)
-			                                                              && !_manuallyDisabledWads.Contains(x.Name, StringComparer.InvariantCultureIgnoreCase));
+			                                                              && !_manuallyDisabledWads.Contains(x.Name, StringComparer.InvariantCultureIgnoreCase)
+			                                                              && !InternalWads.Contains(x.Name, StringComparer.InvariantCultureIgnoreCase));
 			var extraWads = AdditionalTextureFiles.SelectMany(x => _wadProvider.GetPackagesInFile(new NativeFile(x)))
-			                                      .Where(x => !_manuallyDisabledWads.Contains(x.Name, StringComparer.InvariantCultureIgnoreCase));
+			                                      .Where(x => !_manuallyDisabledWads.Contains(x.Name, StringComparer.InvariantCultureIgnoreCase)
+			                                                  && !InternalWads.Contains(x.Name, StringComparer.InvariantCultureIgnoreCase));
 			var wads = await _wadProvider.GetTexturePackages(wadRefs.Union(extraWads));
 
 			var spriteRefs = _spriteProvider.GetPackagesInFile(Root);

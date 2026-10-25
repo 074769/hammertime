@@ -55,7 +55,6 @@ namespace Sledge.BspEditor.Tools.Texture
 			PackageTree.HandleCreated += (s, e) => PackageTree.BeginInvoke(new Action(HideAllPackagesCheckBox)); // after the nodes exist natively
 			_textureList.TextureSelected += TextureSelected;
 			_textureList.HighlightedTexturesChanged += HighlightedTexturesChanged;
-			SizeCombo.SelectedIndex = 1;
 			_textures = new List<string>();
 			SelectedTexture = null;
 
@@ -817,6 +816,25 @@ namespace Sledge.BspEditor.Tools.Texture
 			if (id == null) return;
 			if (!_memory.TryGetValue(id, out var m)) _memory[id] = m = new Memory();
 			m.Set(name, value);
+			ScheduleMemorySave();
+		}
+
+		private static System.Windows.Forms.Timer _memorySaveTimer;
+
+		/// <summary>Write the settings file shortly after a remembered value changed, instead of only at shutdown.</summary>
+		private static void ScheduleMemorySave()
+		{
+			if (_memorySaveTimer == null)
+			{
+				_memorySaveTimer = new System.Windows.Forms.Timer { Interval = 1500 };
+				_memorySaveTimer.Tick += (s, e) =>
+				{
+					_memorySaveTimer.Stop();
+					Oy.Publish("Settings:Save");
+				};
+			}
+			_memorySaveTimer.Stop();
+			_memorySaveTimer.Start();
 		}
 
 		private T GetMemory<T>(string name, T def = default(T))
@@ -836,6 +854,8 @@ namespace Sledge.BspEditor.Tools.Texture
 
 			public string Name => "Sledge.BspEditor.Tools.Texture.TextureBrowser.SettingsManager";
 
+			private const string MemoryKey = "TextureBrowserMemory";
+
 			public bool ValuesLoaded { get; set; } = false;
 			public SettingsManager()
 			{
@@ -850,12 +870,28 @@ namespace Sledge.BspEditor.Tools.Texture
 			public void LoadValues(ISettingsStore store)
 			{
 				FavouriteTextureFolders = store.Get<FavouriteTextureEnvironmentCollection[]>("FavouriteFolders")?.ToList() ?? new();
+
+				// Remembered browser choices (size, sort, filter...), keyed by environment ID
+				var saved = store.Get<Dictionary<string, Dictionary<string, string>>>(MemoryKey);
+				if (saved != null)
+				{
+					foreach (var env in saved)
+					{
+						if (!_memory.TryGetValue(env.Key, out var m)) _memory[env.Key] = m = new Memory();
+						foreach (var kv in env.Value) m.Values[kv.Key] = kv.Value;
+					}
+				}
 				ValuesLoaded = true;
 			}
 
 			public void StoreValues(ISettingsStore store)
 			{
 				store.Set("FavouriteFolders", FavouriteTextureFolders);
+				store.Set(MemoryKey, _memory.ToDictionary(
+					e => e.Key,
+					e => e.Value.Values.Where(v => v.Value != null).ToDictionary(
+						v => v.Key,
+						v => Convert.ToString(v.Value, System.Globalization.CultureInfo.InvariantCulture))));
 			}
 
 			internal static SettingsManager GetInstance()
