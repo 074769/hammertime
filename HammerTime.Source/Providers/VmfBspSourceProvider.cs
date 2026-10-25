@@ -1116,7 +1116,7 @@ namespace HammerTime.Source.Providers
                 var count = obj.Get("count", 0);
                 for (var i = 0; i < count; i++)
                 {
-                    var pt = obj.Get<Vector3>("vertex" + i);
+                    var pt = obj.Get<Vector3?>("vertex" + i, null);
                     if (pt == null)
                     {
                         Vertices.Clear();

@@ -78,7 +78,7 @@ namespace Sledge.BspEditor.Editing.Components.StorageSidebar
         private Task DocumentActivated(IDocument document)
         {
             _document.SetTarget(document as MapDocument);
-            this.InvokeLater(() => Refresh());
+            this.InvokeLater(() => RefreshRows());
             return Task.FromResult(0);
         }
 
@@ -86,7 +86,7 @@ namespace Sledge.BspEditor.Editing.Components.StorageSidebar
         {
             if (_document.TryGetTarget(out var md) && ReferenceEquals(md, change.Document))
             {
-                this.InvokeLater(() => Refresh());
+                this.InvokeLater(() => RefreshRows());
             }
             return Task.FromResult(0);
         }
@@ -106,7 +106,7 @@ namespace Sledge.BspEditor.Editing.Components.StorageSidebar
         /// <summary>
         /// Updates the rows in place, so the selection survives changes made elsewhere (undo, moves, etc.).
         /// </summary>
-        private void Refresh()
+        private void RefreshRows()
         {
             var doc = Current();
             var groups = doc == null

@@ -317,8 +317,8 @@ namespace Sledge.BspEditor.Editing.Components
 			if (selected == null) return;
 			await SelectEntity(selected);
 			var bb = GetSelectionBoundingBox(selected);
-			Oy.Publish("MapDocument:Viewport:Focus2D", bb);
-			Oy.Publish("MapDocument:Viewport:Focus3D", bb);
+			await Oy.Publish("MapDocument:Viewport:Focus2D", bb);
+			await Oy.Publish("MapDocument:Viewport:Focus3D", bb);
 		}
 
 		private void DeleteSelectedEntity(object sender, EventArgs e)
