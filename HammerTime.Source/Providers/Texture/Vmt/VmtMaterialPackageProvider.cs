@@ -25,7 +25,8 @@ namespace HammerTime.Source.Providers.Texture.Vmt
 			}
 			if (materialsRoot == null || !materialsRoot.Exists) return new TexturePackageReference[0];
 
-			var refs = (materialsRoot as CompositeFile).GetCompositeFiles().Select(x => new TexturePackageReference(x.Parent?.Name ?? "Materials", x));
+			if (materialsRoot is not CompositeFile composite) return new TexturePackageReference[0];
+			var refs = composite.GetCompositeFiles().Select(x => new TexturePackageReference(x.Parent?.Name ?? "Materials", x));
 			return refs;
 		}
 		private HashSet<string> _allowedTypes = new HashSet<string>

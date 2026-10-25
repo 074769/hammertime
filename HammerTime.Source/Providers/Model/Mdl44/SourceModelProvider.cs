@@ -58,8 +58,10 @@ namespace HammerTime.Source.Providers.Model.Mdl44
 					vtxFile = vtxFiles.FirstOrDefault();
 				}
 				var vvdFile = file.Parent.GetFile(file.NameWithoutExtension + ".vvd");
-				var vvd = new VvdFile(vvdFile?.Open());
-				var vtx = new VtxFile(vtxFile?.Open());
+				if (vvdFile == null) throw new System.IO.FileNotFoundException("Missing .vvd for model: " + file.NameWithoutExtension);
+				var vvd = new VvdFile(vvdFile.Open());
+				if (vtxFile == null) throw new System.IO.FileNotFoundException("Missing .vtx for model: " + file.NameWithoutExtension);
+				var vtx = new VtxFile(vtxFile.Open());
 				mdl.VvdFile = vvd;
 				mdl.VtxFile = vtx;
 				return new MdlModel(mdl);

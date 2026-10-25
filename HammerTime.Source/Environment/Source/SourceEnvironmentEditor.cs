@@ -70,6 +70,7 @@ namespace HammerTime.Source.BspEditor.Environment
 				try
 				{
 					var element = cklTexturePackages.Items.OfType<string>().ElementAt(e.Index);//  .ElementAt(e.Index);
+					if (_initialObjectCollection == null) return;
 					if (_initialObjectCollection.TryGetValue(element, out var oldVar))
 						_initialObjectCollection[element] = e.NewValue == CheckState.Checked;
 				}

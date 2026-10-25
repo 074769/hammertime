@@ -79,6 +79,7 @@ namespace HammerTime.Source.Controls
 
             if (connectionsView.SelectedItems.Count < 1) return;
             var selected = connectionsView.SelectedItems[0].Tag as Connections.Connection;
+            if (selected == null) return;
             outputBox.Text = selected.Name;
             entityBox.Text = selected.TargetEntity;
             inputBox.Text = selected.TargetAction;
