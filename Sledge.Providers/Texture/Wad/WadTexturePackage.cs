@@ -61,7 +61,7 @@ namespace Sledge.Providers.Texture.Wad
             {
                 wadname = wp.File.Name.Substring(0, wp.File.Name.LastIndexOf('.'));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 wadname = wp.File.Name;
             }

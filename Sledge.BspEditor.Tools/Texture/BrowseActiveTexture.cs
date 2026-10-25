@@ -39,7 +39,7 @@ namespace Sledge.BspEditor.Tools.Texture
                 {
                     var tex = tb.SelectedTexture;
                     var at = new ActiveTexture {Name = tex};
-                    MapDocumentOperation.Perform(md, new TrivialOperation(x => x.Map.Data.Replace(at), x => x.Update(at)));
+                    await MapDocumentOperation.Perform(md, new TrivialOperation(x => x.Map.Data.Replace(at), x => x.Update(at)));
                 }
             }
         }

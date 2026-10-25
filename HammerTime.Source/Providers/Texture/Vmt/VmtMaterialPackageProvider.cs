@@ -125,7 +125,6 @@ namespace HammerTime.Source.Providers.Texture.Vmt
 					var textures = files.Single(x => x.Key.Equals("vtf", StringComparison.InvariantCultureIgnoreCase)).GroupBy(t => GetRelativeName(t)).ToDictionary(g => g.Key, g => g.First());
 					var refs = materials.Select(m =>
 					{
-						bool hide = false;
 						var mat = ReadMaterial(m);
 
 						var baseTexture = mat?.GetValue("$basetexture");

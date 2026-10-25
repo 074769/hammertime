@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using LogicAndTrick.Oy;
 
 namespace Sledge.Shell
 {
@@ -43,6 +44,52 @@ namespace Sledge.Shell
             control.BeginInvoke(action);
         }
         
+        /// <summary>
+        /// Invoke an async delegate on the UI thread and wait for the task it returns.
+        /// </summary>
+        /// <param name="control">The control to invoke upon</param>
+        /// <param name="func">The delegate to run</param>
+        /// <returns>The task that will resolve once the delegate's task is complete</returns>
+        public static async Task InvokeAsync(this Control control, Func<Task> func)
+        {
+            var tcs = new TaskCompletionSource<int>();
+            control.BeginInvoke((MethodInvoker)(async () =>
+            {
+                try
+                {
+                    await func();
+                    tcs.SetResult(0);
+                }
+                catch (Exception ex)
+                {
+                    tcs.SetException(ex);
+                }
+            }));
+            await tcs.Task;
+        }
+
+        /// <summary>
+        /// Invoke an async delegate on the UI thread and return immediately.
+        /// Any exception it throws is published as an unhandled exception instead of being lost.
+        /// </summary>
+        /// <param name="control">The control to invoke upon</param>
+        /// <param name="func">The delegate to run</param>
+        public static void InvokeLater(this Control control, Func<Task> func)
+        {
+            if (!control.IsHandleCreated) return;
+            control.BeginInvoke((MethodInvoker)(async () =>
+            {
+                try
+                {
+                    await func();
+                }
+                catch (Exception ex)
+                {
+                    await Oy.Publish("Shell:UnhandledException", ex);
+                }
+            }));
+        }
+
         public static Task InvokeLaterAsync(this Control control, Action action)
         {
             if (!control.IsHandleCreated) return Task.FromResult(0);

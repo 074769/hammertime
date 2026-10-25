@@ -61,7 +61,7 @@ namespace Sledge.BspEditor.Tools.Texture
             using (var tb = new TextureBrowser(doc))
             {
                 await tb.Initialise(_translation.Value);
-                tb.SetTextureList(await GetTextureList(doc));
+                await tb.SetTextureList(await GetTextureList(doc));
                 tb.SetSelectedTextures(GetSelectedTextures());
                 tb.ShowDialog();
                 if (tb.SelectedTexture != null)

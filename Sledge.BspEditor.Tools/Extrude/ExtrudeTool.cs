@@ -400,7 +400,7 @@ namespace Sledge.BspEditor.Tools.Extrude
             lock (_lock) _dragDistance = distance;
         }
 
-        protected override void DragEnd(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
+        protected override async void DragEnd(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
         {
             bool wasDragging;
             float distance;
@@ -420,7 +420,7 @@ namespace Sledge.BspEditor.Tools.Extrude
             if (!wasDragging) return;
 
             e.Handled = true;
-            if (distance > 0) Apply(distance);
+            if (distance > 0) await Apply(distance);
         }
 
         /// <summary>How far the face has been pulled along its normal, from how far the mouse moved on screen (in units, not snapped).</summary>

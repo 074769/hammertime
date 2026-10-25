@@ -174,11 +174,11 @@ namespace Sledge.BspEditor.Rendering.Viewport
         [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
         [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
 
-        public void MouseClick(ViewportEvent e)
+        public async void MouseClick(ViewportEvent e)
         {
             if (e.Button == MouseButtons.Right)
             {
-                OpenMenu(e);
+                await OpenMenu(e);
             }
         }
 

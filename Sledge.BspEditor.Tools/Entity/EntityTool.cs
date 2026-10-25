@@ -285,12 +285,12 @@ namespace Sledge.BspEditor.Tools.Entity
 			_location = camera.GetUnusedCoordinate(_location) + loc;
 		}
 
-		protected override void KeyDown(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
+		protected override async void KeyDown(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
 		{
 			switch (e.KeyCode)
 			{
 				case Keys.Enter:
-					CreateEntity(document, _location);
+					await CreateEntity(document, _location);
 					_state = EntityState.None;
 					break;
 				case Keys.Escape:
@@ -356,12 +356,12 @@ namespace Sledge.BspEditor.Tools.Entity
 
 			if (_switchToSelectAfterCreation)
 			{
-				Oy.Publish("ActivateTool", "SelectTool");
+				await Oy.Publish("ActivateTool", "SelectTool");
 			}
 
 			if (_resetEntityTypeOnCreation)
 			{
-				Oy.Publish("EntityTool:ResetEntityType", this);
+				await Oy.Publish("EntityTool:ResetEntityType", this);
 			}
 		}
 

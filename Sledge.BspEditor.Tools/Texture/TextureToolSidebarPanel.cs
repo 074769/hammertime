@@ -251,9 +251,9 @@ namespace Sledge.BspEditor.Tools.Texture
             MapDocumentOperation.Perform(document, edit);
         }
 
-        private void TileFitButtonClicked(object sender, EventArgs e)
+        private async void TileFitButtonClicked(object sender, EventArgs e)
         {
-            ApplyFit();
+            await ApplyFit();
         }
 
         private async Task ApplyFit()

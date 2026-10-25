@@ -34,7 +34,7 @@ namespace Sledge.Shell.Forms
             Close();
         }
 
-        private void SearchBoxKeyDown(object sender, KeyEventArgs e)
+        private async void SearchBoxKeyDown(object sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.Escape)
             {
@@ -59,7 +59,7 @@ namespace Sledge.Shell.Forms
                 if (list.Count > _activeComponentIndex)
                 {
                     var idx = list[_activeComponentIndex];
-                    Activate(idx.Activator);
+                    await Activate(idx.Activator);
                 }
             }
         }

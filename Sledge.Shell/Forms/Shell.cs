@@ -174,7 +174,7 @@ namespace Sledge.Shell.Forms
 		/// <summary>
 		/// Makes sure the newest document's tab is the selected one, and that it is the active document.
 		/// </summary>
-		private void ReselectLastDocument()
+		private async Task ReselectLastDocument()
 		{
 			var last = _documentRegister.Value.OpenDocuments.LastOrDefault();
 			if (last == null) return;
@@ -183,7 +183,7 @@ namespace Sledge.Shell.Forms
 			if (page == null) return;
 
 			if (DocumentTabs.SelectedTab != page) DocumentTabs.SelectedTab = page;
-			_documentRegister.Value.ActivateDocument(last);
+			await _documentRegister.Value.ActivateDocument(last);
 		}
 
 		/// <summary>
@@ -205,7 +205,7 @@ namespace Sledge.Shell.Forms
 			}
 			catch (Exception e)
 			{
-				Oy.Publish("Shell:UnhandledException", e);
+				await Oy.Publish("Shell:UnhandledException", e);
 			}
 			finally
 			{
@@ -252,11 +252,11 @@ namespace Sledge.Shell.Forms
 				this.InvokeLater(() =>
 				{
 					EventHandler idle = null;
-					idle = (s, e) =>
+					idle = async (s, e) =>
 					{
 						Application.Idle -= idle;
 						_restoringSession = false;
-						ReselectLastDocument();
+						await ReselectLastDocument();
 					};
 					Application.Idle += idle;
 				});
@@ -502,11 +502,11 @@ namespace Sledge.Shell.Forms
 
 		// Form events
 
-		private void TabChanged(object sender, EventArgs e)
+		private async void TabChanged(object sender, EventArgs e)
 		{
 			Common.Logging.Log.Debug(nameof(Shell), $"Tab changed to index {DocumentTabs.SelectedIndex} (restoring session: {_restoringSession})");
 			if (_restoringSession) return;
-			_documentRegister.Value.ActivateDocument(DocumentTabs.SelectedTab?.Tag as IDocument);
+			await _documentRegister.Value.ActivateDocument(DocumentTabs.SelectedTab?.Tag as IDocument);
 		}
 
 		/// <summary>
@@ -549,11 +549,11 @@ namespace Sledge.Shell.Forms
 			Oy.Publish("Command:Run", new CommandMessage("File:New"));
 		}
 
-		private void RequestClose(object sender, int index)
+		private async void RequestClose(object sender, int index)
 		{
 			if (DocumentTabs.TabPages[index].Tag is IDocument doc)
 			{
-				_documentRegister.Value.RequestCloseDocument(doc);
+				await _documentRegister.Value.RequestCloseDocument(doc);
 			}
 		}
 

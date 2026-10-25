@@ -33,7 +33,7 @@ namespace Sledge.BspEditor.Primitives.MapData
         public class FaceSelectionFormatter : StandardMapElementFormatter<FaceSelection> { }
 
         public bool IsEmpty => !_selectedFaces.Any(x => x.Value.Count > 0);
-        public int Count => _selectedFaces.Aggregate(0, (a, b) => a + b.Value.Count);
+        public new int Count => _selectedFaces.Aggregate(0, (a, b) => a + b.Value.Count);
         
         public void Add(IMapObject parent, params Face[] faces)
         {

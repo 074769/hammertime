@@ -67,7 +67,7 @@ namespace Sledge.Shell
             }
             catch (Exception e)
             {
-                Oy.Publish("Shell:UnhandledException", e);
+                await Oy.Publish("Shell:UnhandledException", e);
             }
         }
 

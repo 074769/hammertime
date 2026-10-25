@@ -326,9 +326,9 @@ namespace Sledge.BspEditor.Tools.Texture
             }
         }
 
-        private void OkClicked(object sender, EventArgs e)
+        private async void OkClicked(object sender, EventArgs e)
         {
-            ExecuteReplace();
+            await ExecuteReplace();
             Close();
         }
 

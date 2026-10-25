@@ -48,7 +48,7 @@ namespace Sledge.BspEditor.Tools.Decal
         }
 		public override Capability ToolCapability => DecalToolCapability;
 
-        protected override void MouseDown(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
+        protected override async void MouseDown(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
         {
             var vp = viewport;
             if (vp == null) return;
@@ -62,7 +62,7 @@ namespace Sledge.BspEditor.Tools.Decal
 
             if (hit == null) return; // Nothing was clicked
 
-            CreateDecal(document, hit.Intersection);
+            await CreateDecal(document, hit.Intersection);
         }
 
         private async Task CreateDecal(MapDocument document, Vector3 origin)

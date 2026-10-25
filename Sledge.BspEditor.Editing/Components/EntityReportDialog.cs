@@ -311,11 +311,11 @@ namespace Sledge.BspEditor.Editing.Components
 		{
 			return !entities.Any() ? Box.Empty : new Box(entities.Select(x => x.BoundingBox).Where(x => x != null).DefaultIfEmpty(Box.Empty));
 		}
-		private void GoToSelectedEntity(object sender, EventArgs e)
+		private async void GoToSelectedEntity(object sender, EventArgs e)
 		{
 			var selected = GetSelected();
 			if (selected == null) return;
-			SelectEntity(selected);
+			await SelectEntity(selected);
 			var bb = GetSelectionBoundingBox(selected);
 			Oy.Publish("MapDocument:Viewport:Focus2D", bb);
 			Oy.Publish("MapDocument:Viewport:Focus3D", bb);

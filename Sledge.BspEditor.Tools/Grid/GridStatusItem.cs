@@ -36,7 +36,7 @@ namespace Sledge.BspEditor.Tools.Grid
             Oy.Subscribe<string>("MapDocument:GridStatus:UpdateText", UpdateText);
         }
 
-        public Task Changed(Change change)
+        public async Task Changed(Change change)
         {
             if (change.HasDataChanges && change.AffectedData.OfType<GridData>().Any())
             {
@@ -44,11 +44,10 @@ namespace Sledge.BspEditor.Tools.Grid
                 if (grid != null)
                 {
                     var snap = grid.SnapToGrid ? Snap : NoSnap;
-                    UpdateText(Grid + ": " + grid.Grid.Description + ", " + snap);
+                    await UpdateText(Grid + ": " + grid.Grid.Description + ", " + snap);
                 }
             }
 
-            return Task.CompletedTask;
         }
 
         private async Task UpdateText(string text)

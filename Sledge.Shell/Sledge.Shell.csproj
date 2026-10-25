@@ -1,5 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <!-- Windows-only app (WinForms / GDI+): platform-compatibility warnings are expected. -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+  <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{1E0BEB41-CF2E-4F48-838E-452C1DCF575F}</ProjectGuid>
@@ -23,7 +27,6 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <NoWarn>CS4014</NoWarn>
     <UseVSHostingProcess>true</UseVSHostingProcess>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -34,7 +37,6 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <NoWarn>CS4014</NoWarn>
     <UseVSHostingProcess>true</UseVSHostingProcess>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
@@ -57,7 +59,6 @@
     <DebugSymbols>true</DebugSymbols>
     <OutputPath>bin\Debug %28Extra%29\</OutputPath>
     <DefineConstants>TRACE;DEBUG;DEBUG_EXTRA</DefineConstants>
-    <NoWarn>CS4014</NoWarn>
     <DebugType>full</DebugType>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <ErrorReport>prompt</ErrorReport>
@@ -67,7 +68,6 @@
     <DebugSymbols>true</DebugSymbols>
     <OutputPath>bin\Debug %28Extra%29\</OutputPath>
     <DefineConstants>TRACE;DEBUG;DEBUG_EXTRA</DefineConstants>
-    <NoWarn>CS4014</NoWarn>
     <DebugType>full</DebugType>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <ErrorReport>prompt</ErrorReport>

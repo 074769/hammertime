@@ -122,7 +122,7 @@ namespace Sledge.BspEditor.Tools.Texture
 			_textures.AddRange(_textureList.Collection.GetBrowsableTextures());
 
 			UpdatePackageList();
-			UpdateTextureList();
+			await UpdateTextureList();
 			UpdateFavouritesList();
 			_textureList.SortTextureList(x => x, GetMemory("SortDescending", false));
 
@@ -222,14 +222,14 @@ namespace Sledge.BspEditor.Tools.Texture
 			Close();
 		}
 
-		public void SetTextureList(IEnumerable<string> items)
+		public async Task SetTextureList(IEnumerable<string> items)
 		{
 			_textures.Clear();
 			_textures.AddRange(items);
 
 			UpdatePackageList();
 			UpdateFavouritesList();
-			UpdateTextureList();
+			await UpdateTextureList();
 		}
 
 		public void SetSelectedTextures(IEnumerable<string> items)
@@ -242,10 +242,10 @@ namespace Sledge.BspEditor.Tools.Texture
 			if (text != null) FilterTextbox.Text = text;
 		}
 
-		private void FilterTextboxKeyUp(object sender, KeyEventArgs e)
+		private async void FilterTextboxKeyUp(object sender, KeyEventArgs e)
 		{
 			SetMemory("Filter", FilterTextbox.Text);
-			UpdateTextureList();
+			await UpdateTextureList();
 		}
 
 		// Clicking the empty space in the package list goes back to "All Packages" (all textures)
@@ -303,7 +303,7 @@ namespace Sledge.BspEditor.Tools.Texture
 			SendMessage(PackageTree.Handle, TVM_SETITEMW, IntPtr.Zero, ref item);
 		}
 
-		private void SelectedPackageChanged(object sender, TreeViewEventArgs e)
+		private async void SelectedPackageChanged(object sender, TreeViewEventArgs e)
 		{
 			FavouritesTree.SelectedNode = null;
 			var package = PackageTree.SelectedNode;
@@ -312,10 +312,10 @@ namespace Sledge.BspEditor.Tools.Texture
 			SetMemory("SelectedPackage", key);
 			SetMemory("SelectedFavourite", (string)null);
 
-			UpdateTextureList();
+			await UpdateTextureList();
 		}
 
-		private void SelectedFavouriteChanged(object sender, TreeViewEventArgs e)
+		private async void SelectedFavouriteChanged(object sender, TreeViewEventArgs e)
 		{
 			PackageTree.SelectedNode = null;
 			var favourite = FavouritesTree.SelectedNode;
@@ -324,19 +324,15 @@ namespace Sledge.BspEditor.Tools.Texture
 			SetMemory("SelectedFavourite", key);
 			SetMemory("SelectedPackage", (string)null);
 
-			UpdateTextureList();
+			await UpdateTextureList();
 		}
 
-		private void UsedTexturesOnlyChanged(object sender, EventArgs e)
+		private async void UsedTexturesOnlyChanged(object sender, EventArgs e)
 		{
 			SetMemory("UsedTexturesOnly", UsedTexturesOnlyBox.Checked);
-			UpdateTextureList();
+			await UpdateTextureList();
 		}
 
-		// True while we're rebuilding PackageTree nodes ourselves, so the AfterCheck handler
-		// below knows to ignore checkbox states it's setting programmatically and only react
-		// to the user actually clicking a checkbox.
-		private bool _updatingPackageList;
 
 		private void UpdatePackageList()
 		{
@@ -357,7 +353,6 @@ namespace Sledge.BspEditor.Tools.Texture
 				? new HashSet<string>(packageManager.ManuallyDisabledTexturePackages, StringComparer.InvariantCultureIgnoreCase)
 				: new HashSet<string>(StringComparer.InvariantCultureIgnoreCase);
 
-			_updatingPackageList = true;
 			try
 			{
 				PackageTree.CheckBoxes = packageManager != null;
@@ -380,7 +375,6 @@ namespace Sledge.BspEditor.Tools.Texture
 			}
 			finally
 			{
-				_updatingPackageList = false;
 			}
 		}
 
@@ -633,7 +627,7 @@ namespace Sledge.BspEditor.Tools.Texture
 			}
 		}
 
-		private void DeleteFavouriteFolderButtonClicked(object sender, EventArgs e)
+		private async void DeleteFavouriteFolderButtonClicked(object sender, EventArgs e)
 		{
 			FavouriteTextureFolder parent = null;
 			var selected = FavouritesTree.SelectedNode;
@@ -643,7 +637,7 @@ namespace Sledge.BspEditor.Tools.Texture
 				var siblings = parent != null ? parent.Children : _settingsManager.Folders;
 				siblings.Remove(selected.Tag as FavouriteTextureFolder);
 				UpdateFavouritesList();
-				UpdateTextureList();
+				await UpdateTextureList();
 			}
 		}
 		private void RenameFolderButtonClicked(object sender, EventArgs e)
@@ -766,7 +760,7 @@ namespace Sledge.BspEditor.Tools.Texture
 			e.Effect = DragDropEffects.Copy;
 		}
 
-		private void RemoveFavouriteItemButtonClicked(object sender, EventArgs e)
+		private async void RemoveFavouriteItemButtonClicked(object sender, EventArgs e)
 		{
 			var selection = _textureList.GetHighlightedTextures().Select(x => x);
 
@@ -778,7 +772,7 @@ namespace Sledge.BspEditor.Tools.Texture
 
 			nodes.ForEach(x => x.Items.RemoveAll(selection.Contains));
 			UpdateFavouritesList();
-			UpdateTextureList();
+			await UpdateTextureList();
 		}
 
 		// Memory (per environment; transient)

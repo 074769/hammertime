@@ -215,7 +215,7 @@ namespace Sledge.BspEditor.Rendering.Scene
 				var sky = env.GetSkyboxes().FirstOrDefault(x => x.Name == skyname);
 				if (sky == null) return;
 
-				UpdateScene(md, null);
+				await UpdateScene(md, null);
 
 				await _resourceCollection.UploadCubemap(sky.File as CompositeFile);
 

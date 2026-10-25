@@ -15,7 +15,6 @@ using System.ComponentModel.Composition;
 using System.Drawing;
 using System.Globalization;
 using System.Numerics;
-using HammerTime.Source.Primitives.MapObjectData;
 using Plane = Sledge.DataStructures.Geometric.Precision.Plane;
 using Polyhedron = Sledge.DataStructures.Geometric.Precision.Polyhedron;
 using PVector3 = Sledge.DataStructures.Geometric.Precision.Vector3;

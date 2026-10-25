@@ -52,13 +52,13 @@ namespace Sledge.BspEditor.Editing.Components
 
 		public void SetVisible(IContext context, bool visible)
 		{
-			this.InvokeLater(() =>
+			this.InvokeLater(async () =>
 			{
 				if (visible)
 				{
 					if (!Visible) Show(_parent.Value);
 					Subscribe();
-					RefreshNodes();
+					await RefreshNodes();
 				}
 				else
 				{
@@ -109,9 +109,9 @@ namespace Sledge.BspEditor.Editing.Components
 
 		public async Task DocumentActivated(MapDocument document)
 		{
-			this.InvokeLater(() =>
+			this.InvokeLater(async () =>
 			{
-				RefreshNodes(document);
+				await RefreshNodes(document);
 			});
 		}
 

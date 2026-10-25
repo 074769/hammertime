@@ -112,7 +112,7 @@ namespace Sledge.Shell.Registers
 
 			if (IsOpen(fileName))
 			{
-				ActivateDocument(GetDocumentByFileName(fileName));
+				await ActivateDocument(GetDocumentByFileName(fileName));
 				return null;
 			}
 
@@ -131,7 +131,7 @@ namespace Sledge.Shell.Registers
 
 			if (IsOpen(fileName))
 			{
-				ActivateDocument(GetDocumentByFileName(fileName));
+				await ActivateDocument(GetDocumentByFileName(fileName));
 				return null;
 			}
 
@@ -222,7 +222,7 @@ namespace Sledge.Shell.Registers
 			await Oy.Publish("Document:RequestClose", msg);
 			if (msg.Cancelled) canClose = false;
 
-			if (canClose) ForceCloseDocument(document);
+			if (canClose) await ForceCloseDocument(document);
 			return canClose;
 		}
 

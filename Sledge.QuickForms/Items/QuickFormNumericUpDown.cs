@@ -1,5 +1,4 @@
 ﻿using System.Drawing;
-using System.Runtime.Versioning;
 using System.Windows.Forms;
 
 namespace Sledge.QuickForms.Items
@@ -14,7 +13,6 @@ namespace Sledge.QuickForms.Items
         private readonly Label _label;
         private readonly NumericUpDown _numericUpDown;
 
-        [SupportedOSPlatform("windows")]
         public QuickFormNumericUpDown(string text, int min, int max, int numDecimals, decimal value)
         {
             _label = new Label

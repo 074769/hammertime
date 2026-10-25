@@ -1,6 +1,5 @@
 using System;
 using System.Drawing;
-using System.Runtime.Versioning;
 using System.Windows.Forms;
 
 namespace Sledge.QuickForms.Items
@@ -17,7 +16,6 @@ namespace Sledge.QuickForms.Items
         private readonly string _filter;
         private readonly Button _button;
 
-        [SupportedOSPlatform("windows")]
         public QuickFormBrowse(string text, string browseText, string fileFilter)
         {
             _filter = fileFilter;

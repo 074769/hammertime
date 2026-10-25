@@ -89,9 +89,9 @@ namespace Sledge.BspEditor.Tools.Vertex
 
 		protected override IEnumerable<Subscription> Subscribe()
 		{
-			yield return Oy.Subscribe<IDocument>("MapDocument:SelectionChanged", x =>
+			yield return Oy.Subscribe<IDocument>("MapDocument:SelectionChanged", async x =>
 			{
-				if (x == GetDocument()) SelectionChanged();
+				if (x == GetDocument()) await SelectionChanged();
 			});
 			// Undo/redo (or anything else) can change the solids under the tool: refresh the working copies so the tool never shows or writes back stale geometry
 			yield return Oy.Subscribe<Change>("MapDocument:Changed", c =>

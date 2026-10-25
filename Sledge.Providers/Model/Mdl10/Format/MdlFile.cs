@@ -139,8 +139,6 @@ namespace Sledge.Providers.Model.Mdl10.Format
 			using (var stream = new BinaryWriter(new StreamWriter(filename).BaseStream))
 			{
 				char[] name = new char[64];
-				int numskinref = 2;
-				int numskinfamilies = 1;
 
 				var headstruSize = Marshal.SizeOf<Header>();
 				var headstruBuffer = new byte[headstruSize];

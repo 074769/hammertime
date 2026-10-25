@@ -397,7 +397,7 @@ namespace Sledge.BspEditor.Tools.Selection
 				IgnoreGroupingChanged(document);
 				SelectionChanged(document);
 			}
-			Oy.Publish("SelectTool:SetReferenceBox", Sledge.BspEditor.Rendering.Overlay.ReferenceBoxOverlay.IsOn(document) ? "1" : "0");
+			await Oy.Publish("SelectTool:SetReferenceBox", Sledge.BspEditor.Rendering.Overlay.ReferenceBoxOverlay.IsOn(document) ? "1" : "0");
 
 			await base.ToolSelected();
 		}

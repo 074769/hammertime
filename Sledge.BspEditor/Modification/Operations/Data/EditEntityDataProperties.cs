@@ -45,7 +45,7 @@ namespace Sledge.BspEditor.Modification.Operations.Data
 							var translation = Matrix4x4.CreateTranslation(vec);
 
                             var tr = new Transaction(new Transform(translation, new[] { obj }));
-                            MapDocumentOperation.Perform(document, tr);
+                            await MapDocumentOperation.Perform(document, tr);
                         }
                     }
                     else data.Properties[kv.Key] = kv.Value;
