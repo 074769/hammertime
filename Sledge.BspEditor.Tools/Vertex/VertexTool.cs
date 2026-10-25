@@ -192,7 +192,7 @@ namespace Sledge.BspEditor.Tools.Vertex
 
 		#endregion
 
-		private void SelectObject(MapDocument document, Solid closestObject)
+		private async Task SelectObject(MapDocument document, Solid closestObject)
 		{
 			// Nothing was clicked, don't change the selection
 			if (closestObject == null) return;
@@ -216,7 +216,11 @@ namespace Sledge.BspEditor.Tools.Vertex
 
 			if (!operation.IsEmpty)
 			{
-				MapDocumentOperation.Perform(document, operation);
+				// Write back any working-copy edits before the selection moves, so the solid being left
+				// is never reset while its edit is still in flight.
+				await _selection.Commit(document);
+				// Selection changes are not edits: keep them out of undo history.
+				await MapDocumentOperation.Bypass(document, operation);
 			}
 		}
 
@@ -242,7 +246,7 @@ namespace Sledge.BspEditor.Tools.Vertex
 				.Select(x => (Solid)x.Object)
 				.FirstOrDefault();
 
-			SelectObject(document, closestObject);
+			_ = SelectObject(document, closestObject);
 		}
 
 		#endregion
@@ -277,7 +281,7 @@ namespace Sledge.BspEditor.Tools.Vertex
 			// tool, which is the only tool that reaches this handler.
 			// Get the first element that intersects with the box, selecting or deselecting as needed
 			var closestObject = SelectionTest(document, camera, e) as Solid;
-			SelectObject(document, closestObject);
+			_ = SelectObject(document, closestObject);
 		}
 
 		#endregion
