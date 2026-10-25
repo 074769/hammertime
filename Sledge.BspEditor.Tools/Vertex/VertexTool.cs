@@ -225,6 +225,9 @@ namespace Sledge.BspEditor.Tools.Vertex
 				await _selection.Commit(document);
 				// Selection changes are not edits: keep them out of undo history.
 				await MapDocumentOperation.Bypass(document, operation);
+				// Apply the new selection straight away. Waiting for the selection-changed event leaves a frame
+				// where the previous solid is still drawn and the clicked one isn't, which shows up as a flicker.
+				await SelectionChanged();
 			}
 		}
 
