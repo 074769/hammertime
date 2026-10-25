@@ -1,4 +1,5 @@
-﻿using Sledge.FileSystem;
+﻿using Sledge.Common.Logging;
+using Sledge.FileSystem;
 using Sledge.Providers.Texture;
 using System.ComponentModel.Composition;
 using System.Text;
@@ -25,7 +26,11 @@ namespace HammerTime.Source.Providers.Texture.Vmt
 			}
 			if (materialsRoot == null || !materialsRoot.Exists) return new TexturePackageReference[0];
 
-			if (materialsRoot is not CompositeFile composite) return new TexturePackageReference[0];
+			if (materialsRoot is not CompositeFile composite)
+			{
+				Log.Warning("VmtMaterialPackageProvider", $"Skipping materials folder '{materialsRoot.FullPathName}': only composite folders are supported, so its textures will not load.");
+				return new TexturePackageReference[0];
+			}
 			var refs = composite.GetCompositeFiles().Select(x => new TexturePackageReference(x.Parent?.Name ?? "Materials", x));
 			return refs;
 		}
