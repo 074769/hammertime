@@ -9,7 +9,7 @@ namespace Sledge.Shell.Controls
     public abstract partial class TextSidebarPanel : UserControl, ISidebarComponent
     {
         public abstract string Title { get; }
-        public abstract string Text { get; }
+        public new abstract string Text { get; }
         public object Control => this;
 
         protected TextSidebarPanel()
