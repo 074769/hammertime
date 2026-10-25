@@ -16,10 +16,18 @@ namespace Sledge.BspEditor.Rendering.Dynamic
     [Export(typeof(IStartupHook))]
     public class DynamicRenderManager : IStartupHook, IUpdateable
     {
+        #pragma warning disable CS0649
         [Import] private Lazy<EngineInterface> _engine;
+        #pragma warning restore CS0649
+        #pragma warning disable CS0649
         [ImportMany] private IDynamicRenderable[] _dynamicRenderables;
+        #pragma warning restore CS0649
+        #pragma warning disable CS0649
         [ImportMany] private IMapObjectDynamicRenderable[] _documentDynamicRenderables;
+        #pragma warning restore CS0649
+        #pragma warning disable CS0649
         [Import] private ResourceCollection _resourceCollection;
+        #pragma warning restore CS0649
 
         private BufferBuilder _builder;
         private BufferBuilderRenderable _renderable;

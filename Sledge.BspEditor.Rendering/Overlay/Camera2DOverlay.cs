@@ -39,7 +39,7 @@ namespace Sledge.BspEditor.Rendering.Overlay
         private static volatile bool _showCameraWidget = true;
 
         // --- Size, in screen pixels (tweak these to taste) ---
-        private const bool FollowFov = true;         // false = always the same fixed pyramid shape
+        private static readonly bool FollowFov = true;         // false = always the same fixed pyramid shape
         private const float BodyHalfSize = 5f;       // camera body box: half width/height
         private const float BodyLength = 11f;        // camera body box: length behind the lens
         private const float MaxFarHalfExtent = 22f;  // pyramid: largest half-extent of the far rectangle

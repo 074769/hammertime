@@ -24,7 +24,9 @@ namespace Sledge.BspEditor.Rendering.Grid
     [Export(typeof(IStartupHook))]
     public class GridManager : IStartupHook
     {
+        #pragma warning disable CS0649
         [Import] private Lazy<EngineInterface> _engine;
+        #pragma warning restore CS0649
 
         private readonly object _lock = new object();
         private readonly Dictionary<int, GridRenderable> _viewportRenderables;

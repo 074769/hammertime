@@ -14,9 +14,15 @@ namespace Sledge.BspEditor.Rendering.Overlay
     [Export(typeof(IStartupHook))]
     public class OverlayManager : IStartupHook
     {
+        #pragma warning disable CS0649
         [Import] private Lazy<EngineInterface> _engine;
+        #pragma warning restore CS0649
+        #pragma warning disable CS0649
         [ImportMany] private IOverlayRenderable[] _overlayRenderables;
+        #pragma warning restore CS0649
+        #pragma warning disable CS0649
         [ImportMany] private IMapDocumentOverlayRenderable[] _documentOverlayRenderables;
+        #pragma warning restore CS0649
 
         /// <inheritdoc />
         public Task OnStartup()

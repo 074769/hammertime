@@ -11,8 +11,12 @@ namespace Sledge.BspEditor.Rendering
     [Export(typeof(ISettingEditorFactory))]
     public class EntityBrushColorEditorFactory : ISettingEditorFactory
     {
+        #pragma warning disable CS0649
         [Import] private Lazy<TranslationStringsCatalog> _catalog;
+        #pragma warning restore CS0649
+        #pragma warning disable CS0649
         [Import] private Lazy<ITranslationStringProvider> _strings;
+        #pragma warning restore CS0649
 
         // OrderHint "X" sorts after the default ShellEditorsFactory ("W") so any key whose
         // EditorType is "EntityBrushColorEditor" is claimed by this factory.

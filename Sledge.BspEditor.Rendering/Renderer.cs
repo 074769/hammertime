@@ -18,7 +18,9 @@ namespace Sledge.BspEditor.Rendering
 	[PartCreationPolicy(CreationPolicy.Shared)]
 	public class Renderer : ISettingsContainer
 	{
+		#pragma warning disable CS0649
 		[Import] private Lazy<EngineInterface> _engine;
+		#pragma warning restore CS0649
 
 		// Renderer settings
 		[Setting] public static Color PerspectiveBackgroundColour { get; set; } = Color.Black;

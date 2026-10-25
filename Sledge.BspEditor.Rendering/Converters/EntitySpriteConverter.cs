@@ -17,7 +17,9 @@ namespace Sledge.BspEditor.Rendering.Converters
     [Export(typeof(IMapObjectSceneConverter))]
     public class EntitySpriteConverter : IMapObjectSceneConverter
     {
+        #pragma warning disable CS0169
         [Import] private EngineInterface _engine;
+        #pragma warning restore CS0169
 
         public MapObjectSceneConverterPriority Priority => MapObjectSceneConverterPriority.DefaultLow;
 
