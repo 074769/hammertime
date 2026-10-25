@@ -59,7 +59,14 @@ namespace Sledge.BspEditor.Rendering.Converters
 
                 foreach (var gc in groupConverters)
                 {
-                    await gc.Convert(buffer, document, g, collector);
+                    try
+                    {
+                        await gc.Convert(buffer, document, g, collector);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Trace.TraceError($"Group scene conversion failed for group {g.Key}: {ex}");
+                    }
                 }
 
                 foreach (var obj in g)
@@ -67,7 +74,17 @@ namespace Sledge.BspEditor.Rendering.Converters
                     foreach (var converter in converters)
                     {
                         if (!converter.Supports(obj)) continue;
-                        await converter.Convert(buffer, document, obj, collector);
+                        try
+                        {
+                            await converter.Convert(buffer, document, obj, collector);
+                        }
+                        catch (Exception ex)
+                        {
+                            // One bad object must not blank its whole group: the group was already cleared above,
+                            // and an exception here would otherwise leave every object in it invisible until reopen.
+                            System.Diagnostics.Trace.TraceError($"Scene conversion failed for object {obj.ID}: {ex}");
+                            break;
+                        }
                         if (converter.ShouldStopProcessing(document, obj)) break;
                     }
                 }
