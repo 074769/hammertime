@@ -120,7 +120,6 @@ namespace Sledge.BspEditor.Tools.Vertex
 
 		public override async Task ToolSelected()
 		{
-			VertexLog.Info("Tool selected");
 			await SelectionChanged();
 			var ct = CurrentSubTool;
 			if (ct != null) await ct.ToolSelected();
@@ -129,7 +128,6 @@ namespace Sledge.BspEditor.Tools.Vertex
 
 		public override async Task ToolDeselected()
 		{
-			VertexLog.Info("Tool deselected");
 			var ct = CurrentSubTool;
 			await ct?.PreToolDeselect();
 			var document = GetDocument();
@@ -161,7 +159,6 @@ namespace Sledge.BspEditor.Tools.Vertex
 			var document = GetDocument();
 			if (document != null)
 			{
-				VertexLog.Info($"SelectionChanged: document has {document.Selection.Count()} selected, vertex tool holds {_selection.Count()}");
 				await _selection.Commit(document);
 				await _selection.Update(document);
 			}
@@ -219,7 +216,6 @@ namespace Sledge.BspEditor.Tools.Vertex
 
 			if (!operation.IsEmpty)
 			{
-				VertexLog.Info($"SelectObject: clicked solid {closestObject.ID}, ctrl {KeyboardState.Ctrl}, pending edits {_selection.Count(x => x.IsDirty)}");
 				// Write back any working-copy edits before the selection moves, so the solid being left
 				// is never reset while its edit is still in flight.
 				await _selection.Commit(document);
@@ -298,24 +294,13 @@ namespace Sledge.BspEditor.Tools.Vertex
 			base.Render(document, builder, resourceCollector);
 
 			// Force this work to happen on a new thread so waiting on it won't block the context
-			var drawn = new List<string>();
 			Task.Run(async () =>
 			{
 				foreach (var obj in _selection)
 				{
-					try
-					{
-						await Convert(builder, document, obj.Copy, resourceCollector);
-						drawn.Add($"{obj.Real.ID}({obj.Copy.Faces.Count()} faces)");
-					}
-					catch (Exception ex)
-					{
-						VertexLog.Warning($"Render failed for solid {obj.Real.ID}", ex);
-						throw;
-					}
+					await Convert(builder, document, obj.Copy, resourceCollector);
 				}
 			}).Wait();
-			VertexLog.RenderState(string.Join(", ", drawn));
 		}
 
 		public void Invalidate()
