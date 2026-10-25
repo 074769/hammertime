@@ -113,7 +113,7 @@ namespace Sledge.BspEditor.Environment.Goldsource
 
 		public List<string> AdditionalTextureFiles { get; set; }
 
-		private IFile _root;
+		private IFile? _root;
 
 		public IFile Root
 		{
