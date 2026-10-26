@@ -184,7 +184,8 @@ namespace Sledge.BspEditor.Tools.Brush
 
 			base.KeyDown(document, viewport, camera, e);
 
-			var nudge = GetNudgeValue(e.KeyCode);
+			var altMovement = KeyboardState.Alt && CameraNavigationViewportSettings.EnableAltArrowKeyMovement;
+			var nudge = (CameraNavigationViewportSettings.EnableArrowKeyMovement || altMovement) ? GetNudgeValue(e.KeyCode) : null;
 
 			if (nudge != null && box.State.Action == BoxAction.Drawn)
 			{
