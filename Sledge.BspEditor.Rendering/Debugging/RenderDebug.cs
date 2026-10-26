@@ -11,7 +11,7 @@ namespace Sledge.BspEditor.Rendering.Debugging
     /// </summary>
     public static class RenderDebug
     {
-        public static readonly bool Enabled = Environment.GetEnvironmentVariable("HAMMERTIME_RENDER_DEBUG") == "1";
+        public static readonly bool Enabled = System.Environment.GetEnvironmentVariable("HAMMERTIME_RENDER_DEBUG") == "1";
 
         private static readonly object _lock = new object();
         private static readonly Stopwatch _clock = Stopwatch.StartNew();
@@ -33,7 +33,7 @@ namespace Sledge.BspEditor.Rendering.Debugging
             var line = $"{_clock.Elapsed.TotalMilliseconds,12:F2}ms  frame {Interlocked.Read(ref _frame),8}  thread {Thread.CurrentThread.ManagedThreadId,3}  {category,-8} {message}";
             lock (_lock)
             {
-                File.AppendAllText(_path, line + Environment.NewLine);
+                File.AppendAllText(_path, line + System.Environment.NewLine);
             }
         }
     }
