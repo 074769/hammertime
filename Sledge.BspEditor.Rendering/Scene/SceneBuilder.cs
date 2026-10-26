@@ -5,8 +5,6 @@ using Sledge.Rendering.Engine;
 using Sledge.Rendering.Renderables;
 using Sledge.Rendering.Resources;
 
-using Sledge.BspEditor.Rendering.Debugging;
-
 namespace Sledge.BspEditor.Rendering.Scene
 {
     public class SceneBuilder : IDisposable
@@ -99,7 +97,6 @@ namespace Sledge.BspEditor.Rendering.Scene
         {
             lock (_lock)
             {
-                if (RenderDebug.Enabled) RenderDebug.Write("scene", $"swap group {group}: {buffer.NumBuffers} buffer(s), replacing {(_bufferBuilders.ContainsKey(group) ? "existing" : "nothing")}");
                 buffer.Complete();
 
                 if (_bufferBuilders.TryGetValue(group, out var old) && !ReferenceEquals(old, buffer))

@@ -9,8 +9,6 @@ using Sledge.BspEditor.Modification.Operations.Data;
 using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.Common.Threading;
 
-using Sledge.BspEditor.Rendering.Debugging;
-
 namespace Sledge.BspEditor.Tools.Vertex.Selection
 {
     public class VertexSelection : IEnumerable<VertexSolid>
@@ -80,7 +78,6 @@ namespace Sledge.BspEditor.Tools.Vertex.Selection
                 var rem = _selectedSolids.Where(s => toDeselect.Contains(s.Real));
                 _selectedSolids.ExceptWith(rem);
                 _selectedSolids.UnionWith(toSelect.Select(s => new VertexSolid(s)));
-                if (RenderDebug.Enabled) RenderDebug.Write("selection", $"update: added {toSelect.Count}, removed {toDeselect.Count}");
 
                 // Queued while the lock is held, so concurrent updates reach the map in the order they changed the selection
                 if (!tran.IsEmpty) pending = MapDocumentOperation.Perform(document, tran);
@@ -137,7 +134,6 @@ namespace Sledge.BspEditor.Tools.Vertex.Selection
             {
                 foreach (var solid in _selectedSolids.Where(x => !x.IsDirty && set.Contains(x.Real)).ToList())
                 {
-                    if (RenderDebug.Enabled) RenderDebug.Write("selection", $"reset copy of solid {solid.Real.ID} (map changed)");
                     solid.Reset();
                     any = true;
                 }

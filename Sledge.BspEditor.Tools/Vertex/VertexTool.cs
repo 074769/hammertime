@@ -37,8 +37,6 @@ using Sledge.Rendering.Primitives;
 using Sledge.Rendering.Resources;
 using Sledge.Shell.Input;
 
-using Sledge.BspEditor.Rendering.Debugging;
-
 namespace Sledge.BspEditor.Tools.Vertex
 {
 	[Export(typeof(ITool))]
@@ -300,7 +298,6 @@ namespace Sledge.BspEditor.Tools.Vertex
 			{
 				foreach (var obj in _selection)
 				{
-					if (RenderDebug.Enabled) RenderDebug.Write("copy", $"solid {obj.Real.ID}: {obj.Copy.Faces.Count} faces, {obj.Copy.Faces.Sum(f => f.Vertices.Count)} vertices");
 					await Convert(builder, document, obj.Copy, resourceCollector);
 				}
 			}).Wait();

@@ -11,9 +11,6 @@ using Sledge.Rendering.Interfaces;
 using Sledge.Rendering.Renderables;
 using Sledge.Rendering.Resources;
 
-using System.Linq;
-using Sledge.BspEditor.Rendering.Debugging;
-
 namespace Sledge.BspEditor.Rendering.Dynamic
 {
     [Export(typeof(IStartupHook))]
@@ -50,7 +47,6 @@ namespace Sledge.BspEditor.Rendering.Dynamic
 
         public void Update(long frame)
         {
-            RenderDebug.SetFrame(frame);
             var builder = _engine.Value.CreateBufferBuilder(BufferSize.Small);
             var renderable = new BufferBuilderRenderable(builder);
             
@@ -73,13 +69,11 @@ namespace Sledge.BspEditor.Rendering.Dynamic
             }
 
             builder.Complete();
-            if (RenderDebug.Enabled) RenderDebug.Write("overlay", $"built {builder.NumBuffers} buffer(s), {builder.IndirectBufferGroups.Sum(l => l.Count)} group(s)");
             _engine.Value.Add(renderable);
 
             if (_builder != null)
             {
                 _engine.Value.Remove(_renderable);
-                if (RenderDebug.Enabled) RenderDebug.Write("overlay", "disposing previous overlay buffer");
                 _renderable.Dispose();
                 _builder.Dispose();
             }
