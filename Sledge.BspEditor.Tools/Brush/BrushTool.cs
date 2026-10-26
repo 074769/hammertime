@@ -27,6 +27,7 @@ using Sledge.Common.Shell.Hotkeys;
 using Sledge.Common.Shell.Settings;
 using Sledge.Common.Translations;
 using Sledge.DataStructures.Geometric;
+using Sledge.Shell.Input;
 using Sledge.Providers.Texture;
 using Sledge.Rendering.Cameras;
 using Sledge.Rendering.Engine;
