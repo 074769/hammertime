@@ -9,8 +9,9 @@ namespace Sledge.BspEditor.Commands.Clipboard
     public static class GroupCleanup
     {
         /// <summary>
-        /// Finds the groups that will have no children left once the given objects are removed
+        /// Finds the groups and brush entities that will have no children left once the given objects are removed
         /// (including groups that only contain such groups) and returns operations to detach them.
+        /// Worldspawn is never removed, even when it is emptied.
         /// Deepest groups come first, so the operations are safe to run in order and to undo in reverse.
         /// </summary>
         public static List<IOperation> DetatchEmptiedGroups(IEnumerable<IMapObject> removing)
@@ -25,7 +26,7 @@ namespace Sledge.BspEditor.Commands.Clipboard
             while (queue.Count > 0)
             {
                 var g = queue.Dequeue();
-                if (!(g is Group) || g.Hierarchy.Parent == null || gone.Contains(g)) continue;
+                if (!CanBeEmptied(g) || g.Hierarchy.Parent == null || gone.Contains(g)) continue;
                 if (!g.Hierarchy.All(gone.Contains)) continue;
 
                 gone.Add(g);
@@ -34,6 +35,13 @@ namespace Sledge.BspEditor.Commands.Clipboard
             }
 
             return result.Select(g => (IOperation) new Detatch(g.Hierarchy.Parent.ID, g)).ToList();
+        }
+
+        private static bool CanBeEmptied(IMapObject o)
+        {
+            if (o is Group) return true;
+            // A brush entity (eg func_detail) with no solids left is an empty entity, so it goes too
+            return o is Entity e && !string.Equals(e.EntityData?.Name, "worldspawn", System.StringComparison.OrdinalIgnoreCase);
         }
     }
 }
