@@ -137,6 +137,10 @@ namespace Sledge.BspEditor.Tools.Vertex.Selection
             {
                 foreach (var solid in _selectedSolids.Where(x => !x.IsDirty && set.Contains(x.Real)).ToList())
                 {
+                    // Our own selection writes (the VertexHidden marker) also raise a change, but leave the geometry alone.
+                    // Only refresh the working copy when the solid's geometry really changed underneath it.
+                    if (GeometrySignature.Of(solid.Real) == solid.SourceSignature) continue;
+
                     if (RenderDebug.Enabled) RenderDebug.Write("selection", $"reset copy of solid {solid.Real.ID} (map changed)");
                     solid.Reset();
                     any = true;
