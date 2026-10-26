@@ -291,23 +291,6 @@ namespace Sledge.BspEditor.Tools.Vertex
 
 		#endregion
 
-		/// <summary>
-		/// Converted geometry for one selected solid, reused on later frames until the solid, the texture set or the environment changes
-		/// </summary>
-		private sealed class CachedMesh
-		{
-			public bool Cacheable = true;
-			public int Signature;
-			public bool HideNull;
-			public string EnvironmentId;
-			public VertexStandard[] Points;
-			public uint[] Indices;
-			public List<BufferGroup> Groups;
-			public readonly List<string> Textures = new List<string>();
-		}
-
-		private readonly Dictionary<VertexSolid, CachedMesh> _meshCache = new Dictionary<VertexSolid, CachedMesh>();
-
 		protected override void Render(MapDocument document, BufferBuilder builder, ResourceCollector resourceCollector)
 		{
 			base.Render(document, builder, resourceCollector);
@@ -315,34 +298,11 @@ namespace Sledge.BspEditor.Tools.Vertex
 			// Force this work to happen on a new thread so waiting on it won't block the context
 			Task.Run(async () =>
 			{
-				var displayFlags = document.Map.Data.GetOne<DisplayFlags>();
-				var hideNull = displayFlags?.HideNullTextures == true;
-				var environmentId = document.Environment.ID;
-				var seen = new HashSet<VertexSolid>();
-
 				foreach (var obj in _selection)
 				{
-					seen.Add(obj);
-					var signature = GeometrySignature.Of(obj.Copy);
-
-					// Only convert when the solid's geometry or how it is drawn has changed. Otherwise reuse last frame's mesh.
-					if (!_meshCache.TryGetValue(obj, out var mesh) || mesh.Signature != signature || mesh.HideNull != hideNull || mesh.EnvironmentId != environmentId)
-					{
-						if (RenderDebug.Enabled) RenderDebug.Write("copy", $"solid {obj.Real.ID}: {obj.Copy.Faces.Count} faces, {obj.Copy.Faces.Sum(f => f.Vertices.Count)} vertices");
-						mesh = await BuildMesh(document, obj.Copy, hideNull);
-						mesh.Signature = signature;
-						mesh.HideNull = hideNull;
-						mesh.EnvironmentId = environmentId;
-						if (mesh.Cacheable) _meshCache[obj] = mesh;
-						else _meshCache.Remove(obj);
-					}
-
-					foreach (var name in mesh.Textures) resourceCollector.RequireTexture(name);
-					builder.Append(mesh.Points, mesh.Indices, mesh.Groups);
+					if (RenderDebug.Enabled) RenderDebug.Write("copy", $"solid {obj.Real.ID}: {obj.Copy.Faces.Count} faces, {obj.Copy.Faces.Sum(f => f.Vertices.Count)} vertices");
+					await Convert(builder, document, obj.Copy, resourceCollector);
 				}
-
-				// Forget meshes for solids that are no longer selected
-				foreach (var key in _meshCache.Keys.Where(k => !seen.Contains(k)).ToList()) _meshCache.Remove(key);
 			}).Wait();
 		}
 
@@ -351,9 +311,10 @@ namespace Sledge.BspEditor.Tools.Vertex
 			Oy.Publish("VertexTool:Updated", _selection);
 		}
 
-		private async Task<CachedMesh> BuildMesh(MapDocument document, MutableSolid solid, bool hideNull)
+		private async Task Convert(BufferBuilder builder, MapDocument document, MutableSolid solid, ResourceCollector resourceCollector)
 		{
-			var mesh = new CachedMesh();
+			var displayFlags = document.Map.Data.GetOne<DisplayFlags>();
+			var hideNull = displayFlags?.HideNullTextures == true;
 
 			var faces = solid.Faces.Where(x => x.Vertices.Count > 2).ToList();
 
@@ -445,16 +406,12 @@ namespace Sledge.BspEditor.Tools.Vertex
 
 				texOffset += texInd;
 
-				if (t != null) mesh.Textures.Add(t.Name);
-				else mesh.Cacheable = false; // texture not loaded yet: convert again next frame
+				if (t != null) resourceCollector.RequireTexture(t.Name);
 			}
 
 			groups.Add(new BufferGroup(PipelineType.Wireframe, CameraType.Both, numSolidIndices, numWireframeIndices));
 
-			mesh.Points = points;
-			mesh.Indices = indices;
-			mesh.Groups = groups;
-			return mesh;
+			builder.Append(points, indices, groups);
 		}
 	}
 }

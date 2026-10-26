@@ -34,7 +34,6 @@ namespace Sledge.BspEditor.Rendering.Dynamic
 
         private BufferBuilder _builder;
         private BufferBuilderRenderable _renderable;
-        private bool _overlayEmpty;
 
         /// <inheritdoc />
         public Task OnStartup()
@@ -74,16 +73,7 @@ namespace Sledge.BspEditor.Rendering.Dynamic
             }
 
             builder.Complete();
-            var empty = builder.NumBuffers == 0;
             if (RenderDebug.Enabled) RenderDebug.Write("overlay", $"built {builder.NumBuffers} buffer(s), {builder.IndirectBufferGroups.Sum(l => l.Count)} group(s)");
-
-            // Nothing was drawn last frame and nothing is drawn this frame: keep the existing empty overlay instead of replacing it
-            if (empty && _builder != null && _overlayEmpty)
-            {
-                builder.Dispose();
-                return;
-            }
-
             _engine.Value.Add(renderable);
 
             if (_builder != null)
@@ -96,7 +86,6 @@ namespace Sledge.BspEditor.Rendering.Dynamic
 
             _builder = builder;
             _renderable = renderable;
-            _overlayEmpty = empty;
         }
 
         // Document events
