@@ -1,4 +1,5 @@
 using System.Numerics;
+using Sledge.BspEditor.Primitives;
 using Sledge.BspEditor.Primitives.MapObjects;
 
 namespace Sledge.BspEditor.Tools.Vertex.Selection
@@ -11,44 +12,42 @@ namespace Sledge.BspEditor.Tools.Vertex.Selection
     {
         public static int Of(Solid solid)
         {
-            var hash = 17;
+            var hash = new HashCode();
             foreach (var face in solid.Faces)
             {
-                hash = Mix(hash, face.Vertices.Count);
-                foreach (var v in face.Vertices) hash = Mix(hash, v.GetHashCode());
-                hash = AddTexture(hash, face.Texture);
+                hash.Add(face.Vertices.Count);
+                foreach (var v in face.Vertices) hash.Add(v);
+                AddTexture(ref hash, face.Texture);
             }
-            return hash;
+            return hash.ToHashCode();
         }
 
         public static int Of(MutableSolid solid)
         {
-            var hash = 17;
+            var hash = new HashCode();
             foreach (var face in solid.Faces)
             {
-                hash = Mix(hash, face.Vertices.Count);
-                foreach (var v in face.Vertices) hash = Mix(hash, v.Position.GetHashCode());
-                hash = AddTexture(hash, face.Texture);
+                hash.Add(face.Vertices.Count);
+                foreach (var v in face.Vertices) hash.Add(v.Position);
+                AddTexture(ref hash, face.Texture);
             }
-            return hash;
+            return hash.ToHashCode();
         }
 
-        private static int AddTexture(int hash, Primitives.Texture t)
+        private static void AddTexture(ref HashCode hash, Texture t)
         {
-            if (t == null) return Mix(hash, 0);
-            hash = Mix(hash, t.Name?.GetHashCode() ?? 0);
-            hash = Mix(hash, t.UAxis.GetHashCode());
-            hash = Mix(hash, t.VAxis.GetHashCode());
-            hash = Mix(hash, t.XShift.GetHashCode());
-            hash = Mix(hash, t.XScale.GetHashCode());
-            hash = Mix(hash, t.YShift.GetHashCode());
-            hash = Mix(hash, t.YScale.GetHashCode());
-            return hash;
-        }
-
-        private static int Mix(int hash, int value)
-        {
-            unchecked { return hash * 31 + value; }
+            if (t == null)
+            {
+                hash.Add(0);
+                return;
+            }
+            hash.Add(t.Name);
+            hash.Add(t.UAxis);
+            hash.Add(t.VAxis);
+            hash.Add(t.XShift);
+            hash.Add(t.XScale);
+            hash.Add(t.YShift);
+            hash.Add(t.YScale);
         }
     }
 }
