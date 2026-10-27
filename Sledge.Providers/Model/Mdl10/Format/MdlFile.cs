@@ -1026,12 +1026,9 @@ namespace Sledge.Providers.Model.Mdl10.Format
 				var cRot = bone.Rotation + cFrame.Rotations[i] * bone.RotationScale;
 				var nRot = bone.Rotation + nFrame.Rotations[i] * bone.RotationScale;
 
-				var cQtn = Quaternion.CreateFromYawPitchRoll(cRot.X, cRot.Y, cRot.Z);
-				var nQtn = Quaternion.CreateFromYawPitchRoll(nRot.X, nRot.Y, nRot.Z);
-
-				// MDL angles have Y as the up direction
-				cQtn = new Quaternion(cQtn.Y, cQtn.X, cQtn.Z, cQtn.W);
-				nQtn = new Quaternion(nQtn.Y, nQtn.X, nQtn.Z, nQtn.W);
+				// Bone angles are (pitch, yaw, roll) in the same basis as the positions and vertices
+				var cQtn = AngleQuaternion(cRot);
+				var nQtn = AngleQuaternion(nRot);
 
 				var mat = Matrix4x4.CreateFromQuaternion(Quaternion.Slerp(cQtn, nQtn, subframe));
 				mat.Translation = cPos * (1 - subframe) + nPos * subframe;
@@ -1100,6 +1097,22 @@ namespace Sledge.Providers.Model.Mdl10.Format
 					}
 				}
 			}
+		}
+
+		/// <summary>
+		/// GoldSrc bone angles (pitch, yaw, roll) to a unit quaternion (Valve's AngleQuaternion).
+		/// Matches the GoldSrc AngleMatrix for the same angles.
+		/// </summary>
+		private static Quaternion AngleQuaternion(Vector3 angles)
+		{
+			var sr = (float)System.Math.Sin(angles.Z * 0.5f); var cr = (float)System.Math.Cos(angles.Z * 0.5f);
+			var sp = (float)System.Math.Sin(angles.X * 0.5f); var cp = (float)System.Math.Cos(angles.X * 0.5f);
+			var sy = (float)System.Math.Sin(angles.Y * 0.5f); var cy = (float)System.Math.Cos(angles.Y * 0.5f);
+			return new Quaternion(
+				sr * cp * cy - cr * sp * sy,
+				cr * sp * cy + sr * cp * sy,
+				cr * cp * sy - sr * sp * cy,
+				cr * cp * cy + sr * sp * sy);
 		}
 
 		private enum Section : int

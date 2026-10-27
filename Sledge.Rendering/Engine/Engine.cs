@@ -108,6 +108,7 @@ namespace Sledge.Rendering.Engine
 			AddPipeline(new BillboardOpaquePipeline());
 			AddPipeline(new WireframeModelPipeline());
 			AddPipeline(new TexturedModelPipeline());
+			AddPipeline(new TexturedModelAdditivePipeline());
 
 			AddPipeline(new TexturedAlphaPipeline());
 			AddPipeline(new TexturedAdditivePipeline());

@@ -34,8 +34,30 @@ namespace Sledge.Providers.Model.Mdl10
 		private uint _numTexturedIndices;
 		private uint _numWireframeIndices;
 		private uint[][] _skins;
+		private readonly List<MeshRange> _meshRanges = new List<MeshRange>();
+
+		/// <summary>True when any texture of the model has the GoldSrc additive flag.</summary>
+		public bool HasAdditive { get; private set; }
 
 		private string TextureName => $"{nameof(MdlModel)}::{_guid}";
+
+		private struct MeshRange
+		{
+			public readonly int BodyPart;
+			public readonly int Model;
+			public readonly uint Start;
+			public readonly uint Count;
+			public readonly bool Additive;
+
+			public MeshRange(int bodyPart, int model, uint start, uint count, bool additive)
+			{
+				BodyPart = bodyPart;
+				Model = model;
+				Start = start;
+				Count = count;
+				Additive = additive;
+			}
+		}
 
 		public MdlModel(MdlFile model)
 		{
@@ -171,6 +193,8 @@ namespace Sledge.Providers.Model.Mdl10
 		{
 			_skins = Model.Skins.Select(x => x.Textures.Select(x => (uint)x).ToArray()).ToArray();
 
+			_meshRanges.Clear();
+			HasAdditive = false;
 			var texHeight = _originalRectangles.Max(x => x.Bottom);
 			var texWidth = _originalRectangles.Max(x => x.Right);
 			var maxTexSize = new Vector2(texWidth, texHeight);
@@ -198,6 +222,8 @@ namespace Sledge.Providers.Model.Mdl10
 					foreach (var mesh in model.Meshes)
 					{
 						var texId = skin[mesh.Header.SkinRef];
+						var meshStart = vi;
+						var additive = texId >= 0 && texId < Model.Textures.Count && Model.Textures[texId].Header.Flags.HasFlag(TextureFlags.Additive);
 						for (var i = 0; i < mesh.Vertices.Length; i++)
 						{
 							var x = mesh.Vertices[i];
@@ -220,6 +246,8 @@ namespace Sledge.Providers.Model.Mdl10
 							wireframeIndices.Add(i % 3 == 2 ? vi - 2 : vi + 1);
 							vi++;
 						}
+						_meshRanges.Add(new MeshRange(bpi, mdlIndex, (uint)meshStart, (uint)mesh.Vertices.Length, additive));
+						HasAdditive |= additive;
 					}
 				}
 
@@ -242,25 +270,26 @@ namespace Sledge.Providers.Model.Mdl10
 		{
 			_buffer.Bind(cl, 0);
 
-			if (pipeline.Type == PipelineType.TexturedModel)
+			if (pipeline.Type == PipelineType.TexturedModel || pipeline.Type == PipelineType.TexturedModelAdditive)
 			{
 				_textureResource.BindTo(cl, 1);
-				uint ci = 0;
 
+				// Pick one model per body part, as the body group says, then draw its meshes that belong to this pass
+				var additive = pipeline.Type == PipelineType.TexturedModelAdditive;
+				var selected = new HashSet<(int, int)>();
 				var bodyPartId = bodyGroup;
-
-				foreach (var bpi in _bodyPartIndices)
+				for (var bp = 0; bp < _bodyPartIndices.Length; bp++)
 				{
-					var body = bodyPartId % bpi.Length;
-					bodyPartId /= bpi.Length;
-					for (var model_index = 0; model_index < bpi.Length; model_index++)
-					{
-						var model = bpi[model_index];
+					var count = _bodyPartIndices[bp].Length;
+					if (count == 0) continue;
+					selected.Add((bp, bodyPartId % count));
+					bodyPartId /= count;
+				}
 
-						if (model_index == body)
-							cl.DrawIndexed(model, 1, ci, 0, 0);
-						ci += model;
-					}
+				foreach (var mesh in _meshRanges)
+				{
+					if (mesh.Additive != additive || !selected.Contains((mesh.BodyPart, mesh.Model))) continue;
+					cl.DrawIndexed(mesh.Count, 1, mesh.Start, 0, 0);
 				}
 			}
 			else if (pipeline.Type == PipelineType.WireframeModel)
