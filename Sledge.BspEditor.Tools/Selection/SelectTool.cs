@@ -791,7 +791,28 @@ namespace Sledge.BspEditor.Tools.Selection
 
 		private bool CenterHandleIntersectFilter(IMapObject obj, Box box)
 		{
-			return obj.BoundingBox != null && box.Vector3IsInside(obj.BoundingBox.Center);
+			if (obj.BoundingBox == null) return false;
+			// Model and sprite entities use their gizmo (origin) as the centre handle, not the bounding box centre
+			return box.Vector3IsInside(GetPickGeometry(obj) != null ? GetPickCentre(obj) : obj.BoundingBox.Center);
+		}
+
+		/// <summary>
+		/// Model and sprite entities are picked by their gizmo or model wireframe, never by their bounding box.
+		/// Returns that pick geometry, or null when the object uses the default bounding-box picking.
+		/// </summary>
+		private static IEnumerable<Polygon> GetPickGeometry(IMapObject obj)
+		{
+			return obj.Data.Get<IPickGeometryProvider>().FirstOrDefault()?.GetPickPolygons(obj);
+		}
+
+		private static Vector3 GetPickCentre(IMapObject obj)
+		{
+			return obj.Data.GetOne<Origin>()?.Location ?? obj.BoundingBox.Center;
+		}
+
+		private static bool PolygonTouchesBox(Polygon polygon, Box box)
+		{
+			return polygon.GetLines().Any(box.IntersectsWith) || polygon.Vertices.Any(box.Vector3IsInside);
 		}
 
 		private bool LineIntersectFilter(IMapObject obj, Box box)
@@ -897,11 +918,31 @@ namespace Sledge.BspEditor.Tools.Selection
 				// Otherwise, select all brushes that intersect with the box
 				Predicate<IMapObject> filter;
 				if (KeyboardState.Shift)
-					filter = x => x.BoundingBox.ContainedWithin(boundingbox);
+				{
+					// Model and sprite entities must have all their pick vertices inside the box
+					filter = x =>
+					{
+						var pick = GetPickGeometry(x);
+						if (pick == null) return x.BoundingBox.ContainedWithin(boundingbox);
+						var polys = pick.ToList();
+						return polys.Count > 0 && polys.All(p => p.Vertices.All(boundingbox.Vector3IsInside));
+					};
+				}
 				else if (SelectionBoxOnlySelectsByCenterHandles)
-					filter = x => boundingbox.Vector3IsInside(x.BoundingBox.Center);
+				{
+					filter = x => GetPickGeometry(x) != null
+						? boundingbox.Vector3IsInside(GetPickCentre(x))
+						: boundingbox.Vector3IsInside(x.BoundingBox.Center);
+				}
 				else
-					filter = x => true;
+				{
+					// Model and sprite entities only match when the box touches their gizmo or wireframe
+					filter = x =>
+					{
+						var pick = GetPickGeometry(x);
+						return pick == null || pick.Any(p => PolygonTouchesBox(p, boundingbox));
+					};
+				}
 
 				var nodes = GetBoxIntersections(document, boundingbox, filter);
 

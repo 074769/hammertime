@@ -66,6 +66,12 @@ namespace Sledge.BspEditor.Primitives.MapObjects
 			// Entities with children don't contain any geometry directly
 			if (Hierarchy.HasChildren) return new Polygon[0];
 
+			// Model and sprite entities supply their own pick geometry (gizmo + model wireframe).
+			// A null answer means no provider wants to override picking.
+			var picker = Data.Get<IPickGeometryProvider>().FirstOrDefault();
+			var pick = picker?.GetPickPolygons(this);
+			if (pick != null) return pick;
+
 			// Otherwise we use the bounding box faces
 			return BoundingBox.GetBoxFaces().Select(x => new Polygon(x));
 		}

@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.Composition;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Numerics;
 using System.Runtime.Serialization;
@@ -14,7 +15,7 @@ using Sledge.Rendering.Interfaces;
 
 namespace Sledge.BspEditor.Rendering.ChangeHandlers
 {
-	public class EntitySprite : IMapObjectData, IContentsReplaced, IBoundingBoxProvider
+	public class EntitySprite : IMapObjectData, IContentsReplaced, IBoundingBoxProvider, IPickGeometryProvider
 	{
 		public string Name { get; set; }
 		public float Scale { get; }
@@ -23,12 +24,16 @@ namespace Sledge.BspEditor.Rendering.ChangeHandlers
 		public int Framerate => Renderable.Framerate;
 		public SpriteRenderable Renderable { get; }
 
+		/// <summary>True for iconsprite gizmos (lights, spawns etc). Those keep bounding-box picking.</summary>
+		public bool IsGizmo { get; }
+
 		public bool ContentsReplaced => Renderable.Model != null;
 
 		public EntitySprite(string name, float scale, Color color, SizeF? size, int framerate, IModelRenderable renderable, bool isGizmo = false)
 		{
 			Name = name;
 			Scale = scale;
+			IsGizmo = isGizmo;
 			Color = color;
 			Size = size ?? SizeF.Empty;
 			if (renderable == null)
@@ -77,6 +82,14 @@ namespace Sledge.BspEditor.Rendering.ChangeHandlers
 			var half = new Vector3(Size.Width, Size.Width, Size.Height) * Scale / 2;
 			Renderable.Origin = origin;
 			return new Box(origin - half, origin + half);
+		}
+
+		public IEnumerable<Polygon> GetPickPolygons(IMapObject obj)
+		{
+			// Iconsprite gizmos keep the default bounding-box picking
+			if (IsGizmo) return null;
+			var origin = obj.Data.GetOne<Origin>()?.Location ?? Vector3.Zero;
+			return PickGeometry.GizmoPolygons(origin);
 		}
 
 		public IMapElement Copy(UniqueNumberGenerator numberGenerator)

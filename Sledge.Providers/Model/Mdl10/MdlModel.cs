@@ -64,6 +64,40 @@ namespace Sledge.Providers.Model.Mdl10
 			return (box.Start, box.End);
 		}
 
+		/// <summary>
+		/// Triangles of the model at the first frame of a sequence, in model space (bone transforms
+		/// applied, entity origin and angles not applied). Used for wireframe picking.
+		/// </summary>
+		public List<Vector3[]> GetPickTriangles(int sequence)
+		{
+			var result = new List<Vector3[]>();
+			if (Model.Bones.Count == 0) return result;
+
+			var seq = sequence >= 0 && sequence < Model.Sequences.Count ? sequence : 0;
+			var transforms = new Matrix4x4[Model.Bones.Count];
+			Model.GetTransforms(seq, 0, 0, ref transforms);
+
+			foreach (var part in Model.BodyParts)
+			{
+				if (part.Models == null || part.Models.Length == 0) continue;
+				foreach (var mesh in part.Models[0].Meshes)
+				{
+					// Mesh vertices are already expanded to a plain triangle list (3 per triangle)
+					var verts = mesh.Vertices;
+					for (var i = 0; i + 2 < verts.Length; i += 3)
+					{
+						result.Add(new[]
+						{
+							Vector3.Transform(verts[i].Vertex, transforms[verts[i].VertexBone]),
+							Vector3.Transform(verts[i + 1].Vertex, transforms[verts[i + 1].VertexBone]),
+							Vector3.Transform(verts[i + 2].Vertex, transforms[verts[i + 2].VertexBone]),
+						});
+					}
+				}
+			}
+			return result;
+		}
+
 		private static Bitmap CreateBitmap(int width, int height, byte[] data, byte[] palette, bool lastTextureIsTransparent)
 		{
 			var bmp = new Bitmap(width, height, PixelFormat.Format8bppIndexed);
