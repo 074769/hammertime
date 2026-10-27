@@ -23,14 +23,14 @@ namespace Sledge.BspEditor.Tools.Vertex.Commands
 		{
 			if (!context.TryGet("ActiveTool", out VertexTool tool)) return;
 
-			var scale = tool.GetSubTool(typeof(VertexScaleTool));
+			var scale = tool.GetSubTool(typeof(VertexScaleTool)) as VertexScaleTool;
 			if (scale == null) return;
 
-			// The scale subtool only listens for events while it is the active subtool,
-			// so activate it, open the dialog, then go back to whichever subtool was active.
+			// Activate the scale subtool, open its dialog directly (the dialog call blocks until it closes),
+			// then go back to whichever subtool was active before.
 			var previous = tool.CurrentSubTool;
 			tool.CurrentSubTool = scale;
-			await Oy.Publish("VertexScaleTool:OpenDialog");
+			scale.OpenScaleDialog();
 			if (previous != null && previous != scale) tool.CurrentSubTool = previous;
 		}
 

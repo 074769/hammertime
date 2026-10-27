@@ -72,7 +72,6 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
             yield return Oy.Subscribe<decimal>("VertexScaleTool:ValueChanged", v => ValueChanged(v));
             yield return Oy.Subscribe<decimal>("VertexScaleTool:ValueReset", v => ValueReset(v));
             yield return Oy.Subscribe("VertexScaleTool:ResetOrigin", () => ResetOrigin());
-            yield return Oy.Subscribe("VertexScaleTool:OpenDialog", () => OpenScaleDialog());
         }
 
         private void ValueChanged(decimal value)
@@ -210,7 +209,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
         /// Alt+E: scale the selected vertices with the per-axis dialog. The dialog previews live;
         /// Cancel puts the vertices back where they were when the dialog opened.
         /// </summary>
-        private void OpenScaleDialog()
+        internal void OpenScaleDialog()
         {
             if (!GetVisiblePoints().Any(x => x.IsSelected)) return;
 
