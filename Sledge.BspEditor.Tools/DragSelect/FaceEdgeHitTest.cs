@@ -16,7 +16,7 @@ namespace Sledge.BspEditor.Tools.DragSelect
     public static class FaceEdgeHitTest
     {
         /// <summary>Screen distance in pixels within which a hit counts as being on an edge.</summary>
-        public const float EdgePixels = 6f;
+        public const float EdgePixels = 3f;
 
         public static bool IsOnFaceEdge(PerspectiveCamera camera, IEnumerable<Vector3> faceVertices, Vector3 hit)
         {
