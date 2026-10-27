@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Sledge.BspEditor.Tools.DragSelect;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Diagnostics;
@@ -255,41 +256,9 @@ namespace Sledge.BspEditor.Tools.Texture
             _paintApplying = false;
         }
 
-        /// <summary>
-        /// Screen distance in pixels within which a hit counts as being on a face edge.
-        /// </summary>
-        private const float EdgeHitPixels = 6f;
-
         private static bool IsOnEdge(PerspectiveCamera camera, Face face, Vector3 hit)
         {
-            var verts = face.Vertices.ToList();
-            if (verts.Count < 2) return false;
-
-            var p = camera.WorldToScreen(hit);
-            for (var i = 0; i < verts.Count; i++)
-            {
-                var a = camera.WorldToScreen(verts[i]);
-                var b = camera.WorldToScreen(verts[(i + 1) % verts.Count]);
-                if (DistanceToSegment2D(p, a, b) < EdgeHitPixels) return true;
-            }
-            return false;
-        }
-
-        private static float DistanceToSegment2D(Vector3 p, Vector3 a, Vector3 b)
-        {
-            var abX = b.X - a.X;
-            var abY = b.Y - a.Y;
-            var lenSq = abX * abX + abY * abY;
-            var t = 0f;
-            if (lenSq > 0)
-            {
-                t = ((p.X - a.X) * abX + (p.Y - a.Y) * abY) / lenSq;
-                if (t < 0) t = 0;
-                if (t > 1) t = 1;
-            }
-            var dx = p.X - (a.X + t * abX);
-            var dy = p.Y - (a.Y + t * abY);
-            return (float)Math.Sqrt(dx * dx + dy * dy);
+            return FaceEdgeHitTest.IsOnFaceEdge(camera, face.Vertices, hit);
         }
 
         private Task SelectFace(MapDocument document, PerspectiveCamera camera, Face face, IMapObject parent)

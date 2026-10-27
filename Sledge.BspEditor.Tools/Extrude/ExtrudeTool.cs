@@ -1,3 +1,4 @@
+using Sledge.BspEditor.Tools.DragSelect;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
@@ -76,6 +77,7 @@ namespace Sledge.BspEditor.Tools.Extrude
         // false: picking faces (red), true: dragging them out (blue). The tool's hotkey switches between the two
         private bool _extrudeMode;
         private bool _painting;
+        private bool _pressOnEdge;
 
         // Drag state: the face the mouse went down on, where, and how far it has been pulled (already snapped)
         private PickedFace _anchor;
@@ -253,6 +255,14 @@ namespace Sledge.BspEditor.Tools.Extrude
         #region Picking
 
         /// <summary>The nearest face under the cursor that points at the camera, on the nearest solid the cursor is over. Any solid counts.</summary>
+        /// <summary>True when the screen point lands within the edge margin of the picked face.</summary>
+        private static bool IsOnPickedEdge(PerspectiveCamera camera, PickedFace picked, int x, int y)
+        {
+            var (start, end) = camera.CastRayFromScreen(new Vector3(x, y, 0));
+            var point = new Polygon(picked.Face.Vertices).GetIntersectionPoint(new Line(start, end));
+            return point.HasValue && FaceEdgeHitTest.IsOnFaceEdge(camera, picked.Face.Vertices, point.Value);
+        }
+
         private static PickedFace PickFace(MapDocument document, PerspectiveCamera camera, int x, int y)
         {
             var (start, end) = camera.CastRayFromScreen(new Vector3(x, y, 0));
@@ -299,6 +309,7 @@ namespace Sledge.BspEditor.Tools.Extrude
             e.Handled = true;
 
             var picked = PickFace(document, camera, e.X, e.Y);
+            _pressOnEdge = picked != null && IsOnPickedEdge(camera, picked, e.X, e.Y);
             lock (_lock)
             {
                 CancelDragUnlocked();
@@ -363,8 +374,8 @@ namespace Sledge.BspEditor.Tools.Extrude
                 }
                 else
                 {
-                    // Select step: sweeping over faces picks them
-                    _painting = true;
+                    // Select step: sweeping over faces picks them (not when the press was on an edge)
+                    _painting = !_pressOnEdge;
                 }
             }
             e.Handled = true;
@@ -381,7 +392,7 @@ namespace Sledge.BspEditor.Tools.Extrude
                 {
                     e.Handled = true;
                     var swept = PickFace(document, camera, e.X, e.Y);
-                    if (swept != null && !_faces.Any(x => ReferenceEquals(x.Face, swept.Face))) _faces.Add(swept);
+                    if (swept != null && !IsOnPickedEdge(camera, swept, e.X, e.Y) && !_faces.Any(x => ReferenceEquals(x.Face, swept.Face))) _faces.Add(swept);
                     return;
                 }
 

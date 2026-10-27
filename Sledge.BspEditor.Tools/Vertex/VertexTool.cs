@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Sledge.BspEditor.Tools.DragSelect;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Drawing;
@@ -199,8 +200,7 @@ namespace Sledge.BspEditor.Tools.Vertex
 
 			var operation = new Transaction();
 
-			// Ctrl doesn't toggle selection, only adds to it.
-			// Ctrl+clicking a selected solid will do nothing.
+			// Ctrl adds to the selection. Ctrl+clicking a selected solid deselects it.
 
 			if (!KeyboardState.Ctrl)
 			{
@@ -208,7 +208,12 @@ namespace Sledge.BspEditor.Tools.Vertex
 				operation.Add(new Deselect(document.Selection.Where(x => !ReferenceEquals(x, closestObject)).ToList()));
 			}
 
-			if (!closestObject.IsSelected)
+			if (KeyboardState.Ctrl && closestObject.IsSelected)
+			{
+				// Ctrl+clicking a selected solid deselects it
+				operation.Add(new Deselect(new List<IMapObject> { closestObject }));
+			}
+			else if (!closestObject.IsSelected)
 			{
 				// The clicked object isn't selected yet, select it.
 				operation.Add(new Select(closestObject));
@@ -229,6 +234,56 @@ namespace Sledge.BspEditor.Tools.Vertex
 
 		#region 3D interaction
 
+		// Ctrl+drag paint state (3D)
+		private bool _paintSelecting;
+		private bool _paintAdds;
+		private Solid _paintLast;
+
+		protected override void MouseMove(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
+		{
+			if (_paintSelecting)
+			{
+				if (!KeyboardState.Ctrl) _paintSelecting = false;
+				else PaintSolidAt(document, camera, e);
+			}
+			base.MouseMove(document, viewport, camera, e);
+		}
+
+		protected override void MouseUp(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
+		{
+			_paintSelecting = false;
+			_paintLast = null;
+			base.MouseUp(document, viewport, camera, e);
+		}
+
+		private void PaintSolidAt(MapDocument document, PerspectiveCamera camera, ViewportEvent e)
+		{
+			var (start, end) = camera.CastRayFromScreen(new Vector3(e.X, e.Y, 0));
+			var ray = new Line(start, end);
+			var hit = document.Map.Root.GetIntersectionsForVisibleObjects(ray).FirstOrDefault(x => x.Object is Solid);
+			if (hit == null) return;
+
+			// Hits near an edge are ignored so the drag doesn't flip between neighbouring solids
+			if (FaceEdgeHitTest.IsOnObjectEdge(camera, hit.Object, hit.Intersection)) return;
+
+			var solid = (Solid) hit.Object;
+			if (ReferenceEquals(solid, _paintLast)) return;
+			_paintLast = solid;
+			_ = SetSolidSelected(document, solid, _paintAdds);
+		}
+
+		private async Task SetSolidSelected(MapDocument document, Solid solid, bool add)
+		{
+			var operation = new Transaction();
+			if (add && !solid.IsSelected) operation.Add(new Select(solid));
+			else if (!add && solid.IsSelected) operation.Add(new Deselect(new List<IMapObject> { solid }));
+			if (operation.IsEmpty) return;
+
+			await _selection.Commit(document);
+			await MapDocumentOperation.Bypass(document, operation);
+			await SelectionChanged();
+		}
+
 		/// <summary>
 		/// When the mouse is pressed in the 3D view, we want to select the clicked object.
 		/// </summary>
@@ -243,11 +298,20 @@ namespace Sledge.BspEditor.Tools.Vertex
 			var (start, end) = camera.CastRayFromScreen(new Vector3(e.X, e.Y, 0));
 			var ray = new Line(start, end);
 
-			// Grab all the elements that intersect with the ray
-			var closestObject = document.Map.Root.GetIntersectionsForVisibleObjects(ray)
-				.Where(x => x.Object is Solid)
-				.Select(x => (Solid)x.Object)
-				.FirstOrDefault();
+			// Grab the closest solid that intersects with the ray
+			var hit = document.Map.Root.GetIntersectionsForVisibleObjects(ray)
+				.FirstOrDefault(x => x.Object is Solid);
+			var closestObject = hit?.Object as Solid;
+
+			// Ctrl+press starts a paint drag: the first click toggles this solid, dragging does the same to each solid
+			// the cursor passes over. A press on a solid's edge still clicks, but starts no drag.
+			_paintSelecting = false;
+			if (closestObject != null && KeyboardState.Ctrl)
+			{
+				_paintSelecting = !FaceEdgeHitTest.IsOnObjectEdge(camera, closestObject, hit.Intersection);
+				_paintAdds = !closestObject.IsSelected;
+				_paintLast = closestObject;
+			}
 
 			_ = SelectObject(document, closestObject);
 		}

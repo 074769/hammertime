@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Sledge.BspEditor.Tools.DragSelect;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
@@ -156,6 +157,8 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
         
         // True while the left button is held after a drag has started: faces under the cursor are added as it sweeps over them
         private bool _painting;
+        // The press landed on a face edge: it still clicks, but doesn't start a sweep
+        private bool _pressOnEdge;
 
         /// <summary>The nearest face (of the vertex-selected solids) under the cursor, or null.</summary>
         private SolidFace PickFace(PerspectiveCamera camera, ViewportEvent e)
@@ -177,6 +180,14 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
                 .FirstOrDefault();
 
             return clicked == null ? null : new SolidFace(clicked.Solid, clicked.Face);
+        }
+
+        /// <summary>True when the screen point lands within the edge margin of the picked face.</summary>
+        private bool IsOnPickedEdge(PerspectiveCamera camera, ViewportEvent e, SolidFace picked)
+        {
+            var (start, end) = camera.CastRayFromScreen(new Vector3(e.X, e.Y, 0));
+            var point = GetIntersectionPoint(picked.Face, new Line(start, end));
+            return point.HasValue && FaceEdgeHitTest.IsOnFaceEdge(camera, picked.Face.Vertices.Select(v => v.Position), point.Value);
         }
 
         /// <summary>Adds the picked face (every face of its solid while Shift is held), skipping faces that are already selected.</summary>
@@ -201,6 +212,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
             e.Handled = true;
 
             var picked = PickFace(camera, e);
+            _pressOnEdge = picked != null && IsOnPickedEdge(camera, e, picked);
 
             if (!KeyboardState.Ctrl) ClearSelection();
             if (picked != null) AddPicked(picked);
@@ -215,7 +227,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
         {
             if (e.Button != MouseButtons.Left) return;
             e.Handled = true;
-            _painting = true;
+            _painting = !_pressOnEdge;
         }
 
         protected override void DragMove(MapDocument document, MapViewport viewport, PerspectiveCamera camera,
@@ -225,7 +237,8 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
             e.Handled = true;
 
             var picked = PickFace(camera, e);
-            if (picked != null && AddPicked(picked)) Invalidate();
+            if (picked == null || IsOnPickedEdge(camera, e, picked)) return;
+            if (AddPicked(picked)) Invalidate();
         }
 
         protected override void DragEnd(MapDocument document, MapViewport viewport, PerspectiveCamera camera,

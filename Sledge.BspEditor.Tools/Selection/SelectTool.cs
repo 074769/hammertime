@@ -1,3 +1,4 @@
+using Sledge.BspEditor.Tools.DragSelect;
 using LogicAndTrick.Oy;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Editing.Commands.Linking;
@@ -578,6 +579,10 @@ namespace Sledge.BspEditor.Tools.Selection
 			// By default, select the closest object
 			ChosenItemFor3DSelection = IntersectingObjectsFor3DSelection.FirstOrDefault();
 
+			// A press on an object's edge still selects, but doesn't start a paint drag from there
+			var pressHit = document.Map.Root.GetIntersectionsForVisibleObjects(ray, iopt).FirstOrDefault();
+			var pressOnEdge = pressHit != null && FaceEdgeHitTest.IsOnObjectEdge(camera, pressHit.Object, pressHit.Intersection);
+
 			// If Ctrl is down and the object is already selected, we should deselect it instead.
 			var list = new[] { ChosenItemFor3DSelection };
 			var desel = ChosenItemFor3DSelection != null && KeyboardState.Ctrl && ChosenItemFor3DSelection.IsSelected;
@@ -586,7 +591,7 @@ namespace Sledge.BspEditor.Tools.Selection
 			_lastSelectedViewport = viewport;
 
 			// The first click toggles this object; dragging then does the same to every object the cursor passes over
-			_paint3D = KeyboardState.Ctrl && ChosenItemFor3DSelection != null;
+			_paint3D = KeyboardState.Ctrl && ChosenItemFor3DSelection != null && !pressOnEdge;
 			_paint3DAdds = !desel;
 			_paint3DLast = ChosenItemFor3DSelection;
 		}
@@ -619,11 +624,11 @@ namespace Sledge.BspEditor.Tools.Selection
 			IgnoreOptions iopt = (tf.HideClipTextures ? IgnoreOptions.IgnoreClip : IgnoreOptions.None) | (tf.HideNullTextures ? IgnoreOptions.IgnoreNull : IgnoreOptions.None);
 
 			var (rayStart, rayEnd) = camera.CastRayFromScreen(new Vector3(e.X, e.Y, 0));
-			var hit = document.Map.Root.GetIntersectionsForVisibleObjects(new Line(rayStart, rayEnd), iopt)
-				.Select(x => x.Object)
-				.FirstOrDefault();
+			var hitInfo = document.Map.Root.GetIntersectionsForVisibleObjects(new Line(rayStart, rayEnd), iopt).FirstOrDefault();
+			var hit = hitInfo?.Object;
 
-			if (hit == null || ReferenceEquals(hit, _paint3DLast)) return;
+			// Hits near an edge are ignored so the drag doesn't flip between neighbouring objects
+			if (hit == null || FaceEdgeHitTest.IsOnObjectEdge(camera, hit, hitInfo.Intersection) || ReferenceEquals(hit, _paint3DLast)) return;
 			_paint3DLast = hit;
 
 			var list = new[] { hit };
