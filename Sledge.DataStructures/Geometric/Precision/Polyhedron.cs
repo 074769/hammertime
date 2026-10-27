@@ -33,14 +33,17 @@ namespace Sledge.DataStructures.Geometric.Precision
 			{
 				// Split the polygon by all the other planes
 				var poly = new Polygon(list[i]);
-				for (var j = 0; j < list.Count; j++)
+				for (var j = 0; j < list.Count && poly != null; j++)
 				{
 					if (i != j && poly.Split(list[j], out var back, out _))
 					{
-						poly = back;
+						// Near-coincident planes (e.g. thin faces of a many-sided cylinder) can clip a
+						// polygon down to fewer than 3 vertices; that is not a real face, so drop it.
+						poly = back != null && back.Vertices.Count >= 3 ? back : null;
 					}
 				}
-				polygons.Add(poly);
+				if (poly != null && poly.Vertices.Count >= 3)
+					polygons.Add(poly);
 			}
 
 			var groupedPolygons = polygons.GroupBy(p => p.Plane).ToList();
@@ -99,7 +102,7 @@ namespace Sledge.DataStructures.Geometric.Precision
 			back = front = null;
 
 			// Check that this solid actually spans the plane
-			var classify = Polygons.Select(x => x.ClassifyAgainstPlane(plane)).Distinct().ToList();
+			var classify = Polygons.Where(x => x.Vertices.Count >= 3).Select(x => x.ClassifyAgainstPlane(plane)).Distinct().ToList();
 			if (classify.All(x => x != PlaneClassification.Spanning))
 			{
 				if (classify.Any(x => x == PlaneClassification.Back)) back = this;
@@ -110,7 +113,8 @@ namespace Sledge.DataStructures.Geometric.Precision
 			var backPlanes = new List<Plane> { plane };
 			var frontPlanes = new List<Plane> { new Plane(-plane.Normal, -plane.DistanceFromOrigin) };
 
-			foreach (var face in Polygons)
+			// Degenerate faces (fewer than 3 vertices) have no usable plane; ignore them
+			foreach (var face in Polygons.Where(x => x.Vertices.Count >= 3))
 			{
 				var classification = face.ClassifyAgainstPlane(plane);
 				if (classification != PlaneClassification.Back) frontPlanes.Add(face.Plane);
