@@ -26,6 +26,12 @@ namespace Sledge.BspEditor.Tools.Vertex.Controls
 
         private bool _layouting;
 
+        private static readonly HashSet<Type> HiddenSubTools = new HashSet<Type>
+        {
+            typeof(VertexScaleTool),
+            typeof(VertexFaceEditTool),
+        };
+
         public VertexSidebarPanel()
         {
             InitializeComponent();
@@ -123,7 +129,11 @@ namespace Sledge.BspEditor.Tools.Vertex.Controls
         {
             if (ButtonLayoutPanel.Controls.Count > 0) return;
 
-            foreach (var subTool in _subTools.Select(x => x.Value).OrderBy(x => x.OrderHint))
+            // Scale and Face editing are not shown in the sidebar. Scale is opened with Alt+E instead.
+            // The classes are kept in the code base.
+            foreach (var subTool in _subTools.Select(x => x.Value)
+                         .Where(x => !HiddenSubTools.Contains(x.GetType()))
+                         .OrderBy(x => x.OrderHint))
             {
                 AddSubTool(subTool);
             }

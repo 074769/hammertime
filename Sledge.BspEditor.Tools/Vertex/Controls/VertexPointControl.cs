@@ -38,9 +38,17 @@ namespace Sledge.BspEditor.Tools.Vertex.Controls
 
         #endregion
 
+        private readonly Label _scaleHotkeyLabel = new Label
+        {
+            AutoSize = true,
+            Text = "Scale selected vertices: Alt+E",
+            ForeColor = SystemColors.GrayText
+        };
+
         public VertexPointControl()
         {
             InitializeComponent();
+            Controls.Add(_scaleHotkeyLabel);
             CreateHandle();
             HookTextChanges();
             LayoutControls();
@@ -114,6 +122,9 @@ namespace Sledge.BspEditor.Tools.Vertex.Controls
 
             VertexControlLayout.Move(apply, ShowMidpointsCheckbox, indent, y);
             y += ShowMidpointsCheckbox.Height + m;
+
+            VertexControlLayout.Move(apply, _scaleHotkeyLabel, indent, y);
+            y += _scaleHotkeyLabel.Height + m;
 
             return y;
         }

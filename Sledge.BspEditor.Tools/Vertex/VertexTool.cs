@@ -171,6 +171,11 @@ namespace Sledge.BspEditor.Tools.Vertex
 
 		#region Tool switching
 
+		internal VertexSubtool GetSubTool(System.Type type)
+		{
+			return Children.OfType<VertexSubtool>().FirstOrDefault(x => x.GetType() == type);
+		}
+
 		internal VertexSubtool CurrentSubTool
 		{
 			get { return Children.OfType<VertexSubtool>().FirstOrDefault(x => x.Active); }

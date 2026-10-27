@@ -72,6 +72,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
             yield return Oy.Subscribe<decimal>("VertexScaleTool:ValueChanged", v => ValueChanged(v));
             yield return Oy.Subscribe<decimal>("VertexScaleTool:ValueReset", v => ValueReset(v));
             yield return Oy.Subscribe("VertexScaleTool:ResetOrigin", () => ResetOrigin());
+            yield return Oy.Subscribe("VertexScaleTool:OpenDialog", () => OpenScaleDialog());
         }
 
         private void ValueChanged(decimal value)
@@ -203,6 +204,42 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
                 v.Update();
             }
             _originals = GetVisiblePoints().ToDictionary(x => x, x => x.Position);
+        }
+
+        /// <summary>
+        /// Alt+E: scale the selected vertices with the per-axis dialog. The dialog previews live;
+        /// Cancel puts the vertices back where they were when the dialog opened.
+        /// </summary>
+        private void OpenScaleDialog()
+        {
+            if (!GetVisiblePoints().Any(x => x.IsSelected)) return;
+
+            var originals = GetVisiblePoints().ToDictionary(x => x, x => x.Position);
+            var origin = _origin.Position;
+
+            using (var dialog = new VertexScaleDialog())
+            {
+                dialog.FactorsChanged += (s, e) => ApplyScale(originals, origin, dialog.GetFactors());
+                if (dialog.ShowDialog() != DialogResult.OK)
+                {
+                    ApplyScale(originals, origin, new float[] { 1, 1, 1 });
+                }
+            }
+        }
+
+        private void ApplyScale(Dictionary<VertexPoint, Vector3> originals, Vector3 origin, float[] factors)
+        {
+            var factor = new Vector3(factors[0], factors[1], factors[2]);
+            var solids = new List<VertexSolid>();
+
+            foreach (var p in GetVisiblePoints().Where(x => x.IsSelected).SelectMany(x => x.GetStandardPointList()).Distinct())
+            {
+                if (!solids.Contains(p.Solid)) solids.Add(p.Solid);
+                // Scale each axis by its own factor, relative to the scale origin
+                var target = origin + (originals[p] - origin) * factor;
+                p.Move(target - p.Position);
+            }
+            UpdateSolids(solids);
         }
 
         private void UpdateSolids(List<VertexSolid> solids)
