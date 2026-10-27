@@ -90,6 +90,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 			yield return Oy.Subscribe<object>("VertexPointTool:Merge", _ => Merge());
 			yield return Oy.Subscribe<SnapToGridRequest>("BspEditor:SnapToGrid:Request", r => SnapSelectedPointsToGrid(r));
 			yield return Oy.Subscribe<object>("VertexTool:DeselectAll", _ => DeselectAll());
+			yield return Oy.Subscribe("VertexTool:ScaleDialog", () => OpenScaleDialog());
 			yield return Oy.Subscribe("VertexTool:Triangulate", async _ =>
 			{
 				foreach (var solid in _vertices.Keys)
@@ -518,6 +519,72 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 			else if (CanMerge() && ConfirmMerge()) CheckMergedVertices();
 
 			UpdateSolids(pts.Select(x => x.Solid).Distinct().ToList());
+		}
+
+		#endregion
+
+		#region Scale dialog (Alt+E)
+
+		/// <summary>
+		/// Opens the per-axis scale dialog for the selected points. Scales around the centre of the selection,
+		/// previews live, and Cancel puts the points back where they were.
+		/// </summary>
+		private void OpenScaleDialog()
+		{
+			var selected = GetVisiblePoints().Where(x => x.IsSelected && !x.IsMidpoint).Distinct()
+				.SelectMany(x => x.GetStandardPointList()).Distinct().ToList();
+			if (!selected.Any()) return;
+
+			var originals = selected.ToDictionary(x => x, x => x.Position);
+			var origin = selected.Aggregate(Vector3.Zero, (a, b) => a + b.Position) / selected.Count;
+			var solids = selected.Select(x => x.Solid).Distinct().ToList();
+
+			var confirmed = false;
+			using (var dialog = new VertexScaleDialog())
+			{
+				dialog.FactorsChanged += (s, e) => ApplyScale(originals, origin, solids, dialog.GetFactors());
+				confirmed = dialog.ShowDialog() == DialogResult.OK;
+			}
+
+			if (confirmed)
+			{
+				// Merge points if required
+				if (AutomaticallyMerge()) CheckMergedVertices();
+				else if (CanMerge() && ConfirmMerge()) CheckMergedVertices();
+			}
+			else
+			{
+				// Cancelled: put every point back exactly where it started
+				foreach (var kv in originals) kv.Key.Move(kv.Value - kv.Key.Position);
+				foreach (var midpoint in solids.SelectMany(x => _vertices.TryGetValue(x, out var l) ? l.Points.Where(p => p.IsMidpoint) : new List<VertexPoint>()))
+				{
+					midpoint.DraggingPosition = midpoint.Position = (midpoint.MidpointStart.Position + midpoint.MidpointEnd.Position) / 2;
+				}
+			}
+
+			// Refresh the point lists once, now that the dialog is closed
+			UpdateSolids(solids);
+		}
+
+		private void ApplyScale(Dictionary<VertexPoint, Vector3> originals, Vector3 origin, List<VertexSolid> solids, float[] factors)
+		{
+			var factor = new Vector3(factors[0], factors[1], factors[2]);
+
+			// Scale each axis by its own factor, relative to the centre of the selection
+			foreach (var kv in originals)
+			{
+				var target = origin + (kv.Value - origin) * factor;
+				kv.Key.Move(target - kv.Key.Position);
+			}
+
+			foreach (var midpoint in solids.SelectMany(x => _vertices.TryGetValue(x, out var l) ? l.Points.Where(p => p.IsMidpoint) : new List<VertexPoint>()))
+			{
+				midpoint.DraggingPosition = midpoint.Position = (midpoint.MidpointStart.Position + midpoint.MidpointEnd.Position) / 2;
+			}
+
+			// Mark dirty and redraw only. The point lists are rebuilt once, when the dialog closes.
+			foreach (var solid in solids) solid.IsDirty = true;
+			Invalidate();
 		}
 
 		#endregion

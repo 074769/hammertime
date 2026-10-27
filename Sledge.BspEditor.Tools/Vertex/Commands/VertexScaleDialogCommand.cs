@@ -21,17 +21,8 @@ namespace Sledge.BspEditor.Tools.Vertex.Commands
 
 		public async Task Invoke(IContext context, CommandParameters parameters)
 		{
-			if (!context.TryGet("ActiveTool", out VertexTool tool)) return;
-
-			var scale = tool.GetSubTool(typeof(VertexScaleTool)) as VertexScaleTool;
-			if (scale == null) return;
-
-			// Activate the scale subtool, open its dialog directly (the dialog call blocks until it closes),
-			// then go back to whichever subtool was active before.
-			var previous = tool.CurrentSubTool;
-			tool.CurrentSubTool = scale;
-			scale.OpenScaleDialog();
-			if (previous != null && previous != scale) tool.CurrentSubTool = previous;
+			// The Point tool owns the vertex selection and handles this
+			await Oy.Publish("VertexTool:ScaleDialog");
 		}
 
 		public bool IsInContext(IContext context)
