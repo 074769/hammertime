@@ -5,7 +5,7 @@ using System.Windows.Forms;
 namespace Sledge.BspEditor.Tools.Vertex.Controls
 {
     /// <summary>
-    /// Per-axis scale dialog opened with Alt+E. Each axis takes a factor from 0 to 1 (1 = unchanged).
+    /// Per-axis scale dialog opened with Alt+E. Each axis takes a factor from 0 to 10 (1 = unchanged, below 1 shrinks, above 1 grows).
     /// Unlocked axes are linked and always share one value. A locked axis is not used for scaling:
     /// it is pinned to 1 and disabled until it is unlocked, and then it rejoins the shared value.
     /// </summary>
@@ -40,7 +40,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Controls
                     Location = new Point(40, y),
                     Size = new Size(80, 22),
                     Minimum = 0,
-                    Maximum = 1,
+                    Maximum = 10,
                     DecimalPlaces = 2,
                     Increment = 0.05m,
                     Value = 1m
