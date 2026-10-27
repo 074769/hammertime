@@ -156,11 +156,6 @@ namespace Sledge.Providers.Model.Mdl10
 				if (viewport.Camera.Type != CameraType.Perspective) return false;
 				return true;
 			}
-			else if (pipeline.Type == PipelineType.TexturedModelAdditive)
-			{
-				if (viewport.Camera.Type != CameraType.Perspective) return false;
-				return _model.HasAdditive;
-			}
 			return false;
 		}
 
