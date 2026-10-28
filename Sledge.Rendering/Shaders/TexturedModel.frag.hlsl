@@ -12,7 +12,6 @@ SamplerState Sampler;
 // GoldSrc studio texture flags (upper bits of the skin table entry, see MdlModel.GetLayerSet)
 static const uint F_Flatshade = 0x01;
 static const uint F_Fullbright = 0x04;
-static const uint F_NoMips = 0x08;
 static const uint F_Alpha = 0x10;
 static const uint F_Additive = 0x20;
 static const uint F_Masked = 0x40;
@@ -27,10 +26,7 @@ float4 main(FragmentIn input) : SV_Target0
 {
     uint f = input.fFlags;
 
-    // Sample both ways outside of any branch (derivatives need uniform control flow), then pick
-    float4 mipped = Texture.Sample(Sampler, input.fTexture);
-    float4 level0 = Texture.SampleLevel(Sampler, input.fTexture, 0);
-    float4 tex = (f & F_NoMips) ? level0 : mipped;
+    float4 tex = Texture.Sample(Sampler, input.fTexture);
 
     if ((f & F_GoldSrc) == 0)
     {

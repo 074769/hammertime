@@ -83,8 +83,9 @@ namespace Sledge.BspEditor.Rendering.Converters
 			// try and find the parent entity for render flags
 			// TODO: this code is extremely specific to Goldsource and should be abstracted away
 			var parentEntity = obj.FindClosestParent(x => x is Entity) as Entity;
-			// Unshaded mode ignores entity render effects (rendermode / renderamt / rendercolor)
-			if (!unshaded && parentEntity?.EntityData != null)
+			// Entity render effects (rendermode / renderamt / rendercolor) also apply in unshaded mode:
+			// only the lighting is removed (zero normal + tint scale below), the blending still works
+			if (parentEntity?.EntityData != null)
 			{
 				const int renderModeColor = 1;
 				const int renderModeTexture = 2;
