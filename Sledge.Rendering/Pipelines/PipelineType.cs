@@ -21,5 +21,7 @@
         ShadowOverlay,
 
         Overlay,
+
+        BeamAdditive,
     }
 }
