@@ -21,7 +21,8 @@ namespace Sledge.BspEditor.Rendering.Converters
 		{
 			var displayFlags = document.Map.Data.GetOne<DisplayFlags>();
 			var displayData = document.Map.Data.GetOne<DisplayData>() ?? new DisplayData();
-			var skybox = displayFlags?.ToggleSkybox == true;
+			// Needs a target buffer and a skybox name; the buffer can be missing while a rebuild is still running
+			var skybox = displayFlags?.ToggleSkybox == true && builder != null && !string.IsNullOrEmpty(displayData.SkyboxName);
 
 			if (skybox)
 			{

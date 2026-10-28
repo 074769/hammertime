@@ -30,7 +30,11 @@ namespace Sledge.BspEditor.Rendering.Converters
         {
 			var converter = _converters.FirstOrDefault(x=>x.Value is SkyboxConverter).Value;
             if (converter == null) return;
+            // Group 0 may not exist yet while an async rebuild is still in progress (it is cleared on full rebuilds).
+            // Create it so the sky can be added; the rebuild swaps group 0 later, which replaces this buffer.
+            builder.EnsureGroupExists(0);
             var buffer = builder.GetBufferForGroup(0);
+            if (buffer == null) return;
             await converter.Convert(buffer, document, null, resourceCollector);
 		}
 
