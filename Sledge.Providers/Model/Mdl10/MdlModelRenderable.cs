@@ -59,6 +59,12 @@ namespace Sledge.Providers.Model.Mdl10
 		private int _lastSequence = -1;
 		public int Sequence { get; set; }
 
+		/// <summary>
+		/// Animation speed multiplier from the entity's "framerate" keyvalue (default 1).
+		/// Applied on top of the sequence's own fps: 2 plays twice as fast, 0.5 half speed, 0 freezes.
+		/// </summary>
+		public float FramerateMultiplier { get; set; } = 1f;
+
 		public MdlModelRenderable(MdlModel model)
 		{
 			_model = model;
@@ -100,7 +106,9 @@ namespace Sledge.Providers.Model.Mdl10
 			if (currentSequence >= _model.Model.Sequences.Count) return;
 
 			var seq = _model.Model.Sequences[currentSequence];
-			var targetFps = 1000 / seq.Header.Framerate;
+			// Entity "framerate" scales the sequence's own fps
+			var fps = seq.Header.Framerate * Math.Max(FramerateMultiplier, 0f);
+			var targetFps = fps > 0 ? 1000 / fps : float.PositiveInfinity;
 			var diff = milliseconds - _lastFrameMillis;
 
 			_interframePercent += diff / targetFps;

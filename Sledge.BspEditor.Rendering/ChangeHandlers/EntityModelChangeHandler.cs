@@ -111,6 +111,7 @@ namespace Sledge.BspEditor.Rendering.ChangeHandlers
 
             entityModel.Renderable.Origin = modelDetails.Origin;
             entityModel.Renderable.Angles = modelDetails.Angles;
+            if (entityModel.Renderable is MdlModelRenderable mdl) mdl.FramerateMultiplier = modelDetails.Framerate;
         }
 
         private bool ModelDataMatches(EntityModel model, ModelDetails details)
@@ -162,6 +163,9 @@ namespace Sledge.BspEditor.Rendering.ChangeHandlers
                 var ang = entity.EntityData.GetVector3("angles");
                 if (ang.HasValue) details.Angles = ang.Value * (float) Math.PI / 180f;
 
+                // "framerate" is a multiplier on the model's animation speed (default 1)
+                details.Framerate = entity.EntityData.Get<float>("framerate", 1f);
+
                 return details;
             }
 
@@ -174,6 +178,7 @@ namespace Sledge.BspEditor.Rendering.ChangeHandlers
             public int Sequence { get; set; } = -1;
             public Vector3 Origin { get; set; }
             public Vector3 Angles { get; set; }
+            public float Framerate { get; set; } = 1f;
         }
     }
 }
