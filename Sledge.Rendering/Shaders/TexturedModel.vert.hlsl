@@ -13,6 +13,7 @@ struct FragmentIn
     float4 fPosition : SV_Position;
     float4 fNormal : NORMAL0;
     float3 fTexture : TEXCOORD0;
+    nointerpolation uint fFlags : TEXCOORD1;
 };
 
 cbuffer Projection
@@ -44,7 +45,7 @@ FragmentIn main(VertexIn input)
     FragmentIn output;
 
     float4 position = float4(input.Position, 1);
-    float4 normal = float4(input.Normal, 1);
+    float4 normal = float4(input.Normal, 0);
     
     matrix bone = transpose(uTransforms[input.Bone.x]);
     position = mul(position, bone);
@@ -56,10 +57,14 @@ FragmentIn main(VertexIn input)
     float4 viewportPos = mul(cameraPos, tProjection);
 
     output.fPosition = viewportPos;
-    output.fNormal = normal;
+    // World-space normal (bone, then entity transform) for the fragment shader lighting
+    float4 worldNormal = mul(normal, tModel);
+    output.fNormal = float4(normalize(worldNormal.xyz), 0);
 
-    uint layer = uLayers[input.TextureLayer / 4][input.TextureLayer % 4];
-    output.fTexture = float3(input.Texture, layer);
+    // Skin table entries: low 8 bits = texture layer, upper bits = GoldSrc texture flags (0 for other engines)
+    uint packed = uLayers[input.TextureLayer / 4][input.TextureLayer % 4];
+    output.fTexture = float3(input.Texture, packed & 0xFFu);
+    output.fFlags = packed >> 8;
 
     return output;
 }

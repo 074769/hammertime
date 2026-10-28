@@ -138,9 +138,19 @@ namespace Sledge.Providers.Model.Mdl10
 			);
 		}
 
+		private class OriginLocation : ILocation
+		{
+			public Vector3 Location { get; }
+			public OriginLocation(Vector3 location) => Location = location;
+		}
+
 		public IEnumerable<ILocation> GetLocationObjects(IPipeline pipeline, IViewport viewport)
 		{
-			yield break;
+			// The blended passes are drawn from the sorted transparent list, which only contains location objects
+			if (pipeline.Type == PipelineType.TexturedModelAdditive || pipeline.Type == PipelineType.TexturedModelAlpha)
+			{
+				yield return new OriginLocation(Origin);
+			}
 		}
 
 		public bool ShouldRender(IPipeline pipeline, IViewport viewport)
@@ -155,6 +165,16 @@ namespace Sledge.Providers.Model.Mdl10
 			{
 				if (viewport.Camera.Type != CameraType.Perspective) return false;
 				return true;
+			}
+			else if (pipeline.Type == PipelineType.TexturedModelAdditive)
+			{
+				if (viewport.Camera.Type != CameraType.Perspective) return false;
+				return _model.HasAdditive;
+			}
+			else if (pipeline.Type == PipelineType.TexturedModelAlpha)
+			{
+				if (viewport.Camera.Type != CameraType.Perspective) return false;
+				return _model.HasAlpha;
 			}
 			return false;
 		}
@@ -187,7 +207,7 @@ namespace Sledge.Providers.Model.Mdl10
 
 		public void Render(RenderContext context, IPipeline pipeline, IViewport viewport, CommandList cl, ILocation locationObject)
 		{
-			//
+			Render(context, pipeline, viewport, cl);
 		}
 
 		public void DestroyResources()

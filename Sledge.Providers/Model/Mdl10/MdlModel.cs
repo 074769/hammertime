@@ -35,6 +35,24 @@ namespace Sledge.Providers.Model.Mdl10
 		private uint _numWireframeIndices;
 		private uint[][] _skins;
 
+		// Which pass a mesh is drawn in, depends on the texture the active skin gives it
+		private enum ModelPass : byte { Opaque, Additive, Alpha }
+
+		private struct MeshRange
+		{
+			public uint Start;
+			public uint Count;
+			public int SkinRef;
+		}
+
+		private MeshRange[][][] _meshRanges;
+		private ModelPass[][] _passBySkin;
+
+		/// <summary>True when any texture has the Additive flag (and isn't an Alpha texture).</summary>
+		public bool HasAdditive { get; private set; }
+		/// <summary>True when any texture has the Alpha (index alpha) flag.</summary>
+		public bool HasAlpha { get; private set; }
+
 		private string TextureName => $"{nameof(MdlModel)}::{_guid}";
 
 		public MdlModel(MdlFile model)
@@ -98,7 +116,7 @@ namespace Sledge.Providers.Model.Mdl10
 			return result;
 		}
 
-		private static Bitmap CreateBitmap(int width, int height, byte[] data, byte[] palette, bool lastTextureIsTransparent)
+		private static Bitmap CreateBitmap(int width, int height, byte[] data, byte[] palette, bool lastTextureIsTransparent, bool indexAlpha)
 		{
 			var bmp = new Bitmap(width, height, PixelFormat.Format8bppIndexed);
 
@@ -110,7 +128,17 @@ namespace Sledge.Providers.Model.Mdl10
 				pal.Entries[j] = Color.FromArgb(255, palette[k], palette[k + 1], palette[k + 2]);
 			}
 
-			if (lastTextureIsTransparent)
+			if (indexAlpha)
+			{
+				// GoldSrc "alpha" textures: every pixel uses the colour of the last palette entry,
+				// the palette index is the opacity
+				var baseColour = pal.Entries[byte.MaxValue];
+				for (var j = 0; j <= byte.MaxValue; j++)
+				{
+					pal.Entries[j] = Color.FromArgb(j, baseColour.R, baseColour.G, baseColour.B);
+				}
+			}
+			else if (lastTextureIsTransparent)
 			{
 				pal.Entries[pal.Entries.Length - 1] = Color.Transparent;
 			}
@@ -127,7 +155,7 @@ namespace Sledge.Providers.Model.Mdl10
 		{
 			if (!Model.Textures.Any()) return new List<Rectangle>();
 			// Combine all the textures into one long texture
-			var textures = Model.Textures.Select(x => CreateBitmap(x.Header.Width, x.Header.Height, x.Data, x.Palette, x.Header.Flags.HasFlag(TextureFlags.Masked))).ToList();
+			var textures = Model.Textures.Select(x => CreateBitmap(x.Header.Width, x.Header.Height, x.Data, x.Palette, x.Header.Flags.HasFlag(TextureFlags.Masked), x.Header.Flags.HasFlag(TextureFlags.Alpha))).ToList();
 
 			var width = textures.Max(x => x.Width);
 			var height = textures.Max(x => x.Height);
@@ -167,9 +195,29 @@ namespace Sledge.Providers.Model.Mdl10
 			_buffer = engine.CreateBuffer();
 			Init();
 		}
+		private uint PackLayer(int texture)
+		{
+			var flags = texture >= 0 && texture < Model.Textures.Count ? (int)Model.Textures[texture].Header.Flags : 0;
+			return (uint)texture | ((uint)((flags & 0x7F) | 0x80) << 8);
+		}
+
+		private ModelPass GetPass(int texture)
+		{
+			if (texture < 0 || texture >= Model.Textures.Count) return ModelPass.Opaque;
+			var flags = Model.Textures[texture].Header.Flags;
+			if (flags.HasFlag(TextureFlags.Alpha)) return ModelPass.Alpha;
+			if (flags.HasFlag(TextureFlags.Additive)) return ModelPass.Additive;
+			return ModelPass.Opaque;
+		}
+
 		private void Init()
 		{
-			_skins = Model.Skins.Select(x => x.Textures.Select(x => (uint)x).ToArray()).ToArray();
+			// Skin table entries carry the GoldSrc texture flags in the bits above the layer index,
+			// bit 7 of the flags marks it as a GoldSrc entry for the shader
+			_skins = Model.Skins.Select(x => x.Textures.Select(t => PackLayer(t)).ToArray()).ToArray();
+			_passBySkin = Model.Skins.Select(x => x.Textures.Select(t => GetPass(t)).ToArray()).ToArray();
+			HasAlpha = Model.Textures.Any(t => t.Header.Flags.HasFlag(TextureFlags.Alpha));
+			HasAdditive = Model.Textures.Any(t => t.Header.Flags.HasFlag(TextureFlags.Additive) && !t.Header.Flags.HasFlag(TextureFlags.Alpha));
 
 			var texHeight = _originalRectangles.Max(x => x.Bottom);
 			var texWidth = _originalRectangles.Max(x => x.Right);
@@ -181,6 +229,7 @@ namespace Sledge.Providers.Model.Mdl10
 
 
 			var _bodyPartIndices1 = new uint[Model.BodyParts.Count][];
+			var meshRanges = new MeshRange[Model.BodyParts.Count][][];
 
 			uint vi = 0;
 			var skinMax = 0;
@@ -190,14 +239,17 @@ namespace Sledge.Providers.Model.Mdl10
 			{
 				var part = Model.BodyParts[bpi];
 				_bodyPartIndices1[bpi] = new uint[part.Models.Length];
+				meshRanges[bpi] = new MeshRange[part.Models.Length][];
 
 				for (var mdlIndex = 0; mdlIndex < part.Models.Length; mdlIndex++)
 				{
 					var model = part.Models[mdlIndex];
 					_bodyPartIndices1[bpi][mdlIndex] = (uint)model.Meshes.Sum(x => x.Vertices.Length);
+					var ranges = new List<MeshRange>();
 					foreach (var mesh in model.Meshes)
 					{
 						var texId = skin[mesh.Header.SkinRef];
+						ranges.Add(new MeshRange { Start = vi, Count = (uint)mesh.Vertices.Length, SkinRef = mesh.Header.SkinRef });
 						for (var i = 0; i < mesh.Vertices.Length; i++)
 						{
 							var x = mesh.Vertices[i];
@@ -221,10 +273,12 @@ namespace Sledge.Providers.Model.Mdl10
 							vi++;
 						}
 					}
+					meshRanges[bpi][mdlIndex] = ranges.ToArray();
 				}
 
 			}
 			_bodyPartIndices = _bodyPartIndices1;
+			_meshRanges = meshRanges;
 
 			var flatIndices = new uint[vi + wireframeIndices.Count];
 			var currentIndexCount = 0;
@@ -242,24 +296,31 @@ namespace Sledge.Providers.Model.Mdl10
 		{
 			_buffer.Bind(cl, 0);
 
-			if (pipeline.Type == PipelineType.TexturedModel)
+			if (pipeline.Type == PipelineType.TexturedModel
+			    || pipeline.Type == PipelineType.TexturedModelAdditive
+			    || pipeline.Type == PipelineType.TexturedModelAlpha)
 			{
 				_textureResource.BindTo(cl, 1);
-				uint ci = 0;
+
+				var pass = pipeline.Type == PipelineType.TexturedModelAdditive ? ModelPass.Additive
+					: pipeline.Type == PipelineType.TexturedModelAlpha ? ModelPass.Alpha
+					: ModelPass.Opaque;
+				var passes = _passBySkin[skinId % _passBySkin.Length];
 
 				var bodyPartId = bodyGroup;
 
-				foreach (var bpi in _bodyPartIndices)
+				for (var bpi = 0; bpi < _bodyPartIndices.Length; bpi++)
 				{
-					var body = bodyPartId % bpi.Length;
-					bodyPartId /= bpi.Length;
-					for (var model_index = 0; model_index < bpi.Length; model_index++)
-					{
-						var model = bpi[model_index];
+					var count = _bodyPartIndices[bpi].Length;
+					var body = bodyPartId % count;
+					bodyPartId /= count;
 
-						if (model_index == body)
-							cl.DrawIndexed(model, 1, ci, 0, 0);
-						ci += model;
+					foreach (var mesh in _meshRanges[bpi][body])
+					{
+						if (mesh.Count == 0) continue;
+						var meshPass = mesh.SkinRef >= 0 && mesh.SkinRef < passes.Length ? passes[mesh.SkinRef] : ModelPass.Opaque;
+						if (meshPass != pass) continue;
+						cl.DrawIndexed(mesh.Count, 1, mesh.Start, 0, 0);
 					}
 				}
 			}

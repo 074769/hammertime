@@ -15,6 +15,8 @@
 
         WireframeModel,
         TexturedModel,
+        TexturedModelAdditive,
+        TexturedModelAlpha,
 
         ShadowOverlay,
 
