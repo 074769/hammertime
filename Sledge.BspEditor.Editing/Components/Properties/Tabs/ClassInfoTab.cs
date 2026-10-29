@@ -173,8 +173,12 @@ namespace Sledge.BspEditor.Editing.Components.Properties.Tabs
 		{
 			_document.TryGetTarget(out var mapDocument);
 			var strings = _clipboard.Value.GetPastedText(mapDocument);
+			// Nothing text-like on the clipboard, GetPastedText returns null
+			if (string.IsNullOrEmpty(strings)) return;
+			if (_gameData == null) _gameData = new GameData();
+
 			var content = strings.Split('|');
-			if (content.Length > 0 && content[0].StartsWith("classname"))
+			if (content.Length >= 2 && content[0].StartsWith("classname"))
 			{
 				var classname = content[0].Split(':')[1];
 
@@ -191,6 +195,7 @@ namespace Sledge.BspEditor.Editing.Components.Properties.Tabs
 				foreach (var kv in newContent)
 				{
 					var splitvalue = kv.Split(':');
+					if (splitvalue.Length < 2) continue;
 					var newKey = newClass.Properties.FirstOrDefault(x => (x.Name ?? "").ToLower() == splitvalue[0]);
 
 					// Brand new key, mark it as added and add it to the list.
