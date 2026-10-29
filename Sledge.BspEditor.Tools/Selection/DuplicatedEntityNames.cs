@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Primitives.MapObjectData;
 using Sledge.BspEditor.Primitives.MapObjects;
+using MapEntity = Sledge.BspEditor.Primitives.MapObjects.Entity;
 
 namespace Sledge.BspEditor.Tools.Selection
 {
@@ -26,20 +27,20 @@ namespace Sledge.BspEditor.Tools.Selection
 
             // Every targetname currently in the map (originals included) is taken
             var taken = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var e in document.Map.Root.Find(x => x is Entity).OfType<Entity>())
+            foreach (var e in document.Map.Root.Find(x => x is MapEntity).OfType<MapEntity>())
             {
                 var name = GetName(e);
                 if (name != null) taken.Add(name);
             }
 
             // Pair up original and copy entities
-            var pairs = new List<KeyValuePair<Entity, Entity>>();
+            var pairs = new List<KeyValuePair<MapEntity, MapEntity>>();
             for (var i = 0; i < originals.Count; i++)
             {
-                var oe = originals[i].FindAll().OfType<Entity>().ToList();
-                var ce = copies[i].FindAll().OfType<Entity>().ToList();
+                var oe = originals[i].FindAll().OfType<MapEntity>().ToList();
+                var ce = copies[i].FindAll().OfType<MapEntity>().ToList();
                 if (oe.Count != ce.Count) continue;
-                for (var j = 0; j < oe.Count; j++) pairs.Add(new KeyValuePair<Entity, Entity>(oe[j], ce[j]));
+                for (var j = 0; j < oe.Count; j++) pairs.Add(new KeyValuePair<MapEntity, MapEntity>(oe[j], ce[j]));
             }
 
             // Give each named duplicate a new unique name, remembering old -> new for targets
@@ -73,7 +74,7 @@ namespace Sledge.BspEditor.Tools.Selection
             }
         }
 
-        private static string GetName(Entity entity)
+        private static string GetName(MapEntity entity)
         {
             var data = entity.EntityData;
             if (data == null || !data.Properties.TryGetValue("targetname", out var name)) return null;
