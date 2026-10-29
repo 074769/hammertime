@@ -18,6 +18,7 @@ using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.BspEditor.Rendering.Resources;
 using Sledge.BspEditor.Rendering.Viewport;
 using Sledge.BspEditor.Tools.Draggable;
+using Sledge.BspEditor.Tools.DragSelect;
 using Sledge.BspEditor.Tools.Properties;
 using Sledge.Common.Shell;
 using Sledge.Common.Shell.Components;
@@ -50,6 +51,7 @@ namespace Sledge.BspEditor.Tools.Brush
 		private bool _updatePreview;
 		private List<IMapObject> _preview;
 		private BoxDraggableState box;
+		private readonly LastSelectionBounds _lastSelection = new LastSelectionBounds();
 		private IBrush _activeBrush;
 
 		public bool RoundVertices { get; set; } = true;
@@ -93,6 +95,8 @@ namespace Sledge.BspEditor.Tools.Brush
 			box.BoxColour = Color.Turquoise;
 			box.FillColour = Color.FromArgb(_selectionBoxBackgroundOpacity, Color.Green);
 			box.State.Changed += BoxChanged;
+			// Span the hidden axis to the last selected object, like the Vertex tool does
+			box.HiddenAxisBounds = () => _lastSelection.Get();
 			States.Add(box);
 			this.Usage = ToolUsage.Both;
 		}
@@ -103,9 +107,15 @@ namespace Sledge.BspEditor.Tools.Brush
 			{
 				if (x.Document == GetDocument())
 				{
+					_lastSelection.Update(GetDocument());
 					TextureSelected();
 				}
 				return Task.FromResult(0);
+			});
+			yield return Oy.Subscribe<IDocument>("MapDocument:SelectionChanged", x =>
+			{
+				var document = GetDocument();
+				if (x == document) _lastSelection.Update(document);
 			});
 			yield return Oy.Subscribe<object>("BrushTool:ValuesChanged", x =>
 			{
