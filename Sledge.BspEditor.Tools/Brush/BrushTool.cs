@@ -145,6 +145,9 @@ namespace Sledge.BspEditor.Tools.Brush
 			var document = GetDocument();
 			if (document == null) return;
 
+			// Subscriptions only run while this tool is active, so pick up whatever was selected in another tool (including point entities)
+			_lastSelection.Update(document);
+
 			var sel = document.Selection.OfType<Solid>().ToList();
 			if (sel.Any())
 			{

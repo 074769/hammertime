@@ -399,6 +399,8 @@ namespace Sledge.BspEditor.Tools.Selection
 			var document = GetDocument();
 			if (document != null)
 			{
+				// Remember whatever is selected now, including selections made in other tools
+				_lastSelection.Update(document);
 				IgnoreGroupingChanged(document);
 				SelectionChanged(document);
 			}
