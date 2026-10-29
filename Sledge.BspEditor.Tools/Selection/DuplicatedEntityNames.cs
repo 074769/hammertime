@@ -2,20 +2,38 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using GameDataDef = Sledge.DataStructures.GameData.GameData;
+using VarType = Sledge.DataStructures.GameData.VariableType;
 using Sledge.BspEditor.Documents;
-using Sledge.BspEditor.Primitives.MapObjectData;
 using Sledge.BspEditor.Primitives.MapObjects;
+using Sledge.BspEditor.Tools.Widgets;
 using MapEntity = Sledge.BspEditor.Primitives.MapObjects.Entity;
 
 namespace Sledge.BspEditor.Tools.Selection
 {
     /// <summary>
     /// Gives entities that were duplicated (Ctrl+Shift+drag) a unique targetname, and re-points
-    /// the "target" of duplicated entities at the duplicate of their target when that target
-    /// was duplicated as well. Must be called before the copies are attached to the map.
+    /// references to duplicated entities (target, killtarget, LightningStart, ...) at the new names.
+    /// Must be called before the copies are attached to the map.
     /// </summary>
     internal static class DuplicatedEntityNames
     {
+        /// <summary>
+        /// Keys that reference another entity's targetname, used when the FGD does not describe the entity class.
+        /// </summary>
+        private static readonly string[] FallbackReferenceKeys =
+        {
+            "target", "killtarget", "pathtarget", "master", "LightningStart", "LightningEnd", "LaserTarget",
+        };
+
+        /// <summary>
+        /// Keys of an entity that are never treated as references to other entities.
+        /// </summary>
+        private static readonly HashSet<string> NonTargetKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "targetname", "classname", "origin", "angles", "spawnflags", "model", "message", "netname"
+        };
+
         private static readonly Regex LastNumber = new Regex("[0-9]+(?![^0-9]*[0-9])");
 
         /// <param name="document">The document the originals belong to.</param>
@@ -24,6 +42,9 @@ namespace Sledge.BspEditor.Tools.Selection
         public static void Apply(MapDocument document, IList<IMapObject> originals, IList<IMapObject> copies)
         {
             if (originals.Count != copies.Count) return;
+
+            // Game data (FGD) tells us which properties reference other entities. Null is fine, we fall back to a key list.
+            MotionWidgetDrawing.TryGetGameData(document, out var gameData);
 
             // Every targetname currently in the map (originals included) is taken
             var taken = new HashSet<string>(StringComparer.Ordinal);
@@ -43,7 +64,7 @@ namespace Sledge.BspEditor.Tools.Selection
                 for (var j = 0; j < oe.Count; j++) pairs.Add(new KeyValuePair<MapEntity, MapEntity>(oe[j], ce[j]));
             }
 
-            // Give each named duplicate a new unique name, remembering old -> new for targets
+            // Give each named duplicate a new unique name, remembering old -> new for references
             var renames = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var pair in pairs)
             {
@@ -59,19 +80,51 @@ namespace Sledge.BspEditor.Tools.Selection
 
             if (renames.Count == 0) return;
 
-            // Re-point targets whose target was duplicated too; untouched targets keep their name
+            // Re-point references to duplicated entities; references to entities that were not duplicated keep their name
             foreach (var pair in pairs)
             {
                 var data = pair.Value.EntityData;
-                if (data == null || !data.Properties.TryGetValue("target", out var target)) continue;
-                if (target == null) continue;
+                if (data == null) continue;
 
-                var key = target.Trim();
-                if (key.Length > 0 && renames.TryGetValue(key, out var newTarget))
+                foreach (var key in data.Properties.Keys.ToList())
                 {
-                    data.Properties["target"] = newTarget;
+                    if (!IsReferenceKey(gameData, data.Name, key)) continue;
+                    var value = data.Properties[key];
+                    if (value != null && renames.TryGetValue(value.Trim(), out var newValue))
+                    {
+                        data.Properties[key] = newValue;
+                    }
+                }
+
+                // multi_manager uses the targetnames of its targets as its keys (values are delays)
+                if (string.Equals(data.Name, "multi_manager", StringComparison.OrdinalIgnoreCase))
+                {
+                    foreach (var key in data.Properties.Keys.ToList())
+                    {
+                        if (NonTargetKeys.Contains(key) || !renames.TryGetValue(key.Trim(), out var newKey)) continue;
+                        if (data.Properties.ContainsKey(newKey)) continue;
+                        var delay = data.Properties[key];
+                        data.Properties.Remove(key);
+                        data.Properties[newKey] = delay;
+                    }
                 }
             }
+        }
+
+        /// <summary>
+        /// A key is a reference if it is one of the known reference keys, or if the FGD types it as a
+        /// target source or destination. The entity's own targetname is never a reference (renamed separately).
+        /// </summary>
+        private static bool IsReferenceKey(GameDataDef gameData, string className, string key)
+        {
+            if (string.Equals(key, "targetname", StringComparison.OrdinalIgnoreCase)) return false;
+            if (FallbackReferenceKeys.Any(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase))) return true;
+
+            var cls = (gameData != null && !string.IsNullOrEmpty(className)) ? gameData.GetClass(className) : null;
+            if (cls == null) return false;
+
+            return cls.Properties.Any(p => string.Equals(p.Name, key, StringComparison.OrdinalIgnoreCase)
+                                           && (p.VariableType == VarType.TargetSource || p.VariableType == VarType.TargetDestination));
         }
 
         private static string GetName(MapEntity entity)
