@@ -113,7 +113,6 @@ namespace Sledge.Rendering.Engine
 
 			AddPipeline(new TexturedAlphaPipeline());
 			AddPipeline(new TexturedAdditivePipeline());
-			AddPipeline(new BeamAdditivePipeline());
 			AddPipeline(new BillboardAlphaPipeline());
 //#if DEBUG
 //			AddPipeline(new SwapchainShadowOverlay(shadowdepth.NearShadowResourceTexture));

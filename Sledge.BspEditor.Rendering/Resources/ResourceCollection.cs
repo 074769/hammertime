@@ -146,44 +146,6 @@ namespace Sledge.BspEditor.Rendering.Resources
 		}
 
 		/// <summary>
-		/// Creates a renderable that draws env_beam / env_laser beams using the given sprite as the beam texture.
-		/// </summary>
-		public async Task<BeamRenderable> CreateBeamRenderable(IEnvironment environment, string name)
-		{
-			EnsureEnvironment(environment);
-
-			var rList = _resources[environment.ID];
-			var tList = _textures[environment.ID];
-
-			var tc = await environment.GetTextureCollection();
-			var item = await tc.GetTextureItem(name);
-			if (item == null) return null;
-
-			using var ss = tc.GetStreamSource();
-			var texture = await UploadTexture(environment, item, ss) as Texture;
-			if (texture == null) return null;
-			tList.Add(item.Name);
-
-			var resource = new BeamRenderable(texture);
-			_engine.Value.CreateResource(resource);
-			rList.Add(resource);
-			return resource;
-		}
-
-		/// <summary>
-		/// Destroy a beam renderable and remove it from the resource collection.
-		/// </summary>
-		public void DestroyBeamRenderable(IEnvironment environment, BeamRenderable renderable)
-		{
-			if (renderable == null) return;
-			EnsureEnvironment(environment);
-			var rlist = _resources[environment.ID];
-
-			_engine.Value.DestroyResource(renderable);
-			rlist.Remove(renderable);
-		}
-
-		/// <summary>
 		/// Destroy a model renderable and remove it from the resource collection.
 		/// This will NOT destroy the associated model.
 		/// </summary>
