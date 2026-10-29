@@ -56,8 +56,6 @@ namespace Sledge.BspEditor.Tools.Selection
 		public static readonly Capability SelectToolCapability = Capability.Create("SelectTool");
 
 		private readonly BoxDraggableState _emptyBox;
-		private readonly LastSelectionBounds _lastSelection = new LastSelectionBounds();
-		private static readonly Box DefaultHiddenAxisSpan = new Box(Vector3.Zero, new Vector3(64, 64, 64));
 		private readonly SelectionBoxDraggableState _selectionBox;
 
 		private IMapObject ChosenItemFor3DSelection { get; set; }
@@ -156,8 +154,6 @@ namespace Sledge.BspEditor.Tools.Selection
 			_emptyBox.BoxColour = Color.Yellow;
 			_emptyBox.FillColour = Color.FromArgb(SelectionBoxBackgroundOpacity, Color.White);
 			_emptyBox.State.Changed += EmptyBoxChanged;
-			// Span the hidden axis to the last selected object (or a 64 unit span before anything was selected)
-			_emptyBox.HiddenAxisBounds = () => _lastSelection.Get() ?? DefaultHiddenAxisSpan;
 			_emptyBox.DragEnded += (sender, args) =>
 			{
 				var document = GetDocument();
@@ -446,7 +442,6 @@ namespace Sledge.BspEditor.Tools.Selection
 				var box = document.Selection.GetSelectionBoundingBox();
 				_selectionBox.State.Start = box.Start;
 				_selectionBox.State.End = box.End;
-				_lastSelection.Update(document);
 				_selectionBox.State.Action = BoxAction.Drawn;
 				// Do NOT reset the rotation origin here. This runs on every object change,
 				// including the change a rotation/move produces, which would drag the pivot
