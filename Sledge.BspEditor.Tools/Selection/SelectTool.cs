@@ -1150,7 +1150,11 @@ namespace Sledge.BspEditor.Tools.Selection
 						}
 
 						return mo;
-					});
+					})
+					.ToList();
+
+				// Ctrl+Shift duplicates give named entities unique names and re-point targets that were duplicated too
+				if (KeyboardState.Ctrl) DuplicatedEntityNames.Apply(document, parents, copies);
 
 				// Deselect the originals, we want to move the selection to the new nodes
 				transaction.Add(new Deselect(document.Selection));

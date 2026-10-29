@@ -159,6 +159,8 @@ namespace Sledge.BspEditor.Tools.Selection
 					transaction.Add(new Deselect(document.Selection));
 					var matrix = transformation.Value;
 					var clone = objects.Select(x => (IMapObject)x.Copy(document.Map.NumberGenerator)).ToList();
+					// Ctrl+Shift duplicates rename named entities; plain Shift duplicates keep the names
+					if (KeyboardState.Ctrl) DuplicatedEntityNames.Apply(document, objects, clone);
 					transaction.Add(new Attach(document.Map.Root.ID, clone));
 					var transformOperation = new Transform(matrix, clone);
 					transaction.Add(transformOperation);
