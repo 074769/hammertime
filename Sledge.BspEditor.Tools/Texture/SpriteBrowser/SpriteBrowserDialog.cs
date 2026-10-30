@@ -16,7 +16,7 @@ namespace Sledge.BspEditor.Tools.Texture.SpriteBrowser
 	/// <summary>
 	/// A browser for .spr sprites: folder tree, search across all folders, a list or thumbnail grid, and a preview
 	/// (zoom, pan, background, frame stepping and playback) with sprite information. The "Texture browser" button hands
-	/// over to the WAD-style texture browser (the dialog closes with <see cref="DialogResult.Retry"/> and
+	/// over to the model browser (the dialog closes with <see cref="DialogResult.Retry"/> and
 	/// <see cref="SwitchRequested"/> set).
 	/// </summary>
 	public class SpriteBrowserDialog : Form
@@ -110,7 +110,7 @@ namespace Sledge.BspEditor.Tools.Texture.SpriteBrowser
 			// Top bar: the path of the selected sprite, the texture browser switch, and the grid / list toggle
 			_top = new Panel { Dock = DockStyle.Top, Height = 34 };
 			_pathBox = new TextBox { ReadOnly = true, Left = 8, Top = 7 };
-			_switchButton = new Button { Text = "Texture browser", Top = 5, Width = 112, Height = 24 };
+			_switchButton = new Button { Text = "Model browser", Top = 5, Width = 112, Height = 24 };
 			_switchButton.Click += (s, e) =>
 			{
 				SwitchRequested = true;
@@ -363,7 +363,7 @@ namespace Sledge.BspEditor.Tools.Texture.SpriteBrowser
 		{
 			if (_top == null || _bottom == null) return;
 
-			// Top: [ path ............ ] [Texture browser] [Grid view]
+			// Top: [ path ............ ] [Model browser] [Grid view]
 			_gridToggle.Left = Math.Max(8, _top.ClientSize.Width - _gridToggle.Width - 8);
 			_switchButton.Left = Math.Max(8, _gridToggle.Left - _switchButton.Width - 6);
 			_pathBox.Width = Math.Max(50, _switchButton.Left - 16);

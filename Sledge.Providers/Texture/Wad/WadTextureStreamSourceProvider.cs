@@ -57,51 +57,66 @@ namespace Sledge.Providers.Texture.Wad
         {
             // Transparent textures are named like: {Name
             if (!name.StartsWith("{")) return bmp;
+            if (bmp.PixelFormat != PixelFormat.Format8bppIndexed) return bmp;
 
-            var palette = bmp.Palette;
+            var palette = bmp.Palette.Entries;
+            if (palette.Length == 0) return bmp;
+            var last = palette[palette.Length - 1];
 
             // Two transparency types: "blue" transparency and "decal" transparency
-            // Decal transparency is all greyscale and doesn't contain any of palette #255 colour
-            /*
-                var blueTransparency = false;
-                for (var i = 0; i < palette.Entries.Length - 1; i++)
-                {
-                    var color = palette.Entries[i];
-                    if (color.R != color.B || color.R != color.G || color.B != color.G)
-                    {
-                        blueTransparency = true;
-                        break;
-                    }
-                }*/
-
             // Can't be clever and detect the transparency type automatically - Goldsource is too unpredictable
             // decal.wad is hard-coded in the engine, so this is relatively safe, except for custom engines
             var blueTransparency = packageName.IndexOf("decal", StringComparison.CurrentCultureIgnoreCase) < 0;
 
+            // Work out the final colour of every palette index. This has to be done on the pixels: setting alpha on the
+            // palette of an 8bpp bitmap is ignored when it is drawn (GDI+ needs a palette flag that can't be set from here),
+            // which is why the transparent colour used to show up as a solid colour.
+            var lut = new Color[palette.Length];
             if (blueTransparency)
             {
-                // We found the last index, therefore it should be transparent
-                palette.Entries[palette.Entries.Length - 1] = Color.Transparent;
+                // Palette index 255 is the transparent one; it gets no colour at all so it can't bleed into the edges
+                for (var i = 0; i < palette.Length - 1; i++) lut[i] = Color.FromArgb(255, palette[i]);
+                lut[palette.Length - 1] = Color.FromArgb(0, 0, 0, 0);
             }
             else
             {
-                // If we didn't find the last index, we have a decal
-                var last = palette.Entries[palette.Entries.Length - 1];
+                // Decal: the greyscale value is the alpha, the colour is the last palette entry.
                 // If the first item is black, we need to flip the transparency calculation (I think...)
-                var isBlack = palette.Entries[0].R == 0 && palette.Entries[0].G == 0 && palette.Entries[0].B == 0;
-                for (var i = 0; i < palette.Entries.Length - 1; i++)
+                var isBlack = palette[0].R == 0 && palette[0].G == 0 && palette[0].B == 0;
+                for (var i = 0; i < palette.Length - 1; i++) lut[i] = Color.FromArgb(isBlack ? palette[i].R : 255 - palette[i].R, last);
+                lut[palette.Length - 1] = last;
+            }
+
+            // Build a proper 32bit image with an alpha channel
+            var width = bmp.Width;
+            var height = bmp.Height;
+            var clone = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+            var src = bmp.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.ReadOnly, PixelFormat.Format8bppIndexed);
+            var dst = clone.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+            try
+            {
+                var indices = new byte[width];
+                var row = new byte[width * 4];
+                for (var y = 0; y < height; y++)
                 {
-                    palette.Entries[i] = Color.FromArgb(isBlack ? palette.Entries[i].R : 255 - palette.Entries[i].R, last);
+                    System.Runtime.InteropServices.Marshal.Copy(IntPtr.Add(src.Scan0, y * src.Stride), indices, 0, width);
+                    for (var x = 0; x < width; x++)
+                    {
+                        var c = lut[Math.Min((int) indices[x], lut.Length - 1)];
+                        row[x * 4 + 0] = c.B;
+                        row[x * 4 + 1] = c.G;
+                        row[x * 4 + 2] = c.R;
+                        row[x * 4 + 3] = c.A;
+                    }
+                    System.Runtime.InteropServices.Marshal.Copy(row, 0, IntPtr.Add(dst.Scan0, y * dst.Stride), row.Length);
                 }
             }
-            bmp.Palette = palette;
-
-            // Copy the bitmap to a new one with a proper alpha channel
-            var clone = new Bitmap(bmp.Width, bmp.Height, PixelFormat.Format32bppArgb);
-            using (var g = System.Drawing.Graphics.FromImage(clone))
+            finally
             {
-                g.DrawImage(bmp, new Rectangle(0, 0, clone.Width, clone.Height));
+                bmp.UnlockBits(src);
+                clone.UnlockBits(dst);
             }
+
             bmp.Dispose();
             return clone;
         }

@@ -26,6 +26,11 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 
 		public IFile SelectedFile { get; private set; }
 
+		/// <summary>True if the user pressed the "Sprite browser" button (see <see cref="EnableSpriteBrowserSwitch"/>).</summary>
+		public bool SwitchRequested { get; private set; }
+
+		private Button _switchButton;
+
 		private readonly IFile _root;
 		private readonly IFile _modelsRoot;
 		private readonly bool _hasModelsFolder;
@@ -300,13 +305,37 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 			return bmp;
 		}
 
+		/// <summary>
+		/// Adds a "Sprite browser" button to the top bar. It closes this browser with <see cref="DialogResult.Retry"/> and
+		/// <see cref="SwitchRequested"/> set so the caller can open the sprite browser instead. Used when picking sprites.
+		/// </summary>
+		public void EnableSpriteBrowserSwitch()
+		{
+			if (_switchButton != null) return;
+			_switchButton = new Button { Text = "Sprite browser", Top = 5, Width = 112, Height = 24 };
+			_switchButton.Click += (s, e) =>
+			{
+				SwitchRequested = true;
+				DialogResult = DialogResult.Retry;
+				Close();
+			};
+			_top.Controls.Add(_switchButton);
+			LayoutBars();
+		}
+
 		private void LayoutBars()
 		{
 			if (_top == null || _bottom == null) return;
 
-			// Top: [ path ........................ ] [Grid view]
+			// Top: [ path ........................ ] [Sprite browser] [Grid view]
 			_gridToggle.Left = Math.Max(8, _top.ClientSize.Width - _gridToggle.Width - 8);
-			_pathBox.Width = Math.Max(50, _gridToggle.Left - 16);
+			var pathRight = _gridToggle.Left;
+			if (_switchButton != null)
+			{
+				_switchButton.Left = Math.Max(8, _gridToggle.Left - _switchButton.Width - 6);
+				pathRight = _switchButton.Left;
+			}
+			_pathBox.Width = Math.Max(50, pathRight - 16);
 
 			// Bottom: Search: [....] 123 models ................ [OK] [Cancel]
 			var w = _bottom.ClientSize.Width;

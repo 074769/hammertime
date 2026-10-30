@@ -5,6 +5,7 @@ using System.Windows.Forms;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Editing.Components.Properties;
 using Sledge.BspEditor.Editing.Components.Properties.SmartEdit;
+using Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser;
 using Sledge.Common.Translations;
 using Sledge.DataStructures.GameData;
 using Sledge.FileSystem;
@@ -13,9 +14,8 @@ using Sledge.Shell;
 namespace Sledge.BspEditor.Tools.Texture.SpriteBrowser
 {
 	/// <summary>
-	/// The editor for sprite (.spr) keyvalues. Browse opens the sprite browser, which can hand over to the texture
-	/// browser (and back) with a button; the last one used is the one that opens next time. Both give the same
-	/// value ("sprites/name.spr").
+	/// The editor for sprite (.spr) keyvalues. Browse opens the sprite browser, which can hand over to the model
+	/// browser (and back) with a button; the last one used is the one that opens next time.
 	/// </summary>
 	[Export(typeof(IObjectPropertyEditor))]
 	public class SmartEditSpriteBrowser : SmartEditControl
@@ -64,51 +64,56 @@ namespace Sledge.BspEditor.Tools.Texture.SpriteBrowser
 		{
 			if (!_document.TryGetTarget(out var doc)) return;
 
-			var useTextures = SpriteBrowserSettings.UseTextureBrowser;
+			var root = doc.Environment.Root;
+			var useModels = SpriteBrowserSettings.UseModelBrowser;
 			while (true)
 			{
-				if (!useTextures)
+				if (!useModels)
 				{
-					using (var sb = new SpriteBrowserDialog(doc.Environment.Root, _textBox.Text))
+					using (var sb = new SpriteBrowserDialog(root, _textBox.Text))
 					{
 						sb.ShowDialog();
 						if (sb.SwitchRequested)
 						{
-							useTextures = true;
-							SpriteBrowserSettings.UseTextureBrowser = true;
+							useModels = true;
 							continue;
 						}
 
-						SpriteBrowserSettings.UseTextureBrowser = false;
 						if (sb.SelectedPath != null) _textBox.Text = sb.SelectedPath;
 					}
 				}
 				else
 				{
-					using (var tb = new TextureBrowser(doc))
+					using (var mb = new ModelBrowserDialog(root, _textBox.Text))
 					{
-						await tb.Initialise(_translation.Value);
-						var tc = await doc.Environment.GetTextureCollection();
-						await tb.SetTextureList(tc.GetSpriteTextures());
-						tb.SetSelectedTextures(new[] { _textBox.Text });
-						tb.EnableSpriteBrowserSwitch();
-						tb.ShowDialog();
-						if (tb.SwitchToSpriteBrowser)
+						mb.EnableSpriteBrowserSwitch();
+						mb.ShowDialog();
+						if (mb.SwitchRequested)
 						{
-							useTextures = false;
-							SpriteBrowserSettings.UseTextureBrowser = false;
+							useModels = false;
 							continue;
 						}
 
-						SpriteBrowserSettings.UseTextureBrowser = true;
-						if (tb.SelectedTexture != null) _textBox.Text = tb.SelectedTexture;
+						if (mb.SelectedFile != null) _textBox.Text = GetGamePath(mb.SelectedFile);
 					}
 				}
 
 				// Remember which browser was used last
+				SpriteBrowserSettings.UseModelBrowser = useModels;
 				LogicAndTrick.Oy.Oy.Publish("Settings:Save");
 				return;
 			}
+		}
+
+		private static string GetGamePath(IFile file)
+		{
+			var path = "";
+			while (file != null && !(file is RootFile))
+			{
+				path = "/" + file.Name + path;
+				file = file.Parent;
+			}
+			return path.TrimStart('/');
 		}
 
 		protected override string GetName()

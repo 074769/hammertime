@@ -150,6 +150,9 @@ namespace Sledge.BspEditor.Rendering.Converters
 				var tintModifier = new Vector4(1, 1, 1, opacity);
 				var extraFlags = t == null ? VertexFlags.FlatColour : VertexFlags.None;
 
+				// "{" textures are alpha tested: the engine cuts out the transparent (palette 255) pixels on any brush
+				if (t != null && face.Texture.Name.StartsWith("{")) extraFlags |= VertexFlags.AlphaTested;
+
 				var offs = vi;
 				var numFaceVerts = (uint)face.Vertices.Count;
 

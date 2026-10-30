@@ -6,14 +6,14 @@ namespace Sledge.BspEditor.Tools.Texture.SpriteBrowser
 {
 	/// <summary>
 	/// Remembers how the user arranged the sprite browser (window, splitters, grid / list, columns, sorting, last folder,
-	/// preview options) and which of the two browsers - sprite files or the texture browser - was used last.
+	/// preview options) and which of the two browsers - sprites or models - was used last.
 	/// Persisted by the shell's settings provider like every other settings container.
 	/// </summary>
 	[Export(typeof(ISettingsContainer))]
 	public class SpriteBrowserSettings : ISettingsContainer
 	{
-		// Which browser opens first: false = sprite browser, true = texture browser
-		[Setting] public static bool UseTextureBrowser { get; set; } = false;
+		// Which browser opens first: false = sprite browser, true = model browser
+		[Setting] public static bool UseModelBrowser { get; set; } = false;
 
 		// Window (normal bounds, not the maximized ones)
 		[Setting] public static int WindowLeft { get; set; } = 0;
