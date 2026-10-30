@@ -46,7 +46,7 @@ namespace Sledge.BspEditor.Tools.Texture
 
         public override bool SupportsType(VariableType type)
         {
-            return type == VariableType.Decal || type == VariableType.Material || type == VariableType.Sprite;
+            return type == VariableType.Decal || type == VariableType.Material;
         }
 
         private async void OpenTextureBrowser(object sender, EventArgs e)

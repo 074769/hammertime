@@ -18,18 +18,13 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 		private const int RenderVersion = 1;
 
 		private static readonly object Lock = new object();
-		private static string _folder;
 
-		private static string Folder
+		/// <summary>The cache folder name the model browser uses.</summary>
+		public const string ModelCache = "ModelThumbnails";
+
+		private static string GetFolder(string cacheName)
 		{
-			get
-			{
-				if (_folder == null)
-				{
-					_folder = Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "Hammertime", "ModelThumbnails");
-				}
-				return _folder;
-			}
+			return Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "Hammertime", cacheName);
 		}
 
 		/// <summary>
@@ -38,6 +33,15 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 		/// </summary>
 		public static Bitmap GetOrCreate(IFile file, int size, Func<Bitmap> render)
 		{
+			return GetOrCreate(ModelCache, file, size, render);
+		}
+
+		/// <summary>
+		/// Same as above, but for a named cache (each browser keeps its own folder, e.g. "SpriteThumbnails").
+		/// </summary>
+		public static Bitmap GetOrCreate(string cacheName, IFile file, int size, Func<Bitmap> render)
+		{
+			var folder = GetFolder(cacheName);
 			string prefix = null;
 			string entry = null;
 			try
@@ -51,8 +55,8 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 				return render();
 			}
 
-			var png = Path.Combine(Folder, entry + ".png");
-			var none = Path.Combine(Folder, entry + ".none");
+			var png = Path.Combine(folder, entry + ".png");
+			var none = Path.Combine(folder, entry + ".none");
 
 			try
 			{
@@ -77,10 +81,10 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit.ModelBrowser
 			{
 				lock (Lock)
 				{
-					Directory.CreateDirectory(Folder);
+					Directory.CreateDirectory(folder);
 
 					// Drop stale entries for this model (older versions of the file)
-					foreach (var old in Directory.GetFiles(Folder, prefix + "_*"))
+					foreach (var old in Directory.GetFiles(folder, prefix + "_*"))
 					{
 						try { File.Delete(old); } catch { }
 					}

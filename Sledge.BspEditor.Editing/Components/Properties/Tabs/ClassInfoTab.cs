@@ -471,6 +471,18 @@ namespace Sledge.BspEditor.Editing.Components.Properties.Tabs
 		}
 
 		/// <summary>
+		/// True if the entity being edited displays models rather than sprites: the cycler family, or anything with a studio() behaviour.
+		/// </summary>
+		private bool IsModelEntity()
+		{
+			var classes = _tableValues.NewClass != null
+				? new List<GameDataObject> { _tableValues.NewClass }
+				: _tableValues.OriginalClasses;
+			return classes.Any(c => c.Name.StartsWith("cycler", StringComparison.InvariantCultureIgnoreCase)
+			                        || c.Behaviours.Any(b => string.Equals(b.Name, "studio", StringComparison.InvariantCultureIgnoreCase)));
+		}
+
+		/// <summary>
 		/// A keyvalue record has been selected, need to show the value editor
 		/// </summary>
 		private void SelectedPropertyChanged(object sender, EventArgs e)
@@ -492,7 +504,8 @@ namespace Sledge.BspEditor.Editing.Components.Properties.Tabs
 			{
 				var prop = btnSmartEdit.Checked ? tv.GameDataProperty : null;
 				var type = prop?.VariableType ?? VariableType.Void;
-				type = type is VariableType.Sprite ? _tableValues.OriginalClass == "env_sprite" ? type : VariableType.Studio : type;
+				// Sprite keyvalues get the sprite browser, except on model entities (cycler, cycler_sprite, ...) which keep the file/model browser
+				if (type is VariableType.Sprite && IsModelEntity()) type = VariableType.Studio;
 				_currentEditor = _smartEditControls
 									 .Select(x => x.Value)
 									 .OrderBy(x => x.PriorityHint)

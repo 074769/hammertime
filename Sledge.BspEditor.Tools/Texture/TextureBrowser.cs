@@ -213,6 +213,32 @@ namespace Sledge.BspEditor.Tools.Texture
 		}
 
 		public string SelectedTexture { get; set; }
+
+		/// <summary>True if the user pressed the "Sprite browser" button (only available after <see cref="EnableSpriteBrowserSwitch"/>).</summary>
+		public bool SwitchToSpriteBrowser { get; private set; }
+
+		/// <summary>
+		/// Adds a bar with a button that closes this browser and asks the caller to open the sprite file browser instead
+		/// (the dialog closes with <see cref="DialogResult.Retry"/>). Used when picking sprites.
+		/// </summary>
+		public void EnableSpriteBrowserSwitch()
+		{
+			if (Controls.ContainsKey("SpriteSwitchBar")) return;
+
+			var bar = new Panel { Name = "SpriteSwitchBar", Dock = DockStyle.Top, Height = 32 };
+			var button = new Button { Text = "Sprite browser", Width = 112, Height = 24, Left = 8, Top = 4, UseVisualStyleBackColor = true };
+			button.Click += (s, e) =>
+			{
+				SwitchToSpriteBrowser = true;
+				SelectedTexture = null;
+				DialogResult = DialogResult.Retry;
+				Close();
+			};
+			var label = new Label { Text = "Sprites from the texture list. Double-click one to use it.", AutoSize = true, Left = 128, Top = 9 };
+			bar.Controls.Add(button);
+			bar.Controls.Add(label);
+			Controls.Add(bar); // added last, so it is laid out first: the full-width strip at the top
+		}
 		private readonly List<string> _textures;
 
 		private void TextureSelected(object sender, string item)

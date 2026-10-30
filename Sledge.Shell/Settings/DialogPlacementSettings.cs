@@ -33,7 +33,7 @@ namespace Sledge.Shell.Settings
         // Windows that place themselves, remember themselves, or aren't movable pop-ups
         private static readonly HashSet<string> Excluded = new HashSet<string>
         {
-            "ModelBrowserDialog", "ViewportWindow", "SplashForm", "CommandBox", "ExceptionWindow"
+            "ModelBrowserDialog", "SpriteBrowserDialog", "ViewportWindow", "SplashForm", "CommandBox", "ExceptionWindow"
         };
 
         public string Name => "Sledge.Shell.DialogPlacement";
