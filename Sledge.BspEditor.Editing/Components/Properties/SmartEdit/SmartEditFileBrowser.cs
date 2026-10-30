@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.IO;
 using System.Linq;
@@ -21,6 +22,9 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit
 	public class SmartEditFileBrowser : SmartEditControl
 	{
 		private WeakReference<IFile> _root;
+
+		// Optional: the sprite browser (lives in another project), so the model browser can switch to it
+		[ImportMany] private IEnumerable<Lazy<ISpriteBrowserLauncher>> _spriteBrowsers;
 
 		private readonly TextBox _textBox;
 		private readonly Button _browseButton;
@@ -89,17 +93,43 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit
 		{
 			if (!_root.TryGetTarget(out var rt)) return;
 
-			// Models get the dedicated browser (folder tree, search, static preview)
-			if (Property.VariableType == VariableType.Studio)
+			// Models get the dedicated browser (folder tree, search, preview). A sprite keyvalue on a model entity
+			// (cycler_sprite etc.) opens it too. When the sprite browser is available the model browser has a button to switch
+			// to it, and the sprite browser has one to come back.
+			if (Property.VariableType == VariableType.Studio || Property.VariableType == VariableType.Sprite)
 			{
-				using (var mb = new ModelBrowserDialog(rt, _textBox.Text))
+				var launcher = _spriteBrowsers?.FirstOrDefault()?.Value;
+				var showSprites = false;
+				while (true)
 				{
-					if (mb.ShowDialog() == DialogResult.OK && mb.SelectedFile != null)
+					if (!showSprites)
 					{
-						_textBox.Text = GetPath(mb.SelectedFile);
+						using (var mb = new ModelBrowserDialog(rt, _textBox.Text))
+						{
+							if (launcher != null) mb.EnableSpriteBrowserSwitch();
+							var result = mb.ShowDialog();
+							if (mb.SwitchRequested)
+							{
+								showSprites = true;
+								continue;
+							}
+
+							if (result == DialogResult.OK && mb.SelectedFile != null) _textBox.Text = GetPath(mb.SelectedFile);
+						}
 					}
+					else
+					{
+						var sprite = launcher.Show(rt, _textBox.Text);
+						if (sprite.SwitchToModels)
+						{
+							showSprites = false;
+							continue;
+						}
+
+						if (sprite.Path != null) _textBox.Text = sprite.Path;
+					}
+					return;
 				}
-				return;
 			}
 
 			var path = rt;
