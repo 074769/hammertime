@@ -317,12 +317,11 @@ namespace Sledge.Rendering.Engine
 			var cameraLocation = renderTarget.Camera.Location;
 			var transparentPipelines = _pipelines[PipelineGroup.Transparent];
 
-			// Get the location objects and sort them by distance from the camera
-			var locationObjects =
+			// Every transparent object the pipelines report this frame, before culling and sorting
+			var candidateLocations =
 				from t in transparentPipelines
 				from renderable in Scene.GetRenderables(t, renderTarget)
 				from location in renderable.GetLocationObjects(t, renderTarget)
-				orderby (cameraLocation - location.Location).LengthSquared() descending
 				select new { Pipeline = t, Renderable = renderable, Location = location };
 
 
@@ -338,9 +337,19 @@ namespace Sledge.Rendering.Engine
 				transparent.SetupFrame(Context, _cameraBuffer);
 			}
 			var sortTimer = PerfLog.MeasureForView("Transparent sort", renderTarget.ID);
-			var sortedLocations = locationObjects.ToList();
+			var frustum = new ViewCulling.Frustum(renderTarget.Camera.View * renderTarget.Camera.Projection);
+			var candidates = candidateLocations.ToList();
+			var visible = ViewCulling.Enabled ? candidates.Where(x => !frustum.IsOutside(x.Location)).ToList() : candidates;
+			var sortedLocations = visible.OrderByDescending(x => (cameraLocation - x.Location.Location).LengthSquared()).ToList();
 			sortTimer.Dispose();
-			if (PerfLog.Enabled) PerfLog.AddCountForView("Transparent objects", renderTarget.ID, sortedLocations.Count);
+			if (PerfLog.Enabled)
+			{
+				PerfLog.AddCountForView("Transparent candidates", renderTarget.ID, candidates.Count);
+				PerfLog.AddCountForView("Transparent culled", renderTarget.ID, candidates.Count - sortedLocations.Count);
+				PerfLog.AddCountForView("Transparent objects", renderTarget.ID, sortedLocations.Count);
+				foreach (var g in sortedLocations.GroupBy(x => x.Renderable.GetType().Name))
+					PerfLog.AddCountForView("Transparent type:" + g.Key, renderTarget.ID, g.Count());
+			}
 			var drawTimer = PerfLog.MeasureForView("Transparent draw", renderTarget.ID);
 			foreach (var lo in sortedLocations)
 			{

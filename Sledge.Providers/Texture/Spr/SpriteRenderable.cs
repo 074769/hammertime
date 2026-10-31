@@ -95,6 +95,8 @@ namespace Sledge.Providers.Texture.Spr
 
 		public IEnumerable<ILocation> GetLocationObjects(IPipeline pipeline, IViewport viewport)
 		{
+			// Generous: the quad is at most the full texture size from its origin. Unknown textures are never culled.
+			_location.Radius = _textureItem == null ? float.MaxValue : 1.5f * System.Math.Max(_textureItem.Width, _textureItem.Height) * Scale;
 			yield return _location;
 		}
 
@@ -176,9 +178,10 @@ namespace Sledge.Providers.Texture.Spr
 			_lastFrameTime = frame;
 		}
 
-		public class SpriteLocation : ILocation
+		public class SpriteLocation : IBoundedLocation
 		{
 			public Vector3 Location { get; set; }
+			public float Radius { get; set; } = float.MaxValue;
 		}
 	}
 }
