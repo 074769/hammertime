@@ -27,6 +27,17 @@ namespace Sledge.BspEditor.Rendering.Converters
             _converters = converters;
             _groupConverters = groupConverters;
         }
+
+        // Entities and brushes are kept in separate buffer groups. Each group covers 200 IDs of one kind, so
+        // selecting a brush rebuilds only brush groups and never touches entity boxes or gizmos.
+        private const long EntityGroupBase = 1L << 40;
+
+        internal static long GroupKeyOf(IMapObject obj)
+        {
+            var block = obj.ID / 200;
+            return obj is Entity ? EntityGroupBase + block : block;
+        }
+
         public async Task ConvertSky(MapDocument document, SceneBuilder builder, ResourceCollector resourceCollector)
         {
 			var converter = _converters.FirstOrDefault(x=>x.Value is SkyboxConverter).Value;
@@ -46,8 +57,8 @@ namespace Sledge.BspEditor.Rendering.Converters
 
             // A full rebuild covers every group in the map. An incremental one covers the groups that changed,
             // including groups that are now empty, so those get cleared too.
-            var groupKeys = (affected ?? objs).Select(x => x.ID / 200).Distinct().OrderBy(x => x).ToList();
-            var byGroup = objs.ToLookup(x => x.ID / 200);
+            var groupKeys = (affected ?? objs).Select(x => GroupKeyOf(x)).Distinct().OrderBy(x => x).ToList();
+            var byGroup = objs.ToLookup(x => GroupKeyOf(x));
 
             var converters = _converters.Select(x => x.Value).OrderBy(x => (int) x.Priority).ToList();
             var groupConverters = _groupConverters.Select(x => x.Value).OrderBy(x => (int) x.Priority).ToList();
