@@ -5,6 +5,7 @@ using System.Linq;
 using System.Numerics;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Primitives.MapObjects;
+using Sledge.Common.Logging;
 using Sledge.DataStructures.Geometric;
 using Sledge.Rendering.Cameras;
 using Sledge.Rendering.Overlay;
@@ -40,13 +41,16 @@ namespace Sledge.BspEditor.Rendering.Overlay
             // Determine which objects are visible
             var padding = Vector3.One * 100;
             var box = new Box(worldMin - padding, worldMax + padding);
+            var findTimer = PerfLog.Measure("2D find visible");
             var objects = doc.Map.Root.Find(x => x.BoundingBox.IntersectsWith(box)).ToList();
+            findTimer.Dispose();
 
             // Render the overlay for each object
             foreach (var overlay in _overlays)
             {
-                overlay.Value.Render(viewport, objects, camera, worldMin, worldMax, im, doc);
+                using (PerfLog.Measure("Overlay", overlay.Value)) overlay.Value.Render(viewport, objects, camera, worldMin, worldMax, im, doc);
             }
+            PerfLog.FlushIfDue("2D overlays (last 2 s)", 2000);
         }
 
         public void Render(IViewport viewport, PerspectiveCamera camera, I2DRenderer im)

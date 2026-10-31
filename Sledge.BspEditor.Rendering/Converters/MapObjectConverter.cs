@@ -7,6 +7,7 @@ using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.BspEditor.Rendering.Resources;
 using Sledge.BspEditor.Rendering.Scene;
+using Sledge.Common.Logging;
 using Sledge.Rendering.Resources;
 
 namespace Sledge.BspEditor.Rendering.Converters
@@ -40,6 +41,7 @@ namespace Sledge.BspEditor.Rendering.Converters
 
         public async Task Convert(MapDocument document, SceneBuilder builder, IEnumerable<IMapObject> affected, ResourceCollector resourceCollector)
         {
+            var rebuildTimer = PerfLog.Measure("Rebuild total");
             var objs = document.Map.Root.FindAll().ToList();
 
             // A full rebuild covers every group in the map. An incremental one covers the groups that changed,
@@ -63,7 +65,7 @@ namespace Sledge.BspEditor.Rendering.Converters
                 {
                     try
                     {
-                        await gc.Convert(buffer, document, groupObjects, collector);
+                        using (PerfLog.Measure("GroupConvert", gc)) await gc.Convert(buffer, document, groupObjects, collector);
                     }
                     catch (Exception ex)
                     {
@@ -75,10 +77,12 @@ namespace Sledge.BspEditor.Rendering.Converters
                 {
                     foreach (var converter in converters)
                     {
-                        if (!converter.Supports(obj)) continue;
+                        bool supports;
+                        using (PerfLog.Measure("Supports", converter)) supports = converter.Supports(obj);
+                        if (!supports) continue;
                         try
                         {
-                            await converter.Convert(buffer, document, obj, collector);
+                            using (PerfLog.Measure("Convert", converter)) await converter.Convert(buffer, document, obj, collector);
                         }
                         catch (Exception ex)
                         {
@@ -102,6 +106,8 @@ namespace Sledge.BspEditor.Rendering.Converters
             }
 
             builder.Complete();
+            rebuildTimer.Dispose();
+            PerfLog.Flush($"rebuild: {groupKeys.Count} groups, {objs.Count} objects");
         }
     }
 }
