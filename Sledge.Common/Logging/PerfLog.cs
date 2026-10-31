@@ -105,13 +105,22 @@ namespace Sledge.Common.Logging
             ViewLabels[viewportId] = label;
         }
 
-        private static void Record(string name, long ticks)
+        /// <summary>
+        /// Adds an amount to a count that has no duration (for example the number of objects drawn), tagged with a viewport id.
+        /// </summary>
+        public static void AddCountForView(string name, int viewportId, int amount)
+        {
+            if (!Enabled) return;
+            Record(name + " [view " + viewportId + "]", 0, amount);
+        }
+
+        private static void Record(string name, long ticks, long count = 1)
         {
             var bucket = Buckets.GetOrAdd(name, _ => new Bucket());
             lock (bucket)
             {
                 bucket.Ticks += ticks;
-                bucket.Count++;
+                bucket.Count += count;
                 if (ticks > bucket.MaxTicks) bucket.MaxTicks = ticks;
             }
         }

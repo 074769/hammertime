@@ -264,12 +264,12 @@ namespace Sledge.Rendering.Engine
 				foreach (var rt in _renderTargets)
 				{
 					using (PerfLog.MeasureForView("View update", rt.ID)) rt.Update(frame);
-					using (PerfLog.MeasureForView("Overlay build", rt.ID)) rt.Overlay.Build(overlays);
 					if (!(rt.IsFocused || shouldRender)) PerfLog.CountForView("Render skipped", rt.ID);
 					if (rt.IsFocused || (!rt.IsFocused && shouldRender))
 					{
 						_cameraBuffer = new ViewProjectionBuffer { Projection = rt.Camera.Projection, View = rt.Camera.View };
 						if (PerfLog.Enabled) PerfLog.SetViewLabel(rt.ID, rt.Camera.Type.ToString());
+						using (PerfLog.MeasureForView("Overlay build", rt.ID)) rt.Overlay.Build(overlays);
 						using (PerfLog.MeasureForView("Render view", rt.ID)) Render(rt);
 					}
 				}
@@ -337,13 +337,17 @@ namespace Sledge.Rendering.Engine
 			{
 				transparent.SetupFrame(Context, _cameraBuffer);
 			}
-			var locTimer = PerfLog.MeasureForView("Transparent location", renderTarget.ID);
-			foreach (var lo in locationObjects)
+			var sortTimer = PerfLog.MeasureForView("Transparent sort", renderTarget.ID);
+			var sortedLocations = locationObjects.ToList();
+			sortTimer.Dispose();
+			if (PerfLog.Enabled) PerfLog.AddCountForView("Transparent objects", renderTarget.ID, sortedLocations.Count);
+			var drawTimer = PerfLog.MeasureForView("Transparent draw", renderTarget.ID);
+			foreach (var lo in sortedLocations)
 			{
 				lo.Pipeline.Render(Context, renderTarget, _commandList, lo.Renderable, lo.Location);
 			}
 
-			locTimer.Dispose();
+			drawTimer.Dispose();
 			foreach (var pipeline in transparentPipelines)
 			{
 				if (pipeline.Type == PipelineType.BillboardAlpha || (IsShadowsEnabled && pipeline.Type == PipelineType.ShadowOverlay))
