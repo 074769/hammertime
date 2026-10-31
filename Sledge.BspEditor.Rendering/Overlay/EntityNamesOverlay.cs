@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Drawing;
@@ -25,6 +26,10 @@ namespace Sledge.BspEditor.Rendering.Overlay
 
             var renderNames = camera.Zoom > 2 && ents.Count < 50;
 
+            // Labels that land on the same spot with the same text, font and colour are drawn on top of each
+            // other, so only the first one is needed. This is common when entities are stacked on one origin.
+            var drawn = new HashSet<(int X, int Y, int Font, string Text, int Argb)>();
+
             foreach (var ed in ents)
             {
                 var c = ed.Color?.Color ?? Color.White;
@@ -42,14 +47,22 @@ namespace Sledge.BspEditor.Rendering.Overlay
 
                 var pos = new Vector2(loc.X - size.X / 2, loc.Y - size.Y - 2);
 
-                im.AddText(pos, c, FontType.Normal, str);
+                AddLabel(drawn, im, pos, c, FontType.Normal, str);
 
                 if (renderNames && targetname.Length > 0)
                 {
                     var nmms = im.CalcTextSize(FontType.Bold, targetname);
-                    im.AddText(new Vector2(loc.X - nmms.X / 2, loc.Y + 2), c, FontType.Bold, targetname);
+                    AddLabel(drawn, im, new Vector2(loc.X - nmms.X / 2, loc.Y + 2), c, FontType.Bold, targetname);
                 }
             }
+        }
+
+        private static void AddLabel(HashSet<(int X, int Y, int Font, string Text, int Argb)> drawn, I2DRenderer im,
+            Vector2 pos, Color colour, FontType font, string text)
+        {
+            var key = ((int) Math.Round(pos.X), (int) Math.Round(pos.Y), (int) font, text, colour.ToArgb());
+            if (!drawn.Add(key)) return;
+            im.AddText(pos, colour, font, text);
         }
     }
 }
