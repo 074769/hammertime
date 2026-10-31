@@ -1,5 +1,6 @@
 using System.ComponentModel.Composition;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Numerics;
 using System.Threading.Tasks;
 using Sledge.BspEditor.Documents;
@@ -20,11 +21,18 @@ namespace Sledge.BspEditor.Rendering.Converters
     /// the 3D viewport: a wireframe box of half size PickGeometry.GizmoHalfSize centred on the
     /// origin. This is the same box the entity is picked with. Iconsprite gizmos (lights, spawns
     /// etc.) are skipped because they already draw their own icon. Does not stop other converters.
+    /// Entities that share an origin and colour produce identical boxes, so only the first one
+    /// converted into a given buffer is drawn. Picking is unaffected: it uses each entity's own geometry.
     /// </summary>
     [Export(typeof(IMapObjectSceneConverter))]
     public class EntityGizmoConverter : IMapObjectSceneConverter
     {
         public MapObjectSceneConverterPriority Priority => MapObjectSceneConverterPriority.DefaultLow;
+
+        // (origin, colour) pairs already drawn into each staging buffer. Staging buffers are created fresh
+        // for every group on every rebuild, so the set is discarded with the buffer.
+        private static readonly ConditionalWeakTable<BufferBuilder, HashSet<(Vector3, Vector4)>> DrawnGizmos
+            = new ConditionalWeakTable<BufferBuilder, HashSet<(Vector3, Vector4)>>();
 
         public bool ShouldStopProcessing(MapDocument document, IMapObject obj)
         {
@@ -49,6 +57,11 @@ namespace Sledge.BspEditor.Rendering.Converters
 
             var origin = entity.Data.GetOne<Origin>()?.Location ?? Vector3.Zero;
             var colour = (entity.Color?.Color ?? System.Drawing.Color.White).ToVector4();
+
+            // An identical box is already in this buffer, so drawing it again only costs time.
+            var drawn = DrawnGizmos.GetValue(builder, _ => new HashSet<(Vector3, Vector4)>());
+            if (!drawn.Add((origin, colour))) return Task.CompletedTask;
+
             var h = PickGeometry.GizmoHalfSize;
 
             // Corner i uses bit 0 for X, bit 1 for Y, bit 2 for Z.
