@@ -41,14 +41,14 @@ namespace Sledge.BspEditor.Rendering.Overlay
             // Determine which objects are visible
             var padding = Vector3.One * 100;
             var box = new Box(worldMin - padding, worldMax + padding);
-            var findTimer = PerfLog.Measure("2D find visible");
+            var findTimer = PerfLog.MeasureForView("2D find visible", viewport.ID);
             var objects = doc.Map.Root.Find(x => x.BoundingBox.IntersectsWith(box)).ToList();
             findTimer.Dispose();
 
             // Render the overlay for each object
             foreach (var overlay in _overlays)
             {
-                using (PerfLog.Measure("Overlay", overlay.Value)) overlay.Value.Render(viewport, objects, camera, worldMin, worldMax, im, doc);
+                using (PerfLog.MeasureForView("Overlay", overlay.Value, viewport.ID)) overlay.Value.Render(viewport, objects, camera, worldMin, worldMax, im, doc);
             }
             PerfLog.FlushIfDue("2D overlays (last 2 s)", 2000);
         }

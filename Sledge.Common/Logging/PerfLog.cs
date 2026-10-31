@@ -66,6 +66,22 @@ namespace Sledge.Common.Logging
             return Enabled ? new Scope(category + ":" + subject.GetType().Name) : default;
         }
 
+        /// <summary>
+        /// Like Measure(category, subject), but tagged with a 2D viewport id so each view is listed separately.
+        /// </summary>
+        public static Scope MeasureForView(string category, object subject, int viewportId)
+        {
+            return Enabled ? new Scope(category + ":" + subject.GetType().Name + " [view " + viewportId + "]") : default;
+        }
+
+        /// <summary>
+        /// Like Measure(name), but tagged with a 2D viewport id so each view is listed separately.
+        /// </summary>
+        public static Scope MeasureForView(string name, int viewportId)
+        {
+            return Enabled ? new Scope(name + " [view " + viewportId + "]") : default;
+        }
+
         private static void Record(string name, long ticks)
         {
             var bucket = Buckets.GetOrAdd(name, _ => new Bucket());

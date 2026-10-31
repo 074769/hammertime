@@ -4,9 +4,11 @@ using System.ComponentModel.Composition;
 using System.Drawing;
 using System.Linq;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Primitives.MapObjectData;
 using Sledge.BspEditor.Primitives.MapObjects;
+using Sledge.Common.Logging;
 using Sledge.DataStructures.GameData;
 using Sledge.DataStructures.Geometric;
 using Sledge.Rendering.Cameras;
@@ -50,6 +52,35 @@ namespace Sledge.BspEditor.Rendering.Overlay
         private const float StrokeWidth = 2f; // screen pixels
         private const float OutlineExtraWidth = 2f; // added on top of StrokeWidth for the outline pass
 
+        // Caches. Everything here depends only on the FGD and the entity's own data, so it is worked out once
+        // and reused on every redraw. Each cache is keyed on the object it was built from, so a reloaded
+        // environment or an edited entity is picked up automatically.
+
+        private sealed class ClassRotation
+        {
+            public bool CanRotate;
+            public int? XAxisBit;
+            public int? YAxisBit;
+            public int? ReverseBit;
+        }
+
+        private sealed class RotatorState
+        {
+            public int Flags;
+            public string Angles;
+            public Vector3 Origin;
+            public float Radius;
+            public GameDataObject Class;
+            public Vector3[] Arc; // world-space points, projected to screen each redraw
+        }
+
+        private static readonly ConditionalWeakTable<GameData, Dictionary<string, GameDataObject>> ClassIndexes
+            = new ConditionalWeakTable<GameData, Dictionary<string, GameDataObject>>();
+        private static readonly ConditionalWeakTable<GameDataObject, ClassRotation> ClassRotations
+            = new ConditionalWeakTable<GameDataObject, ClassRotation>();
+        private static readonly ConditionalWeakTable<Entity, RotatorState> RotatorStates
+            = new ConditionalWeakTable<Entity, RotatorState>();
+
         public void Render(IViewport viewport, ICollection<IMapObject> objects, OrthographicCamera camera, Vector3 worldMin, Vector3 worldMax, I2DRenderer im, MapDocument document)
         {
             if (camera.Zoom < 0.5f) return;
@@ -68,43 +99,111 @@ namespace Sledge.BspEditor.Rendering.Overlay
             }
             if (gameData == null) return;
 
-            foreach (var ed in objects.OfType<Entity>().Where(x => x.EntityData != null).Where(x => !x.Data.OfType<IObjectVisibility>().Any(v => v.IsHidden)))
+            var classes = GetClassIndex(gameData);
+
+            foreach (var ed in objects.OfType<Entity>())
             {
                 var data = ed.EntityData;
-                var cls = gameData.GetClass(data.Name);
-                if (cls == null) continue;
+                if (data == null || data.Name == null) continue;
+                if (!classes.TryGetValue(data.Name, out var cls)) continue;
+
+                // Most classes never rotate, so this rejects them with one cached lookup
+                if (!GetClassRotation(cls).CanRotate) continue;
+                if (ed.Data.OfType<IObjectVisibility>().Any(v => v.IsHidden)) continue;
 
                 var color = ed.Color?.Color ?? Color.White;
-                var origin = ed.BoundingBox.Center;
-                var min = Math.Min(ed.BoundingBox.Width, Math.Min(ed.BoundingBox.Height, ed.BoundingBox.Length));
+                var box = ed.BoundingBox;
+                var origin = box.Center;
+                var min = Math.Min(box.Width, Math.Min(box.Height, box.Length));
                 if (min <= 0) continue;
 
-                var rotateAxis = GetRotationAxis(cls, data);
-                if (rotateAxis.HasValue)
+                var arc = GetRotatorArc(ed, data, cls, origin, min * RotateArrowScale);
+                DrawRotateArrow(camera, im, arc, color);
+            }
+        }
+
+        // --- Cached lookups -----------------------------------------------------
+
+        /// <summary>
+        /// Same rule as GameData.GetClass (first non-base class whose name matches, ignoring case), but
+        /// indexed once per GameData instead of scanning every class for every entity on every redraw.
+        /// </summary>
+        private static Dictionary<string, GameDataObject> GetClassIndex(GameData gameData)
+        {
+            return ClassIndexes.GetValue(gameData, g =>
+            {
+                var index = new Dictionary<string, GameDataObject>(StringComparer.InvariantCultureIgnoreCase);
+                foreach (var c in g.Classes)
                 {
-                    DrawRotateArrow(camera, im, origin, rotateAxis.Value, min * RotateArrowScale, color, IsReversed(cls, data));
+                    if (c.ClassType == ClassType.Base || c.Name == null) continue;
+                    if (!index.ContainsKey(c.Name)) index.Add(c.Name, c);
                 }
+                return index;
+            });
+        }
+
+        private static ClassRotation GetClassRotation(GameDataObject cls)
+        {
+            return ClassRotations.GetValue(cls, c =>
+            {
+                var rot = new ClassRotation();
+                var flagsProp = c.Properties.FirstOrDefault(x => string.Equals(x.Name, "spawnflags", StringComparison.OrdinalIgnoreCase));
+                if (flagsProp == null) return rot;
+
+                rot.XAxisBit = FindFlagBit(flagsProp, "x axis");
+                rot.YAxisBit = FindFlagBit(flagsProp, "y axis");
+                rot.ReverseBit = FindFlagBit(flagsProp, "reverse");
+                // Only classes whose FGD exposes the classic axis-selection flags are rotators
+                rot.CanRotate = rot.XAxisBit.HasValue || rot.YAxisBit.HasValue;
+                return rot;
+            });
+        }
+
+        /// <summary>
+        /// Returns the world-space arc for a rotating entity. Rebuilt only when the inputs that shape it change.
+        /// </summary>
+        private static Vector3[] GetRotatorArc(Entity ed, EntityData data, GameDataObject cls, Vector3 origin, float radius)
+        {
+            var flags = data.Flags;
+            var angles = data.Get<string>("angles");
+
+            if (RotatorStates.TryGetValue(ed, out var cached)
+                && cached.Flags == flags
+                && cached.Angles == angles
+                && cached.Origin == origin
+                && cached.Radius == radius
+                && ReferenceEquals(cached.Class, cls))
+            {
+                return cached.Arc;
+            }
+
+            using (PerfLog.Measure("MovementOverlay: arc rebuild"))
+            {
+                var rot = GetClassRotation(cls);
+                var axis = GetRotationAxis(rot, data);
+                var reversed = rot.ReverseBit.HasValue && (flags & rot.ReverseBit.Value) != 0;
+                var arc = BuildArc(origin, axis, radius, reversed);
+
+                RotatorStates.AddOrUpdate(ed, new RotatorState
+                {
+                    Flags = flags,
+                    Angles = angles,
+                    Origin = origin,
+                    Radius = radius,
+                    Class = cls,
+                    Arc = arc
+                });
+                return arc;
             }
         }
 
         // --- Rotation helper --------------------------------------------------
 
-        private static Vector3? GetRotationAxis(GameDataObject cls, EntityData data)
+        private static Vector3 GetRotationAxis(ClassRotation rot, EntityData data)
         {
-            var flagsProp = cls.Properties.FirstOrDefault(x => string.Equals(x.Name, "spawnflags", StringComparison.OrdinalIgnoreCase));
-            if (flagsProp == null) return null;
-
-            var xAxisBit = FindFlagBit(flagsProp, "x axis");
-            var yAxisBit = FindFlagBit(flagsProp, "y axis");
-
-            // Only treat this class as a rotator if its FGD data actually exposes
-            // the classic axis-selection flag pair - this is what distinguishes a
-            // rotating entity from an ordinary one without hardcoding classnames.
-            if (xAxisBit == null && yAxisBit == null) return null;
-
             var local = Vector3.UnitZ;
-            if (xAxisBit.HasValue && (data.Flags & xAxisBit.Value) != 0) local = Vector3.UnitX;
-            else if (yAxisBit.HasValue && (data.Flags & yAxisBit.Value) != 0) local = Vector3.UnitY;
+            if (rot.XAxisBit.HasValue && (data.Flags & rot.XAxisBit.Value) != 0) local = Vector3.UnitX;
+            else if (rot.YAxisBit.HasValue && (data.Flags & rot.YAxisBit.Value) != 0) local = Vector3.UnitY;
 
             // Orient the local axis by the entity's own "angles", if any, so the
             // helper also makes sense for angle-oriented rotators (e.g. a
@@ -113,13 +212,6 @@ namespace Sledge.BspEditor.Rendering.Overlay
             if (!ang.HasValue) return local;
 
             return Vector3.Transform(local, AngleMatrix(ang.Value));
-        }
-
-        private static bool IsReversed(GameDataObject cls, EntityData data)
-        {
-            var flagsProp = cls.Properties.FirstOrDefault(x => string.Equals(x.Name, "spawnflags", StringComparison.OrdinalIgnoreCase));
-            var reverseBit = flagsProp == null ? null : FindFlagBit(flagsProp, "reverse");
-            return reverseBit.HasValue && (data.Flags & reverseBit.Value) != 0;
         }
 
         private static int? FindFlagBit(Property flagsProp, string descriptionContains)
@@ -148,19 +240,7 @@ namespace Sledge.BspEditor.Rendering.Overlay
                 0, 0, 0, 1);
         }
 
-        // --- Drawing -------------------------------------------------------
-
-        /// <summary>
-        /// Rotator: a looping arc (a true 3D circle around the rotation axis,
-        /// projected point-by-point per viewport) that ends in a hooked
-        /// triangular head, matching the reference "redo"-style icon. Building
-        /// the loop in 3D - rather than just in screen space - is what makes it
-        /// read correctly in all three 2D views: it appears as a full circle
-        /// when looking straight down the axis, and flattens toward a line when
-        /// the axis lies in the view plane, which is the physically correct
-        /// picture either way.
-        /// </summary>
-        private static void DrawRotateArrow(OrthographicCamera camera, I2DRenderer im, Vector3 origin, Vector3 axis, float radius, Color color, bool reversed)
+        private static Vector3[] BuildArc(Vector3 origin, Vector3 axis, float radius, bool reversed)
         {
             axis = Vector3.Normalize(axis);
 
@@ -171,15 +251,38 @@ namespace Sledge.BspEditor.Rendering.Overlay
             var sweep = RotateArcDegrees * Math.PI / 180.0;
             if (reversed) sweep = -sweep;
 
-            Vector2? prev = null;
-            var lastFrom = Vector2.Zero;
-            var lastTo = Vector2.Zero;
-
+            var arc = new Vector3[RotateArcSegments + 1];
             for (var i = 0; i <= RotateArcSegments; i++)
             {
                 var t = sweep * i / RotateArcSegments;
                 var offset = (u * (float) Math.Cos(t) + v * (float) Math.Sin(t)) * radius;
-                var screen = camera.WorldToScreen(origin + offset).ToVector2();
+                arc[i] = origin + offset;
+            }
+            return arc;
+        }
+
+        // --- Drawing -------------------------------------------------------
+
+        /// <summary>
+        /// Rotator: a looping arc (a true 3D circle around the rotation axis,
+        /// projected point-by-point per viewport) that ends in a hooked
+        /// triangular head, matching the reference "redo"-style icon. Building
+        /// the loop in 3D - rather than just in screen space - is what makes it
+        /// read correctly in all three 2D views: it appears as a full circle
+        /// when looking straight down the axis, and flattens toward a line when
+        /// the axis lies in the view plane, which is the physically correct
+        /// picture either way. The arc itself is cached in world space; only the
+        /// projection to screen happens each redraw.
+        /// </summary>
+        private static void DrawRotateArrow(OrthographicCamera camera, I2DRenderer im, Vector3[] arc, Color color)
+        {
+            Vector2? prev = null;
+            var lastFrom = Vector2.Zero;
+            var lastTo = Vector2.Zero;
+
+            foreach (var world in arc)
+            {
+                var screen = camera.WorldToScreen(world).ToVector2();
 
                 if (prev.HasValue)
                 {
