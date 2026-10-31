@@ -13,6 +13,7 @@ using Sledge.Rendering.Engine;
 using Sledge.Rendering.Viewports;
 using Sledge.Shell.Registers;
 
+using Sledge.Common.Logging;
 namespace Sledge.BspEditor.Rendering.Viewport
 {
 	public class MapViewport
@@ -141,7 +142,7 @@ namespace Sledge.BspEditor.Rendering.Viewport
 			{
 				try
 				{
-					action(listener);
+					using (PerfLog.Measure("Listener", listener)) action(listener);
 				}
 				catch (Exception ex)
 				{

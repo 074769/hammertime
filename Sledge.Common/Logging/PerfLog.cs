@@ -1,12 +1,16 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Text;
 
 namespace Sledge.Common.Logging
 {
     /// <summary>
-    /// Lightweight timing for finding which converters and overlays are slow.
+    /// Lightweight timing for finding slow parts of the editor: scene rebuilds, the engine frame loop, every
+    /// pipeline, overlay and listener, in the 2D and 3D views.
     /// Turn on with the environment variable HAMMERTIME_PERF=1, or by creating an empty file called
     /// perf.enable next to the executable. Results are appended to perf.log next to the executable.
     /// When disabled, Measure does no work and allocates nothing.
@@ -19,8 +23,9 @@ namespace Sledge.Common.Logging
 
         private static readonly string LogPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "perf.log");
         private static readonly ConcurrentDictionary<string, Bucket> Buckets = new ConcurrentDictionary<string, Bucket>();
+        private static readonly ConcurrentDictionary<string, long> LastFlush = new ConcurrentDictionary<string, long>();
+        private static readonly ConcurrentDictionary<int, string> ViewLabels = new ConcurrentDictionary<int, string>();
         private static readonly object FileLock = new object();
-        private static long _lastFlushTimestamp = Stopwatch.GetTimestamp();
 
         private class Bucket
         {
@@ -67,7 +72,7 @@ namespace Sledge.Common.Logging
         }
 
         /// <summary>
-        /// Like Measure(category, subject), but tagged with a 2D viewport id so each view is listed separately.
+        /// Like Measure(category, subject), but tagged with a viewport id so each view is listed separately.
         /// </summary>
         public static Scope MeasureForView(string category, object subject, int viewportId)
         {
@@ -75,11 +80,29 @@ namespace Sledge.Common.Logging
         }
 
         /// <summary>
-        /// Like Measure(name), but tagged with a 2D viewport id so each view is listed separately.
+        /// Like Measure(name), but tagged with a viewport id so each view is listed separately.
         /// </summary>
         public static Scope MeasureForView(string name, int viewportId)
         {
             return Enabled ? new Scope(name + " [view " + viewportId + "]") : default;
+        }
+
+        /// <summary>
+        /// Counts an event that has no duration (for example a frame that was skipped), tagged with a viewport id.
+        /// </summary>
+        public static void CountForView(string name, int viewportId)
+        {
+            if (!Enabled) return;
+            Record(name + " [view " + viewportId + "]", 0);
+        }
+
+        /// <summary>
+        /// Remembers what a viewport is (for example its camera type). Shown at the top of each log block.
+        /// </summary>
+        public static void SetViewLabel(int viewportId, string label)
+        {
+            if (!Enabled) return;
+            ViewLabels[viewportId] = label;
         }
 
         private static void Record(string name, long ticks)
@@ -94,16 +117,17 @@ namespace Sledge.Common.Logging
         }
 
         /// <summary>
-        /// Write everything recorded since the last flush under a title, then clear the totals.
+        /// Write the totals recorded under the given name prefixes (all of them if none are given), then clear
+        /// those totals. Other areas keep their totals for their own flush.
         /// </summary>
-        public static void Flush(string title)
+        public static void Flush(string title, params string[] prefixes)
         {
             if (!Enabled) return;
-            _lastFlushTimestamp = Stopwatch.GetTimestamp();
 
-            var lines = new System.Collections.Generic.List<(string Name, long Ticks, long Count, long Max)>();
+            var lines = new List<(string Name, long Ticks, long Count, long Max)>();
             foreach (var key in Buckets.Keys)
             {
+                if (prefixes.Length > 0 && !prefixes.Any(p => key.StartsWith(p, StringComparison.Ordinal))) continue;
                 if (!Buckets.TryRemove(key, out var bucket)) continue;
                 lock (bucket)
                 {
@@ -113,8 +137,12 @@ namespace Sledge.Common.Logging
             if (lines.Count == 0) return;
 
             lines.Sort((a, b) => b.Ticks.CompareTo(a.Ticks));
-            var sb = new System.Text.StringBuilder();
+            var sb = new StringBuilder();
             sb.AppendLine($"[{DateTime.Now:HH:mm:ss.fff}] {title}");
+            if (!ViewLabels.IsEmpty)
+            {
+                sb.AppendLine("  views: " + string.Join(", ", ViewLabels.OrderBy(x => x.Key).Select(x => x.Key + "=" + x.Value)));
+            }
             foreach (var l in lines)
             {
                 var total = ToMs(l.Ticks);
@@ -133,13 +161,17 @@ namespace Sledge.Common.Logging
         }
 
         /// <summary>
-        /// Flush only if at least the given interval has passed since the last flush. Use for per-frame code.
+        /// Flush the given name prefixes only if at least the given interval has passed since this title was last
+        /// flushed. Use for per-frame code.
         /// </summary>
-        public static void FlushIfDue(string title, int intervalMs)
+        public static void FlushIfDue(string title, int intervalMs, params string[] prefixes)
         {
             if (!Enabled) return;
-            var elapsed = Stopwatch.GetTimestamp() - _lastFlushTimestamp;
-            if (ToMs(elapsed) >= intervalMs) Flush(title);
+            var now = Stopwatch.GetTimestamp();
+            var last = LastFlush.GetOrAdd(title, now);
+            if (ToMs(now - last) < intervalMs) return;
+            LastFlush[title] = now;
+            Flush(title, prefixes);
         }
 
         private static double ToMs(long ticks)

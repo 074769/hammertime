@@ -30,6 +30,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using static System.Net.Mime.MediaTypeNames;
 
+using Sledge.Common.Logging;
 namespace Sledge.BspEditor.Rendering.Scene
 {
 	/// <summary>
@@ -260,6 +261,11 @@ namespace Sledge.BspEditor.Rendering.Scene
 		}
 
 		private Task UpdateSceneNow(MapDocument md, IEnumerable<IMapObject> affected, int request)
+		{
+			using (PerfLog.Measure("Scene: UpdateSceneNow")) return UpdateSceneNowCore(md, affected, request);
+		}
+
+		private Task UpdateSceneNowCore(MapDocument md, IEnumerable<IMapObject> affected, int request)
 		{
 			// Superseded by a newer full rebuild
 			if (request != Volatile.Read(ref _fullUpdateRequest)) return Task.CompletedTask;

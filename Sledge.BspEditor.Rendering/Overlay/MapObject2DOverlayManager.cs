@@ -50,7 +50,7 @@ namespace Sledge.BspEditor.Rendering.Overlay
             {
                 using (PerfLog.MeasureForView("Overlay", overlay.Value, viewport.ID)) overlay.Value.Render(viewport, objects, camera, worldMin, worldMax, im, doc);
             }
-            PerfLog.FlushIfDue("2D overlays (last 2 s)", 2000);
+            PerfLog.FlushIfDue("2D overlays (last 2 s)", 2000, "Overlay:", "2D find", "MovementOverlay");
         }
 
         public void Render(IViewport viewport, PerspectiveCamera camera, I2DRenderer im)

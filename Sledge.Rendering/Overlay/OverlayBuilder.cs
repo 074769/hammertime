@@ -11,6 +11,7 @@ using Sledge.Rendering.Renderables;
 using Sledge.Rendering.Viewports;
 using Veldrid;
 
+using Sledge.Common.Logging;
 namespace Sledge.Rendering.Overlay
 {
     public class ViewportOverlay : IRenderable, IUpdateable
@@ -66,8 +67,8 @@ namespace Sledge.Rendering.Overlay
                 {
                     try
                     {
-                        if (pc != null) b.Render(_viewport, pc, renderer);
-                        if (oc != null) b.Render(_viewport, oc, min, max, renderer);
+                        if (pc != null) using (PerfLog.MeasureForView("Overlay renderable", b, _viewport.ID)) b.Render(_viewport, pc, renderer);
+                        if (oc != null) using (PerfLog.MeasureForView("Overlay renderable", b, _viewport.ID)) b.Render(_viewport, oc, min, max, renderer);
                     }
                     catch (Exception ex)
                     {
@@ -102,7 +103,7 @@ namespace Sledge.Rendering.Overlay
             if (_lastFrame < 0) return;
             
             ImGui.SetCurrentContext(_controller.Context);
-            _controller.Render(context.Device, cl);
+            using (PerfLog.MeasureForView("ImGui draw", viewport.ID)) _controller.Render(context.Device, cl);
         }
 
         public IEnumerable<ILocation> GetLocationObjects(IPipeline pipeline, IViewport viewport)

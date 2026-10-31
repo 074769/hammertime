@@ -13,6 +13,7 @@ using Sledge.Rendering.Renderables;
 using Sledge.Rendering.Viewports;
 using Veldrid;
 
+using Sledge.Common.Logging;
 namespace Sledge.Rendering.Engine
 {
 	public class Engine : IDisposable
@@ -233,8 +234,9 @@ namespace Sledge.Rendering.Engine
 					}
 
 					lastFrame = frame;
-					Render(frame);
-					Device.WaitForIdle();
+					using (PerfLog.Measure("Engine: frame")) Render(frame);
+					using (PerfLog.Measure("Engine: GPU wait")) Device.WaitForIdle();
+					PerfLog.FlushIfDue("Engine and views (last 2 s)", 2000, "Engine:", "View update", "Overlay build", "Overlay renderable", "Render ", "Pipeline", "Transparent", "Submit", "ImGui", "Update:", "Listener:", "Scene:");
 				}
 			}
 			catch (ThreadInterruptedException)
@@ -251,7 +253,7 @@ namespace Sledge.Rendering.Engine
 		{
 			lock (_lock)
 			{
-				Scene.Update(frame);
+				using (PerfLog.Measure("Engine: Scene.Update")) Scene.Update(frame);
 				var overlays = Scene.GetOverlayRenderables().ToList();
 
 				long currentTime = DateTime.Now.Ticks;
@@ -261,12 +263,14 @@ namespace Sledge.Rendering.Engine
 
 				foreach (var rt in _renderTargets)
 				{
-					rt.Update(frame);
-					rt.Overlay.Build(overlays);
+					using (PerfLog.MeasureForView("View update", rt.ID)) rt.Update(frame);
+					using (PerfLog.MeasureForView("Overlay build", rt.ID)) rt.Overlay.Build(overlays);
+					if (!(rt.IsFocused || shouldRender)) PerfLog.CountForView("Render skipped", rt.ID);
 					if (rt.IsFocused || (!rt.IsFocused && shouldRender))
 					{
 						_cameraBuffer = new ViewProjectionBuffer { Projection = rt.Camera.Projection, View = rt.Camera.View };
-						Render(rt);
+						if (PerfLog.Enabled) PerfLog.SetViewLabel(rt.ID, rt.Camera.Type.ToString());
+						using (PerfLog.MeasureForView("Render view", rt.ID)) Render(rt);
 					}
 				}
 				if (shouldRender)
@@ -325,7 +329,7 @@ namespace Sledge.Rendering.Engine
 			foreach (var opaque in _pipelines[PipelineGroup.Opaque])
 			{
 				opaque.SetupFrame(Context, _cameraBuffer);
-				opaque.Render(Context, renderTarget, _commandList, Scene.GetRenderables(opaque, renderTarget));
+				using (PerfLog.MeasureForView("Pipeline opaque", opaque, renderTarget.ID)) opaque.Render(Context, renderTarget, _commandList, Scene.GetRenderables(opaque, renderTarget));
 			}
 
 
@@ -333,24 +337,26 @@ namespace Sledge.Rendering.Engine
 			{
 				transparent.SetupFrame(Context, _cameraBuffer);
 			}
+			var locTimer = PerfLog.MeasureForView("Transparent location", renderTarget.ID);
 			foreach (var lo in locationObjects)
 			{
 				lo.Pipeline.Render(Context, renderTarget, _commandList, lo.Renderable, lo.Location);
 			}
 
+			locTimer.Dispose();
 			foreach (var pipeline in transparentPipelines)
 			{
 				if (pipeline.Type == PipelineType.BillboardAlpha || (IsShadowsEnabled && pipeline.Type == PipelineType.ShadowOverlay))
-					pipeline.Render(Context, renderTarget, _commandList, Scene.GetRenderables(pipeline, renderTarget));
+					using (PerfLog.MeasureForView("Pipeline transparent", pipeline, renderTarget.ID)) pipeline.Render(Context, renderTarget, _commandList, Scene.GetRenderables(pipeline, renderTarget));
 			}
 
 			_commandList.End();
-			Device.SubmitCommands(_commandList);
+			using (PerfLog.MeasureForView("Submit", renderTarget.ID)) Device.SubmitCommands(_commandList);
 
 			_commandList.Begin();
 			renderTarget.ResolveRenderTexture(_commandList);
 			_commandList.End();
-			Device.SubmitCommands(_commandList);
+			using (PerfLog.MeasureForView("Submit", renderTarget.ID)) Device.SubmitCommands(_commandList);
 
 			_commandList.Begin();
 			_commandList.SetFramebuffer(renderTarget.Swapchain.Framebuffer);
@@ -360,10 +366,10 @@ namespace Sledge.Rendering.Engine
 			foreach (var overlay in _pipelines[PipelineGroup.Overlay])
 			{
 				overlay.SetupFrame(Context, _cameraBuffer);
-					overlay.Render(Context, renderTarget, _commandList, Scene.GetRenderables(overlay, renderTarget));
+					using (PerfLog.MeasureForView("Pipeline overlay", overlay, renderTarget.ID)) overlay.Render(Context, renderTarget, _commandList, Scene.GetRenderables(overlay, renderTarget));
 			}
 			_commandList.End();
-			Device.SubmitCommands(_commandList);
+			using (PerfLog.MeasureForView("Submit", renderTarget.ID)) Device.SubmitCommands(_commandList);
 			Device.SwapBuffers(renderTarget.Swapchain);
 		}
 

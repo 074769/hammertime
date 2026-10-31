@@ -6,6 +6,7 @@ using Sledge.Rendering.Pipelines;
 using Sledge.Rendering.Renderables;
 using Sledge.Rendering.Viewports;
 
+using Sledge.Common.Logging;
 namespace Sledge.Rendering.Engine
 {
     public class Scene : IUpdateable
@@ -34,7 +35,7 @@ namespace Sledge.Rendering.Engine
             // We want to be able to update while modifying, if new items don't get the update that's ok
             for (var u = _updateables.First; u != null; u = u.Next)
             {
-                u.Value.Update(frame);
+                using (PerfLog.Measure("Update", u.Value)) u.Value.Update(frame);
             }
         }
 

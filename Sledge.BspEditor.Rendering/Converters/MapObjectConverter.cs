@@ -118,7 +118,7 @@ namespace Sledge.BspEditor.Rendering.Converters
 
             builder.Complete();
             rebuildTimer.Dispose();
-            PerfLog.Flush($"rebuild: {groupKeys.Count} groups, {objs.Count} objects");
+            PerfLog.Flush($"rebuild: {groupKeys.Count} groups, {objs.Count} objects", "Rebuild", "Convert:", "GroupConvert:", "Supports:");
         }
     }
 }
