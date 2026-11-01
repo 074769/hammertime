@@ -105,6 +105,7 @@ namespace Sledge.BspEditor.Rendering.Overlay
             {
                 var data = ed.EntityData;
                 if (data == null || data.Name == null) continue;
+                if (EntityKinds.IsSprite(data)) continue; // sprites never move or rotate
                 if (!classes.TryGetValue(data.Name, out var cls)) continue;
 
                 // Most classes never rotate, so this rejects them with one cached lookup

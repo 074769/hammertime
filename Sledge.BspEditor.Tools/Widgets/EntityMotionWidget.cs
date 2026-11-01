@@ -72,6 +72,7 @@ namespace Sledge.BspEditor.Tools.Widgets
 			foreach (var ed in GetSelectedEntities(document))
 			{
 				var data = ed.EntityData;
+				if (EntityKinds.IsSprite(data)) continue; // sprites never move or rotate
 				var cls = gameData.GetClass(data.Name);
 				if (cls == null) continue;
 
