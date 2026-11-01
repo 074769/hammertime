@@ -48,6 +48,14 @@ namespace Sledge.Providers.Texture.Spr
 		private SpriteLocation _location = new SpriteLocation();
 		private long _lastFrameTime;
 
+		// What was last written to this sprite's own buffers, so unchanged sprites skip the uploads.
+		private bool _uvWritten;
+		private BillboardUV _lastUv;
+		private bool _vertexWritten;
+		private Vector3 _lastOrigin;
+		private Vector3 _lastNormal;
+		private Vector4 _lastTint;
+
 		public SpriteRenderable(Rendering.Resources.Texture texture, TextureItem item)
 		{
 			_texture = texture ?? new Rendering.Resources.Texture();
@@ -75,6 +83,8 @@ namespace Sledge.Providers.Texture.Spr
 				Angles = Angles
 			});
 			_buffer = Engine.Interface.CreateBuffer();
+			_uvWritten = false;
+			_vertexWritten = false;
 		}
 
 		public void DestroyResources()
@@ -118,20 +128,33 @@ namespace Sledge.Providers.Texture.Spr
 				Angles = Angles,
 			};
 
-			cl.UpdateBuffer(_uvBuffer, 0, uv);
+			if (!_uvWritten || !SameUv(uv, _lastUv))
+			{
+				cl.UpdateBuffer(_uvBuffer, 0, uv);
+				_lastUv = uv;
+				_uvWritten = true;
+			}
 			cl.SetGraphicsResourceSet(1, _uvProjectionSet);
 
-			_buffer.Update(
-				new[]
-				{
-					new VertexStandard
+			var normal = new Vector3(_textureItem.Width * Scale, _textureItem.Height * Scale, 0);
+			if (!_vertexWritten || _lastOrigin != Origin || _lastNormal != normal || _lastTint != Tint)
+			{
+				_buffer.Update(
+					new[]
 					{
-						Position = Origin, Normal = new Vector3(_textureItem.Width * Scale, _textureItem.Height * Scale, 0),
-						Colour = Vector4.One, Tint = Tint, Flags = VertexFlags.None
-					}
-				},
-				new[] { 0u }
-			);
+						new VertexStandard
+						{
+							Position = Origin, Normal = new Vector3(_textureItem.Width * Scale, _textureItem.Height * Scale, 0),
+							Colour = Vector4.One, Tint = Tint, Flags = VertexFlags.None
+						}
+					},
+					new[] { 0u }
+				);
+				_lastOrigin = Origin;
+				_lastNormal = normal;
+				_lastTint = Tint;
+				_vertexWritten = true;
+			}
 			_buffer.Bind(cl, 0);
 
 
@@ -146,6 +169,14 @@ namespace Sledge.Providers.Texture.Spr
 			// Per-location rendering just draws the sprite at its own origin - the UV/orientation
 			// buffer update above already covers everything this overload needs.
 			Render(context, pipeline, viewport, cl);
+		}
+
+		private static bool SameUv(BillboardUV a, BillboardUV b)
+		{
+			return a.FrameCount == b.FrameCount
+				&& a.CurrentFrame == b.CurrentFrame
+				&& a.Orientation == b.Orientation
+				&& a.Angles == b.Angles;
 		}
 
 		public bool ShouldRender(IPipeline pipeline, IViewport viewport)
