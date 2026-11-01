@@ -237,8 +237,8 @@ namespace Sledge.BspEditor.Tools.Selection
 			// so they show whenever 3D widgets are on and something can be selected. The
 			// straight move arrow and the rotation arc are separate widgets, each with its
 			// own toggle, so neither depends on the other.
-			if (MoveArrowWidget != null) MoveArrowWidget.Active = ShowWidgets && ShowMoveArrowWidget;
-			if (MotionWidget != null) MotionWidget.Active = ShowWidgets && ShowRotationArcWidget;
+			if (MoveArrowWidget != null) { MoveArrowWidget.Active = ShowWidgets && ShowMoveArrowWidget; MoveArrowWidget.ShowRequested = MoveArrowWidget.Active; }
+			if (MotionWidget != null) { MotionWidget.Active = ShowWidgets && ShowRotationArcWidget; MotionWidget.ShowRequested = MotionWidget.Active; }
 		}
 
 		protected override void CreateBoxHandles()

@@ -115,6 +115,7 @@ namespace Sledge.BspEditor.Tools.Selection
 		{
 			store.LoadInstance(this);
 			Oy.Publish("SelectTool:SetShow3DWidgets", Show3DWidgets ? "1" : "0");
+			_selectionBox.ShowWidgets = Show3DWidgets;
 			Oy.Publish("SelectTool:SetAutoSelectBox", AutoSelectBox ? "1" : "0");
 			_selectionBox.ShowBoundingBox = ShowBoundingBox;
 			Oy.Publish("SelectTool:SetShowBoundingBox", ShowBoundingBox ? "1" : "0");

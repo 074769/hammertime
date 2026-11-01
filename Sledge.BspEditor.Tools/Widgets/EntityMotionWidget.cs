@@ -53,11 +53,16 @@ namespace Sledge.BspEditor.Tools.Widgets
 			Active = false;
 		}
 
+		/// <summary>Set by SelectionBoxDraggableState from the Show 3D widgets and this widget's toggle.
+		/// Checked in Render so the widget can't draw while either setting is off.</summary>
+		public bool ShowRequested { get; set; }
+
 		public override Image GetIcon() { return null; }
 		public override string GetName() { return "EntityMotionWidget"; }
 
 		protected override void Render(MapDocument document, IViewport viewport, PerspectiveCamera camera, I2DRenderer im)
 		{
+			if (!ShowRequested) return;
 			if (!document.Selection.IsEmpty)
 			{
 				RenderSelection(document, camera, im);
