@@ -26,6 +26,24 @@ namespace Sledge.BspEditor.Rendering.Overlay
             public string Text;
         }
 
+        // Text sizes depend only on font and text, and stacked entities usually share a name, so each
+        // size is measured once instead of every frame. Cleared if it grows too large.
+        private const int MaxCachedSizes = 4096;
+        private static readonly Dictionary<(FontType Font, string Text), Vector2> SizeCache
+            = new Dictionary<(FontType Font, string Text), Vector2>();
+
+        // Labels whose anchor is this far outside the viewport are skipped before any text is measured.
+        private const float OffscreenMargin = 512f;
+
+        private static Vector2 MeasureText(I2DRenderer im, FontType font, string text)
+        {
+            if (SizeCache.TryGetValue((font, text), out var size)) return size;
+            if (SizeCache.Count >= MaxCachedSizes) SizeCache.Clear();
+            size = im.CalcTextSize(font, text);
+            SizeCache[(font, text)] = size;
+            return size;
+        }
+
         public void Render(IViewport viewport, ICollection<IMapObject> objects, OrthographicCamera camera, Vector3 worldMin, Vector3 worldMax, I2DRenderer im, MapDocument document)
         {
             if (camera.Zoom < 1) return;
@@ -42,6 +60,8 @@ namespace Sledge.BspEditor.Rendering.Overlay
                 var c = ed.Color?.Color ?? Color.White;
 
                 var loc = camera.WorldToScreen(ed.BoundingBox.Center);
+                if (loc.X < -OffscreenMargin || loc.X > camera.Width + OffscreenMargin
+                    || loc.Y < -OffscreenMargin || loc.Y > camera.Height + OffscreenMargin) continue;
 
                 var box = ed.BoundingBox;
                 var dim = camera.Flatten(box.Dimensions / 2);
@@ -53,13 +73,13 @@ namespace Sledge.BspEditor.Rendering.Overlay
                 var str = ed.EntityData.Name;
                 var targetname = ed.EntityData.Get<string>("targetname")?.Trim() ?? "";
 
-                var size = im.CalcTextSize(FontType.Normal, str);
+                var size = MeasureText(im, FontType.Normal, str);
                 var pos = new Vector2(loc.X - size.X / 2, loc.Y - size.Y - 2);
                 labels.Add(new Label { Depth = depth, Position = pos, Size = size, Colour = c, Font = FontType.Normal, Text = str });
 
                 if (renderNames && targetname.Length > 0)
                 {
-                    var nmms = im.CalcTextSize(FontType.Bold, targetname);
+                    var nmms = MeasureText(im, FontType.Bold, targetname);
                     labels.Add(new Label { Depth = depth, Position = new Vector2(loc.X - nmms.X / 2, loc.Y + 2), Size = nmms, Colour = c, Font = FontType.Bold, Text = targetname });
                 }
             }
