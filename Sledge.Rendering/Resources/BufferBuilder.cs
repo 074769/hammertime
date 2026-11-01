@@ -40,6 +40,12 @@ namespace Sledge.Rendering.Resources
         public List<IndirectIndirectBuffer> IndirectBuffers { get; }
         public List<List<BufferGroup>> IndirectBufferGroups { get; }
 
+        // Selection-dependent draws, one entry per indirect buffer (null when a buffer has none).
+        private readonly List<SelectionDrawTable> _selectionTables = new List<SelectionDrawTable>();
+        private readonly SelectionState _selection;
+        private readonly object _selectionLock = new object();
+        private bool _disposed;
+
         /// <summary>
         /// Debug information about buffer allocations.
         /// This will only contain data in debug mode.
@@ -51,9 +57,10 @@ namespace Sledge.Rendering.Resources
         private readonly uint _vertexBufferSize;
         private readonly uint _indexBufferSize;
 
-        internal BufferBuilder(GraphicsDevice device, BufferSize size)
+        internal BufferBuilder(GraphicsDevice device, BufferSize size, SelectionState selection = null)
         {
             _device = device;
+            _selection = selection;
             VertexBuffers = new List<DeviceBuffer>();
             IndexBuffers = new List<DeviceBuffer>();
             IndirectBuffers = new List<IndirectIndirectBuffer>();
@@ -120,6 +127,8 @@ namespace Sledge.Rendering.Resources
 
             var bufferGroups = new List<BufferGroup>();
             var indirectBuffer = new IndirectIndirectBuffer(_device, numInd * indSize);
+            SelectionDrawTable selectionTable = null;
+            var selectionBits = _selection?.Bits;
             uint indirOffset = 0;
             foreach (var g in _currentIndirectArguments.GroupBy(x => new { x.Pipeline, x.Camera, x.HasTransparency, x.Binding }))
             {
@@ -127,7 +136,9 @@ namespace Sledge.Rendering.Resources
                 {
                     foreach (var ia in g)
                     {
-                        indirectBuffer.Update(indirOffset * indSize, ia.Arguments);
+                        var args = ia.Arguments;
+                        args.IndexCount = StartingIndexCount(ref selectionTable, ia, (int) indirOffset, selectionBits);
+                        indirectBuffer.Update(indirOffset * indSize, args);
                         var bg = new BufferGroup(ia.Pipeline, ia.Camera, ia.Location, ia.Binding, indirOffset, 1);
                         bufferGroups.Add(bg);
                         indirOffset += 1;
@@ -135,7 +146,13 @@ namespace Sledge.Rendering.Resources
                 }
                 else
                 {
-                    var indir = g.Select(x => x.Arguments).ToArray();
+                    var items = g.ToList();
+                    var indir = new IndirectDrawIndexedArguments[items.Count];
+                    for (var j = 0; j < items.Count; j++)
+                    {
+                        indir[j] = items[j].Arguments;
+                        indir[j].IndexCount = StartingIndexCount(ref selectionTable, items[j], (int) indirOffset + j, selectionBits);
+                    }
                     var indirCount = (uint) indir.Length;
 
                     indirectBuffer.Update(indirOffset * indSize, indir);
@@ -151,6 +168,7 @@ namespace Sledge.Rendering.Resources
             IndexBuffers.Add(_currentIndexBuffer);
             IndirectBuffers.Add(indirectBuffer);
             IndirectBufferGroups.Add(bufferGroups);
+            _selectionTables.Add(selectionTable);
 
 #if DEBUG
             AllocationInformation.Add(new BufferAllocation(_currentVertexBuffer.SizeInBytes, _currentVertexOffset, _currentIndexBuffer.SizeInBytes, _currentIndexOffset));
@@ -181,7 +199,7 @@ namespace Sledge.Rendering.Resources
             foreach (var bg in groups)
             {
                 _currentIndirectArguments.Add(new IndirectArgument(
-                    bg.Pipeline, bg.Camera, bg.HasTransparency, bg.Location, bg.Binding,
+                    bg.Pipeline, bg.Camera, bg.HasTransparency, bg.Location, bg.Binding, bg.Slot, bg.Filter,
                     new IndirectDrawIndexedArguments
                     {
                         IndexCount = bg.Count,
@@ -195,6 +213,44 @@ namespace Sledge.Rendering.Resources
 
             _currentVertexOffset += vsize;
             _currentIndexOffset += isize;
+        }
+
+        /// <summary>
+        /// The index count a draw starts with. Draws that depend on selection are registered in the table
+        /// and start at zero when they are hidden for the current selection.
+        /// </summary>
+        private static uint StartingIndexCount(ref SelectionDrawTable table, IndirectArgument draw, int drawIndex, uint[] bits)
+        {
+            var fullCount = draw.Arguments.IndexCount;
+            if (draw.Slot < 0 || draw.Filter == SelectionFilter.Always) return fullCount;
+
+            if (table == null) table = new SelectionDrawTable();
+            return table.AddDraw(draw.Slot, draw.Filter, drawIndex, fullCount, bits);
+        }
+
+        /// <summary>
+        /// Shows or hides the selection-dependent draws to match the given selection, without rebuilding any
+        /// geometry. Only draws whose state actually changed are rewritten. Call this once the builder is complete.
+        /// </summary>
+        public void ApplySelection(uint[] bits)
+        {
+            lock (_selectionLock)
+            {
+                if (_disposed) return;
+
+                var count = Math.Min(_selectionTables.Count, IndirectBuffers.Count);
+                for (var i = 0; i < count; i++)
+                {
+                    var table = _selectionTables[i];
+                    if (table == null) continue;
+
+                    var buffer = IndirectBuffers[i];
+                    if (table.Apply(bits, (draw, indexCount) => buffer.SetIndexCount(draw, indexCount)) > 0)
+                    {
+                        buffer.FlushUpdates();
+                    }
+                }
+            }
         }
 
         public void Complete()
@@ -223,6 +279,10 @@ namespace Sledge.Rendering.Resources
 
         public void Dispose()
         {
+            lock (_selectionLock)
+            {
+                _disposed = true;
+            }
             VertexBuffers.ForEach(x => x.Dispose());
             IndexBuffers.ForEach(x => x.Dispose());
             IndirectBuffers.ForEach(x => x.Dispose());
@@ -235,15 +295,19 @@ namespace Sledge.Rendering.Resources
             public bool HasTransparency;
             public Vector3 Location;
             public string Binding;
+            public int Slot;
+            public SelectionFilter Filter;
             public IndirectDrawIndexedArguments Arguments;
 
-            public IndirectArgument(PipelineType pipeline, CameraType camera, bool hasTransparency, Vector3 location, string binding, IndirectDrawIndexedArguments arguments)
+            public IndirectArgument(PipelineType pipeline, CameraType camera, bool hasTransparency, Vector3 location, string binding, int slot, SelectionFilter filter, IndirectDrawIndexedArguments arguments)
             {
                 Pipeline = pipeline;
                 Camera = camera;
                 HasTransparency = hasTransparency;
                 Location = location;
                 Binding = binding;
+                Slot = slot;
+                Filter = filter;
                 Arguments = arguments;
             }
         }

@@ -43,7 +43,7 @@ namespace Sledge.Rendering.Engine
 
 		public BufferBuilder CreateBufferBuilder(BufferSize size)
 		{
-			return new BufferBuilder(Engine.Instance.Device, size);
+			return new BufferBuilder(Engine.Instance.Device, size, Engine.Instance.Context.Selection);
 		}
 		public int InactiveTargetFps { get => Engine.Instance.InactiveTargetFps; set => Engine.Instance.InactiveTargetFps = value; }
 		public struct DepthResource
@@ -194,6 +194,16 @@ namespace Sledge.Rendering.Engine
 		public void SetSelectiveTransform(Matrix4x4 matrix)
 		{
 			Engine.Instance.Context.SelectiveTransform = matrix;
+		}
+
+		/// <summary>
+		/// Publishes the selected object slots (bit N set = the object in slot N is selected). Buffer builders
+		/// created afterwards start in this state; builders already in the scene are updated by calling
+		/// <see cref="BufferBuilder.ApplySelection"/> on them.
+		/// </summary>
+		public void SetSelection(uint[] bits)
+		{
+			Engine.Instance.Context.Selection.Bits = bits;
 		}
 
 		public void Add(IRenderable renderable) => Engine.Instance.Scene.Add(renderable);

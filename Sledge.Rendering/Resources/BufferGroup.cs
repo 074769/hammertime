@@ -16,6 +16,29 @@ namespace Sledge.Rendering.Resources
         public uint Offset { get; }
         public uint Count { get; }
 
+        /// <summary>
+        /// The selection slot of the object this group draws, or -1 when the group does not depend on selection.
+        /// </summary>
+        public int Slot { get; private set; } = -1;
+
+        /// <summary>
+        /// Which selection state the group is drawn in. Only meaningful when <see cref="Slot"/> is not -1.
+        /// </summary>
+        public SelectionFilter Filter { get; private set; }
+
+        /// <summary>
+        /// A copy of this group that is only drawn while the object in <paramref name="slot"/> is in the
+        /// state described by <paramref name="filter"/>.
+        /// </summary>
+        public BufferGroup WithSelection(int slot, SelectionFilter filter)
+        {
+            return new BufferGroup(Pipeline, Camera, HasTransparency, Location, Binding, Offset, Count)
+            {
+                Slot = slot,
+                Filter = filter
+            };
+        }
+
         public BufferGroup(PipelineType pipeline, CameraType camera, uint offset, uint count)
             : this(pipeline, camera, false, Vector3.Zero, string.Empty, offset, count)
         {

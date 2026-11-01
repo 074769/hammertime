@@ -18,6 +18,12 @@ namespace Sledge.Rendering.Resources
         private readonly DeviceBuffer _deviceBuffer;
         private readonly IndirectDrawIndexedArguments[] _arguments;
 
+        // A CPU copy of every draw's arguments, so a single draw can be changed without reading the
+        // GPU buffer back. In fallback mode the argument array is itself that copy.
+        private readonly IndirectDrawIndexedArguments[] _shadow;
+        private int _dirtyMin = int.MaxValue;
+        private int _dirtyMax = -1;
+
         public IndirectIndirectBuffer(GraphicsDevice device, int sizeInBytes)
         {
             _device = device;
@@ -25,10 +31,12 @@ namespace Sledge.Rendering.Resources
             if (UseFallback)
             {
                 _arguments = new IndirectDrawIndexedArguments[sizeInBytes / ArgSize];
+                _shadow = _arguments;
             }
             else
             {
                 _deviceBuffer = _device.ResourceFactory.CreateBuffer(new BufferDescription((uint) sizeInBytes, BufferUsage.IndirectBuffer));
+                _shadow = new IndirectDrawIndexedArguments[sizeInBytes / ArgSize];
             }
         }
 
@@ -40,6 +48,7 @@ namespace Sledge.Rendering.Resources
             }
             else
             {
+                _shadow[offset / ArgSize] = arguments;
                 _device.UpdateBuffer(_deviceBuffer, (uint) offset, arguments);
             }
         }
@@ -52,7 +61,42 @@ namespace Sledge.Rendering.Resources
             }
             else
             {
+                Array.Copy(arguments, 0, _shadow, offset / ArgSize, arguments.LongLength);
                 _device.UpdateBuffer(_deviceBuffer, (uint) offset, arguments);
+            }
+        }
+
+        /// <summary>
+        /// Changes the index count of one draw. A count of zero makes the draw do nothing.
+        /// The change reaches the GPU when <see cref="FlushUpdates"/> is called.
+        /// </summary>
+        public void SetIndexCount(int drawIndex, uint count)
+        {
+            if (drawIndex < 0 || drawIndex >= _shadow.Length) return;
+            if (_shadow[drawIndex].IndexCount == count) return;
+
+            _shadow[drawIndex].IndexCount = count;
+
+            if (UseFallback) return;
+            if (drawIndex < _dirtyMin) _dirtyMin = drawIndex;
+            if (drawIndex > _dirtyMax) _dirtyMax = drawIndex;
+        }
+
+        /// <summary>
+        /// Uploads the draws changed by <see cref="SetIndexCount"/> in one write covering the changed range.
+        /// </summary>
+        public unsafe void FlushUpdates()
+        {
+            if (UseFallback || _dirtyMax < 0) return;
+
+            var first = _dirtyMin;
+            var last = _dirtyMax;
+            _dirtyMin = int.MaxValue;
+            _dirtyMax = -1;
+
+            fixed (IndirectDrawIndexedArguments* source = &_shadow[first])
+            {
+                _device.UpdateBuffer(_deviceBuffer, (uint) (first * ArgSize), (IntPtr) source, (uint) ((last - first + 1) * ArgSize));
             }
         }
 
