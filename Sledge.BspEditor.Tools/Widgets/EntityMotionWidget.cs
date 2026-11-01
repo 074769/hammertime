@@ -19,7 +19,7 @@ using MapEntity = Sledge.BspEditor.Primitives.MapObjects.Entity;
 namespace Sledge.BspEditor.Tools.Widgets
 {
 	/// <summary>
-	/// 3D-viewport counterpart of the rotation half of EntityMovementOverlay. For every
+	/// 3D-viewport rotation arc for entities whose class has an axis option. For every
 	/// selected entity whose FGD class exposes the "X Axis" / "Y Axis" spawnflag pair
 	/// (func_rotating, func_door_rotating, func_platrot, momentary_rot_button, ...) it
 	/// draws a 3D rotation arrow around the entity's rotation axis. When the entity has a
@@ -103,7 +103,7 @@ namespace Sledge.BspEditor.Tools.Widgets
 			}
 		}
 
-		// --- Rotation data (mirrors EntityMovementOverlay) ---------------------
+		// --- Rotation data ------------------------------------------------------
 
 		private static Vector3? GetRotationAxis(GameDataObject cls, EntityData data)
 		{
