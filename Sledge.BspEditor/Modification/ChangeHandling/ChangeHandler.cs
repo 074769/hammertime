@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using LogicAndTrick.Oy;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Primitives.MapObjects;
+using Sledge.Common.Logging;
 using Sledge.Common.Shell.Hooks;
 
 namespace Sledge.BspEditor.Modification.ChangeHandling
@@ -18,7 +19,8 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
             [ImportMany] IMapDocumentChangeHandler[] changeHandlers
         )
         {
-            _changeHandlers = changeHandlers;
+            // The order never changes, so it is worked out once instead of for every change
+            _changeHandlers = changeHandlers.OrderBy(x => x.OrderHint).ToArray();
         }
 
         public Task OnInitialise()
@@ -38,9 +40,9 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
 
         private async Task Changed(Change change)
         {
-            foreach (var ch in _changeHandlers.OrderBy(x => x.OrderHint))
+            foreach (var ch in _changeHandlers)
             {
-                await ch.Changed(change);
+                using (PerfLog.Measure("Handler", ch)) await ch.Changed(change);
             }
         }
     }

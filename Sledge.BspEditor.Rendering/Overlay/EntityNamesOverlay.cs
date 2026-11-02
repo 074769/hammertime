@@ -4,9 +4,12 @@ using System.ComponentModel.Composition;
 using System.Drawing;
 using System.Linq;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Primitives.MapObjectData;
 using Sledge.BspEditor.Primitives.MapObjects;
+using Sledge.BspEditor.Rendering.Scene;
+using Sledge.Common.Logging;
 using Sledge.Rendering.Cameras;
 using Sledge.Rendering.Overlay;
 using Sledge.Rendering.Viewports;
@@ -44,13 +47,72 @@ namespace Sledge.BspEditor.Rendering.Overlay
             return size;
         }
 
+        /// <summary>
+        /// The labels a view drew the last time, and what they were worked out for. Nothing is recalculated
+        /// while the map, the visible objects and the camera stay the same, which is the case for most frames
+        /// (for example the whole time a selection is being dragged, since the map doesn't change until release).
+        /// </summary>
+        private sealed class ViewLabels
+        {
+            public MapDocument Document;
+            public long Revision;
+            public ICollection<IMapObject> Objects;
+            public Vector3 Position;
+            public float Zoom;
+            public int Width;
+            public int Height;
+            public OrthographicType ViewType;
+            public Label[] Drawn = new Label[0];
+        }
+
+        private static readonly ConditionalWeakTable<IViewport, ViewLabels> Views = new ConditionalWeakTable<IViewport, ViewLabels>();
+
         public void Render(IViewport viewport, ICollection<IMapObject> objects, OrthographicCamera camera, Vector3 worldMin, Vector3 worldMax, I2DRenderer im, MapDocument document)
         {
             if (camera.Zoom < 1) return;
 
+            var revision = DocumentRevision.Get(document);
+            var view = Views.GetOrCreateValue(viewport);
+            var upToDate = ReferenceEquals(view.Document, document)
+                           && view.Revision == revision
+                           && ReferenceEquals(view.Objects, objects)
+                           && view.Position == camera.Position
+                           && view.Zoom == camera.Zoom
+                           && view.Width == camera.Width
+                           && view.Height == camera.Height
+                           && view.ViewType == camera.ViewType;
+
+            if (!upToDate)
+            {
+                PerfLog.CountForView("Labels: rebuilt", viewport.ID);
+                view.Drawn = BuildLabels(objects, camera, im);
+                view.Document = document;
+                view.Revision = revision;
+                view.Objects = objects;
+                view.Position = camera.Position;
+                view.Zoom = camera.Zoom;
+                view.Width = camera.Width;
+                view.Height = camera.Height;
+                view.ViewType = camera.ViewType;
+            }
+            else
+            {
+                PerfLog.CountForView("Labels: cached", viewport.ID);
+            }
+
+            var drawn = view.Drawn;
+            for (var i = 0; i < drawn.Length; i++)
+            {
+                im.AddText(drawn[i].Position, drawn[i].Colour, drawn[i].Font, drawn[i].Text);
+            }
+        }
+
+        /// <summary>Works out which labels to draw for the objects in a view.</summary>
+        private static Label[] BuildLabels(ICollection<IMapObject> objects, OrthographicCamera camera, I2DRenderer im)
+        {
             // Escape hatch in case there's too many entities on screen
             var ents = objects.OfType<Entity>().Where(x => x.EntityData != null).Where(x => !x.Data.OfType<IObjectVisibility>().Any(v => v.IsHidden)).ToList();
-            if (ents.Count <= 0 || ents.Count > 1000) return;
+            if (ents.Count <= 0 || ents.Count > 1000) return new Label[0];
 
             var renderNames = camera.Zoom > 2 && ents.Count < 50;
 
@@ -87,13 +149,15 @@ namespace Sledge.BspEditor.Rendering.Overlay
             // Front to back. A label is drawn only if it doesn't overlap one already drawn, so labels behind
             // another one are culled, and entities stacked on one origin show a single line of text.
             var grid = new LabelGrid();
+            var drawn = new List<Label>();
             foreach (var label in labels.OrderByDescending(l => l.Depth))
             {
                 var rect = new RectangleF(label.Position.X, label.Position.Y, label.Size.X, label.Size.Y);
                 if (grid.Overlaps(rect)) continue;
                 grid.Add(rect);
-                im.AddText(label.Position, label.Colour, label.Font, label.Text);
+                drawn.Add(label);
             }
+            return drawn.ToArray();
         }
 
         /// <summary>
