@@ -34,7 +34,7 @@ namespace Sledge.BspEditor.Rendering.Converters
             await DefaultSolidConverter.ConvertFaces(builder, document, obj, faces, resourceCollector);
 
             var origin = obj.Data.GetOne<Origin>()?.Location ?? obj.BoundingBox.Center;
-            await DefaultEntityConverter.ConvertBox(builder, obj, new Box(origin - Vector3.One * 4, origin + Vector3.One * 4));
+            await DefaultEntityConverter.ConvertBox(builder, document, obj, new Box(origin - Vector3.One * 4, origin + Vector3.One * 4));
         }
     }
 }

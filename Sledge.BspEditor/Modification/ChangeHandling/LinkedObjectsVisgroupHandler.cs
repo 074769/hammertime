@@ -23,7 +23,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
         {
             // Entries are keyed by link/slot IDs and filled by VisgroupHandler, which is
             // skipped for visibility-only changes because membership can't change.
-            if (VisibilityOnlyFastPath.IsActive(change)) return;
+            if (VisibilityOnlyFastPath.IsActive(change) || SelectionOnlyFastPath.IsActive(change)) return;
 
             var doc = change.Document;
 
@@ -127,7 +127,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
             // fill step in VisgroupHandler/LinkedObjectsVisgroupHandler, and an empty
             // "Linked Objects" entry can only appear when links change, never when only
             // visibility flags change.
-            if (VisibilityOnlyFastPath.IsActive(change)) return;
+            if (VisibilityOnlyFastPath.IsActive(change) || SelectionOnlyFastPath.IsActive(change)) return;
 
             var empty = change.Document.Map.Data.Get<LinkedObjectsVisgroup>().Where(x => x.Objects.Count == 0).ToList();
             if (empty.Count == 0) return;

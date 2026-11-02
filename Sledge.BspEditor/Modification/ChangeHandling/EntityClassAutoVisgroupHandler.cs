@@ -29,7 +29,7 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
         {
             // New class entries are only created for changed entities; visibility-only
             // changes can't introduce new class names.
-            if (VisibilityOnlyFastPath.IsActive(change)) return Task.CompletedTask;
+            if (VisibilityOnlyFastPath.IsActive(change) || SelectionOnlyFastPath.IsActive(change)) return Task.CompletedTask;
 
             var classNames = change.Added.Union(change.Updated)
                 .OfType<Entity>()

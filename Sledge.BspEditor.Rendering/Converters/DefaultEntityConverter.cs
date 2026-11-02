@@ -10,6 +10,7 @@ using Sledge.BspEditor.Primitives.MapObjectData;
 using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.BspEditor.Rendering.ChangeHandlers;
 using Sledge.BspEditor.Rendering.Resources;
+using Sledge.BspEditor.Rendering.Selection;
 using Sledge.DataStructures.Geometric;
 using Sledge.Rendering.Cameras;
 using Sledge.Rendering.Pipelines;
@@ -40,7 +41,7 @@ namespace Sledge.BspEditor.Rendering.Converters
 		{
 			if (!obj.Hierarchy.HasChildren)
 			{
-				ConvertBox(builder, obj, obj.BoundingBox);
+				ConvertBox(builder, document, obj, obj.BoundingBox);
 			}
 			return ConvertRelations(builder, obj as Entity, document);
 		}
@@ -98,8 +99,12 @@ namespace Sledge.BspEditor.Rendering.Converters
 			}
 			return Task.CompletedTask;
 		}
-		internal static Task ConvertBox(BufferBuilder builder, IMapObject obj, Box box)
+		internal static Task ConvertBox(BufferBuilder builder, MapDocument document, IMapObject obj, Box box)
 		{
+			// See DefaultSolidConverter: with a slot the object is converted in both looks and never rebuilt for selection
+			var slot = SelectionSlots.SlotFor(document, obj);
+			var bakeSelected = slot < 0 && obj.IsSelected;
+
 			// It's always a box, these numbers are known
 			const uint numVertices = 4 * 6;
 
@@ -110,10 +115,10 @@ namespace Sledge.BspEditor.Rendering.Converters
 			var points = new VertexStandard[numVertices];
 			var indices = new uint[numSolidIndices + numWireframeIndices];
 
-			var c = obj.IsSelected ? Color.Red : EntityBrushColorSettings.Resolve(obj, obj.Data.GetOne<ObjectColor>()?.Color ?? Color.Magenta);
+			var c = bakeSelected ? Color.Red : EntityBrushColorSettings.Resolve(obj, obj.Data.GetOne<ObjectColor>()?.Color ?? Color.Magenta);
 			var colour = new Vector4(c.R, c.G, c.B, c.A) / 255f;
 
-			var flags = obj.IsSelected ? VertexFlags.SelectiveTransformed : VertexFlags.None;
+			var flags = bakeSelected ? VertexFlags.SelectiveTransformed : VertexFlags.None;
 
 			var vi = 0u;
 			var si = 0u;
@@ -165,7 +170,13 @@ namespace Sledge.BspEditor.Rendering.Converters
 				groups.Add(new BufferGroup(PipelineType.TexturedOpaque, CameraType.Perspective, 0, numSolidIndices));
 			}
 
-			// Selected objects: 3D uses the normal (depth tested) wireframe, 2D uses the on-top selection pipeline
+			if (slot >= 0)
+			{
+				SelectionVariants.AppendBoth(builder, slot, points, indices, groups, numSolidIndices, numWireframeIndices, Vector4.One);
+				return Task.FromResult(0);
+			}
+
+			// No slot: the selection is baked into the geometry. Selected objects: 3D uses the normal (depth tested) wireframe, 2D uses the on-top selection pipeline
 			groups.Add(new BufferGroup(PipelineType.Wireframe, obj.IsSelected ? CameraType.Perspective : CameraType.Orthographic, numSolidIndices, numWireframeIndices));
 			if (obj.IsSelected) groups.Add(new BufferGroup(PipelineType.WireframeSelected, CameraType.Orthographic, numSolidIndices, numWireframeIndices));
 

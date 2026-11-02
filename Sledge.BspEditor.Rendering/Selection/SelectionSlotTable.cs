@@ -17,6 +17,12 @@ namespace Sledge.BspEditor.Rendering.Selection
         public const int WordCount = Capacity / 32;
 
         private readonly Dictionary<long, int> _slots = new Dictionary<long, int>();
+
+        // The live selection, one bit per slot. Published to the renderer as a copy (see Snapshot).
+        private readonly uint[] _selected = new uint[WordCount];
+
+        // Objects that still bake their selection into their geometry, so selecting them needs a rebuild.
+        private readonly HashSet<long> _bakesSelection = new HashSet<long>();
         private readonly Stack<int> _free = new Stack<int>();
         private int _next;
 
@@ -48,7 +54,9 @@ namespace Sledge.BspEditor.Rendering.Selection
         /// <summary>Frees the slot of a removed object so it can be reused.</summary>
         public void Remove(long id)
         {
+            _bakesSelection.Remove(id);
             if (!_slots.TryGetValue(id, out var slot)) return;
+            _selected[slot >> 5] &= ~(1u << (slot & 31));
             _slots.Remove(id);
             _free.Push(slot);
         }
@@ -58,7 +66,44 @@ namespace Sledge.BspEditor.Rendering.Selection
         {
             _slots.Clear();
             _free.Clear();
+            _bakesSelection.Clear();
+            Array.Clear(_selected, 0, _selected.Length);
             _next = 0;
+        }
+
+        /// <summary>Marks an object as baking its selection into its geometry, so selecting it must rebuild it.</summary>
+        public void MarkBakesSelection(long id)
+        {
+            _bakesSelection.Add(id);
+        }
+
+        /// <summary>True when selecting or deselecting the object can be done without rebuilding it.</summary>
+        public bool CanSwitchLook(long id)
+        {
+            return _slots.ContainsKey(id) && !_bakesSelection.Contains(id);
+        }
+
+        /// <summary>Sets or clears the selected bit of an object. Objects without a slot are ignored.</summary>
+        public void SetSelected(long id, bool selected)
+        {
+            if (!_slots.TryGetValue(id, out var slot)) return;
+            if (selected) _selected[slot >> 5] |= 1u << (slot & 31);
+            else _selected[slot >> 5] &= ~(1u << (slot & 31));
+        }
+
+        /// <summary>Replaces the whole selection with exactly these objects.</summary>
+        public void ResetSelection(IEnumerable<long> selectedIds)
+        {
+            if (selectedIds == null) throw new ArgumentNullException(nameof(selectedIds));
+
+            Array.Clear(_selected, 0, _selected.Length);
+            foreach (var id in selectedIds) SetSelected(id, true);
+        }
+
+        /// <summary>A copy of the current selection bits, safe to hand to the renderer.</summary>
+        public uint[] Snapshot()
+        {
+            return (uint[]) _selected.Clone();
         }
 
         /// <summary>

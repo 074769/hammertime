@@ -5,6 +5,7 @@ using Sledge.BspEditor.Primitives.MapObjectData;
 using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.BspEditor.Rendering.Converters;
 using Sledge.BspEditor.Rendering.Resources;
+using Sledge.BspEditor.Rendering.Selection;
 using Sledge.DataStructures.Geometric;
 using Sledge.Providers.Texture;
 using Sledge.Rendering.Cameras;
@@ -38,6 +39,9 @@ namespace HammerTime.Source.Converters
 		}
 		internal static async Task ConvertFaces(BufferBuilder builder, MapDocument document, IMapObject obj, Displacement face, ResourceCollector resourceCollector)
 		{
+			// Displacements still bake their selection into their geometry, so selecting one has to rebuild it
+			SelectionSlots.MarkBakesSelection(document, obj);
+
 			var displayFlags = document.Map.Data.GetOne<DisplayFlags>();
 			var displayData = document.Map.Data.GetOne<DisplayData>() ?? new DisplayData();
 			var hideNull = displayFlags?.HideNullTextures == true;

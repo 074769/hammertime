@@ -130,7 +130,9 @@ namespace Sledge.Rendering.Resources
             SelectionDrawTable selectionTable = null;
             var selectionBits = _selection?.Bits;
             uint indirOffset = 0;
-            foreach (var g in _currentIndirectArguments.GroupBy(x => new { x.Pipeline, x.Camera, x.HasTransparency, x.Binding }))
+            // Draws for the "selected" look are merged into groups of their own, so the renderer can skip all of
+            // them at once while nothing in this buffer is selected.
+            foreach (var g in _currentIndirectArguments.GroupBy(x => new { x.Pipeline, x.Camera, x.HasTransparency, x.Binding, SelectedOnly = x.Slot >= 0 && x.Filter == SelectionFilter.WhenSelected }))
             {
                 if (g.Key.HasTransparency)
                 {
@@ -140,6 +142,7 @@ namespace Sledge.Rendering.Resources
                         args.IndexCount = StartingIndexCount(ref selectionTable, ia, (int) indirOffset, selectionBits);
                         indirectBuffer.Update(indirOffset * indSize, args);
                         var bg = new BufferGroup(ia.Pipeline, ia.Camera, ia.Location, ia.Binding, indirOffset, 1);
+                        if (g.Key.SelectedOnly) bg = bg.WithSelection(-1, SelectionFilter.WhenSelected);
                         bufferGroups.Add(bg);
                         indirOffset += 1;
                     }
@@ -158,17 +161,21 @@ namespace Sledge.Rendering.Resources
                     indirectBuffer.Update(indirOffset * indSize, indir);
 
                     var bg = new BufferGroup(g.Key.Pipeline, g.Key.Camera, g.Key.Binding, indirOffset, indirCount);
+                    if (g.Key.SelectedOnly) bg = bg.WithSelection(-1, SelectionFilter.WhenSelected);
                     bufferGroups.Add(bg);
 
                     indirOffset += indirCount;
                 }
             }
             
-            VertexBuffers.Add(_currentVertexBuffer);
-            IndexBuffers.Add(_currentIndexBuffer);
-            IndirectBuffers.Add(indirectBuffer);
-            IndirectBufferGroups.Add(bufferGroups);
-            _selectionTables.Add(selectionTable);
+            lock (_selectionLock)
+            {
+                VertexBuffers.Add(_currentVertexBuffer);
+                IndexBuffers.Add(_currentIndexBuffer);
+                IndirectBuffers.Add(indirectBuffer);
+                IndirectBufferGroups.Add(bufferGroups);
+                _selectionTables.Add(selectionTable);
+            }
 
 #if DEBUG
             AllocationInformation.Add(new BufferAllocation(_currentVertexBuffer.SizeInBytes, _currentVertexOffset, _currentIndexBuffer.SizeInBytes, _currentIndexOffset));
@@ -226,6 +233,17 @@ namespace Sledge.Rendering.Resources
 
             if (table == null) table = new SelectionDrawTable();
             return table.AddDraw(draw.Slot, draw.Filter, drawIndex, fullCount, bits);
+        }
+
+        /// <summary>
+        /// True when at least one "when selected" draw in the given indirect buffer is currently visible.
+        /// The renderer uses this to skip the selected-state groups of buffers with nothing selected.
+        /// </summary>
+        public bool HasSelectedDraws(int bufferIndex)
+        {
+            if (bufferIndex < 0 || bufferIndex >= _selectionTables.Count) return false;
+            var table = _selectionTables[bufferIndex];
+            return table != null && table.VisibleSelectedCount > 0;
         }
 
         /// <summary>

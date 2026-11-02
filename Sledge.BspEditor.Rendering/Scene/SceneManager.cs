@@ -5,8 +5,10 @@ using Sledge.BspEditor.Modification;
 using Sledge.BspEditor.Primitives.MapData;
 using Sledge.BspEditor.Primitives.MapObjectData;
 using Sledge.BspEditor.Primitives.MapObjects;
+using Sledge.BspEditor.Rendering.ChangeHandlers;
 using Sledge.BspEditor.Rendering.Converters;
 using Sledge.BspEditor.Rendering.Resources;
+using Sledge.BspEditor.Rendering.Selection;
 using Sledge.Common;
 using Sledge.Common.Shell.Documents;
 using Sledge.Common.Shell.Hooks;
@@ -88,6 +90,9 @@ namespace Sledge.BspEditor.Rendering.Scene
 		// Document events
 		private async Task DocumentChangedEarly(Change change)
 		{
+			// The skybox and the environment light come from the map's data, which selecting can't change
+			if (change.IsSelectionOnly) return;
+
 			await LoadSkybox();
 			await UpdateEnvironmentLight();
 
@@ -140,6 +145,9 @@ namespace Sledge.BspEditor.Rendering.Scene
 		{
 			if (_activeDocument.TryGetTarget(out var md) && change.Document == md)
 			{
+				// Selecting or deselecting changes no geometry, only which look of each object is drawn
+				if (ApplySelectionOnly(md, change)) return;
+
 				if (change.AffectedData.Any(x => x.AffectsRendering))
 				{
 					await UpdateScene(change.Document, null);
@@ -147,8 +155,41 @@ namespace Sledge.BspEditor.Rendering.Scene
 				else if (change.HasObjectChanges)
 				{
 					await UpdateScene(change.Document, change.Added.Union(change.Updated).Union(change.Removed));
+
+					// Objects that left the map no longer need their selection slots
+					SelectionSlots.Release(md, change.Removed.ToList());
 				}
 			}
+		}
+
+		/// <summary>
+		/// Handles a change that only selected or deselected objects without converting anything, by switching
+		/// each object to its selected or unselected look. Returns false when the scene has to be updated instead,
+		/// which is the case when an object hasn't been converted yet or still bakes its selection into its geometry.
+		/// </summary>
+		private bool ApplySelectionOnly(MapDocument md, Change change)
+		{
+			var sceneBuilder = _sceneBuilder;
+			if (sceneBuilder == null || !change.IsSelectionOnly) return false;
+
+			var updated = change.Updated.ToList();
+			if (!SelectionSlots.CanSkipRebuild(md, updated)) return false;
+
+			using (PerfLog.Measure("Selection: switch looks"))
+			{
+				// Model entities are drawn by renderables of their own; only their selective transform flag depends on selection
+				foreach (var o in updated)
+				{
+					var model = o.Data.GetOne<EntityModel>();
+					if (model?.Renderable == null) continue;
+					model.Renderable.Flags = o.IsSelected
+						? Sledge.Rendering.Primitives.VertexFlags.SelectiveTransformed
+						: Sledge.Rendering.Primitives.VertexFlags.None;
+				}
+
+				sceneBuilder.ApplySelection(SelectionSlots.Update(md, updated));
+			}
+			return true;
 		}
 
 		/// <summary>

@@ -9,6 +9,7 @@ using Sledge.BspEditor.Primitives.MapData;
 using Sledge.BspEditor.Primitives.MapObjectData;
 using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.BspEditor.Rendering.Resources;
+using Sledge.BspEditor.Rendering.Selection;
 using Sledge.DataStructures.Geometric;
 using Sledge.Providers.Texture;
 using Sledge.Rendering.Cameras;
@@ -42,6 +43,12 @@ namespace Sledge.BspEditor.Rendering.Converters
 		{
 			faces = faces.Where(x => x.Vertices.Count > 2).ToList();
 
+			// Objects with a slot are converted once in an unselected and a selected look, and selecting them later
+			// only switches which look is drawn. Without a slot (the slot table is full) the selection is baked
+			// into the geometry instead, so selecting the object rebuilds it.
+			var slot = SelectionSlots.SlotFor(document, obj);
+			var bakeSelected = slot < 0 && obj.IsSelected;
+
 			var displayFlags = document.Map.Data.GetOne<DisplayFlags>();
 			var displayData = document.Map.Data.GetOne<DisplayData>() ?? new DisplayData();
 			var hideNull = displayFlags?.HideNullTextures == true;
@@ -66,7 +73,7 @@ namespace Sledge.BspEditor.Rendering.Converters
 				vColor = document.Map.Data.Get<Visgroup>().FirstOrDefault(x => x.ID == vId.ID)?.Colour;
 			}
 
-			var colour = (obj.IsSelected ? Color.Red : vColor.HasValue ? vColor.Value : EntityBrushColorSettings.Resolve(obj, obj.Data.GetOne<ObjectColor>()?.Color ?? Color.White)).ToVector4();
+			var colour = (bakeSelected ? Color.Red : vColor.HasValue ? vColor.Value : EntityBrushColorSettings.Resolve(obj, obj.Data.GetOne<ObjectColor>()?.Color ?? Color.White)).ToVector4();
 
 			var tint = Vector4.One;
 
@@ -78,7 +85,7 @@ namespace Sledge.BspEditor.Rendering.Converters
 
 			var pipeline = PipelineType.TexturedOpaque;
 			var entityHasTransparency = false;
-			var flags = obj.IsSelected ? VertexFlags.SelectiveTransformed : VertexFlags.None;
+			var flags = bakeSelected ? VertexFlags.SelectiveTransformed : VertexFlags.None;
 
 			// try and find the parent entity for render flags
 			// TODO: this code is extremely specific to Goldsource and should be abstracted away
@@ -134,7 +141,7 @@ namespace Sledge.BspEditor.Rendering.Converters
 				}
 			}
 
-			if (obj.IsSelected) tint *= new Vector4(1, 0.5f, 0.5f, 1);
+			if (bakeSelected) tint *= SelectionVariants.SolidTintScale;
 			if (unshaded) tint *= new Vector4(UnshadedTintScale, UnshadedTintScale, UnshadedTintScale, 1);
 
 			var vi = 0u;
@@ -250,7 +257,27 @@ namespace Sledge.BspEditor.Rendering.Converters
 				if (t != null) resourceCollector.RequireTexture(t.Name);
 			}
 
-			// Selected objects: 3D uses the normal (depth tested) wireframe, 2D uses the on-top selection pipeline
+			if (slot >= 0)
+			{
+				var selectedLook = SelectionVariants.AppendBoth(builder, slot, points, indices, groups, numSolidIndices, numWireframeIndices, SelectionVariants.SolidTintScale);
+
+				// The lightmap shadow overlay follows the object in both looks
+				if (shadowGroups.Count > 0)
+				{
+					builder.Append(shadowPoints, indices, SelectionVariants.Tag(shadowGroups, slot, SelectionFilter.WhenUnselected));
+					builder.Append(SelectionVariants.SelectedLook(shadowPoints, SelectionVariants.SolidTintScale), indices, SelectionVariants.Tag(shadowGroups, slot, SelectionFilter.WhenSelected));
+				}
+
+				if (wireframe)
+				{
+					var wireGroup = new BufferGroup(PipelineType.Wireframe, CameraType.Perspective, numSolidIndices, numWireframeIndices);
+					builder.Append(SelectionVariants.Wireframed(points), indices, new[] { wireGroup.WithSelection(slot, SelectionFilter.WhenUnselected) });
+					builder.Append(SelectionVariants.Wireframed(selectedLook), indices, new[] { wireGroup.WithSelection(slot, SelectionFilter.WhenSelected) });
+				}
+				return;
+			}
+
+			// No slot: the selection is baked into the geometry. Selected objects: 3D uses the normal (depth tested) wireframe, 2D uses the on-top selection pipeline
 			groups.Add(new BufferGroup(PipelineType.Wireframe, obj.IsSelected ? CameraType.Perspective : CameraType.Orthographic, numSolidIndices, numWireframeIndices));
 			if (obj.IsSelected) groups.Add(new BufferGroup(PipelineType.WireframeSelected, CameraType.Orthographic, numSolidIndices, numWireframeIndices));
 

@@ -58,7 +58,7 @@ namespace Sledge.BspEditor.Rendering.ChangeHandlers
 
 			// Moving things around changes nothing about beams unless an endpoint is an entity that was shown or hidden
 			// Visibility-only changes can still hide an endpoint, but the beam is drawn regardless (always show).
-			if (VisibilityOnlyFastPath.IsActive(change)) return;
+			if (VisibilityOnlyFastPath.IsActive(change) || SelectionOnlyFastPath.IsActive(change)) return;
 
 			var all = change.Document.Map.Root.FindAll().OfType<Entity>().ToList();
 			var beams = all.Where(IsBeamEntity).ToList();

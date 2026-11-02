@@ -52,6 +52,14 @@ namespace Sledge.BspEditor.Modification.ChangeHandling
             // no-op. Skip the index build and snapshot diffs for visibility-only changes.
             if (VisibilityOnlyFastPath.IsActive(change)) return Task.CompletedTask;
 
+            // Selecting or deselecting changes no geometry, so there is nothing to sync between linked copies.
+            // The link group selection still has to follow the selection.
+            if (SelectionOnlyFastPath.IsActive(change))
+            {
+                LinkGroupSelection.Update(change);
+                return Task.CompletedTask;
+            }
+
             var doc = change.Document;
             var snaps = LinkGeometry.Snapshots(doc);
 

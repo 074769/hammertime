@@ -25,7 +25,7 @@ namespace Sledge.BspEditor.Rendering.ChangeHandlers
         {
             // Decal derivation depends on entity/solid geometry, not visibility flags.
             // This also skips the full-map decal scan that dominated bulk hide/reveal.
-            if (VisibilityOnlyFastPath.IsActive(change)) return;
+            if (VisibilityOnlyFastPath.IsActive(change) || SelectionOnlyFastPath.IsActive(change)) return;
 
             var tc = await change.Document.Environment.GetTextureCollection();
 

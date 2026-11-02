@@ -23,6 +23,16 @@ namespace Sledge.BspEditor.Rendering.Scene
         }
         public IRenderable SceneBuilderRenderable { get; }
 
+        /// <summary>
+        /// Publishes the selection (bit N set = the object in slot N is selected) and shows the matching look
+        /// of every selectable object in the scene. No geometry is converted or uploaded again.
+        /// </summary>
+        public void ApplySelection(uint[] bits)
+        {
+            _engine.SetSelection(bits);
+            foreach (var buffer in BufferBuilders) buffer.ApplySelection(bits);
+        }
+
         private readonly Dictionary<long, HashSet<IRenderable>> _renderables;
 
         public SceneBuilder(EngineInterface engine)

@@ -37,13 +37,15 @@ namespace Sledge.BspEditor.Modification.Operations.Selection
 				}
 			}
 
-			ch.UpdateRange(updateList);
+			// Only selection changes: lets the scene and the change handlers skip work that selection can't affect
+			ch.UpdateSelectionRange(updateList);
 			return ch;
 		}
 
 		public async Task<Change> Reverse(MapDocument document)
 		{
 			var ch = new Change(document);
+			var updateList = new List<IMapObject>();
 
 			foreach (var id in _idsToSelect)
 			{
@@ -52,10 +54,11 @@ namespace Sledge.BspEditor.Modification.Operations.Selection
 				if (o != null)
 				{
 					o.IsSelected = false;
-					ch.Update(o);
+					updateList.Add(o);
 				}
 			}
 
+			ch.UpdateSelectionRange(updateList);
 			return ch;
 		}
 	}

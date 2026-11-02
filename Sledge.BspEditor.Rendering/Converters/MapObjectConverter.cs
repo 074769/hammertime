@@ -7,6 +7,7 @@ using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.BspEditor.Rendering.Resources;
 using Sledge.BspEditor.Rendering.Scene;
+using Sledge.BspEditor.Rendering.Selection;
 using Sledge.Common.Logging;
 using Sledge.Rendering.Resources;
 
@@ -53,6 +54,10 @@ namespace Sledge.BspEditor.Rendering.Converters
         public async Task Convert(MapDocument document, SceneBuilder builder, IEnumerable<IMapObject> affected, ResourceCollector resourceCollector)
         {
             var rebuildTimer = PerfLog.Measure("Rebuild total");
+
+            // A full rebuild converts every object again, so every selection slot can be handed out again
+            if (affected == null) SelectionSlots.Reset(document);
+
             var objs = document.Map.Root.FindAll().ToList();
 
             // A full rebuild covers every group in the map. An incremental one covers the groups that changed,
@@ -117,6 +122,11 @@ namespace Sledge.BspEditor.Rendering.Converters
             }
 
             builder.Complete();
+
+            // Objects may have been selected or deselected while they were being converted, and the objects
+            // converted just now have slots that the published selection doesn't know about yet
+            builder.ApplySelection(SelectionSlots.ResetSelection(document));
+
             rebuildTimer.Dispose();
             PerfLog.Flush($"rebuild: {groupKeys.Count} groups, {objs.Count} objects", "Rebuild", "Convert:", "GroupConvert:", "Supports:");
         }

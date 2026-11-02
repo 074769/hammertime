@@ -32,7 +32,7 @@ namespace Sledge.BspEditor.Rendering.ChangeHandlers
 		public async Task Changed(Change change)
 		{
             // Sprite derivation depends on entity class/properties, not visibility flags.
-            if (VisibilityOnlyFastPath.IsActive(change)) return;
+            if (VisibilityOnlyFastPath.IsActive(change) || SelectionOnlyFastPath.IsActive(change)) return;
 
 			var gd = await change.Document.Environment.GetGameData();
 			var tc = await change.Document.Environment.GetTextureCollection();

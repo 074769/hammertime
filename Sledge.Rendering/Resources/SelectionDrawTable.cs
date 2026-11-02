@@ -24,12 +24,19 @@ namespace Sledge.Rendering.Resources
         public int Count => _entries.Count;
 
         /// <summary>
+        /// How many "when selected" draws are currently visible. When this is zero nothing in the buffer is
+        /// selected, so the renderer can skip the selected-state groups entirely.
+        /// </summary>
+        public int VisibleSelectedCount { get; private set; }
+
+        /// <summary>
         /// Registers a draw and returns the index count it should start with for the given selection:
         /// the full count when it is visible, otherwise zero.
         /// </summary>
         public uint AddDraw(int slot, SelectionFilter filter, int drawIndex, uint fullCount, uint[] bits)
         {
             var visible = SelectionState.IsVisible(filter, slot, bits);
+            if (visible && filter == SelectionFilter.WhenSelected) VisibleSelectedCount++;
             _entries.Add(new Entry
             {
                 Slot = slot,
@@ -57,6 +64,7 @@ namespace Sledge.Rendering.Resources
 
                 e.Visible = visible;
                 _entries[i] = e;
+                if (e.Filter == SelectionFilter.WhenSelected) VisibleSelectedCount += visible ? 1 : -1;
                 setCount(e.Draw, visible ? e.FullCount : 0u);
                 changed++;
             }

@@ -37,6 +37,12 @@ namespace Sledge.BspEditor.Modification
         private readonly HashSet<IMapObject> _removed;
 
         /// <summary>
+        /// The updated objects whose only change is being selected or deselected. Always a subset of the
+        /// updated objects: an object that is also updated for any other reason is not in this set.
+        /// </summary>
+        private readonly HashSet<IMapObject> _selectionUpdated;
+
+        /// <summary>
         /// The items that were added during the change
         /// </summary>
         public IEnumerable<IMapObject> Added => _added;
@@ -78,6 +84,19 @@ namespace Sledge.BspEditor.Modification
         /// </summary>
         public bool HasTrackedObjectUpdatesOnly => !_hasUntrackedObjectUpdates;
 
+        /// <summary>
+        /// True when nothing changed except which objects are selected: no objects were added or removed, no
+        /// object or map data changed, and every updated object was only selected or deselected.
+        /// Handlers and the scene can use this to skip work that selection can't affect.
+        /// </summary>
+        public bool IsSelectionOnly =>
+            _updated.Count > 0
+            && _added.Count == 0
+            && _removed.Count == 0
+            && _selectionUpdated.Count == _updated.Count
+            && _affectedData.Count == 0
+            && _affectedObjectDataTypes.Count == 0;
+
         public Change(MapDocument document)
         {
             Document = document;
@@ -85,6 +104,7 @@ namespace Sledge.BspEditor.Modification
             _added = new HashSet<IMapObject>();
             _updated = new HashSet<IMapObject>();
             _removed = new HashSet<IMapObject>();
+            _selectionUpdated = new HashSet<IMapObject>();
 
             _affectedData = new HashSet<IMapData>();
             _affectedObjectDataTypes = new HashSet<Type>();
@@ -92,6 +112,7 @@ namespace Sledge.BspEditor.Modification
 
         public Change Add(IMapObject o)
         {
+            _selectionUpdated.Remove(o);
             _added.Add(o);
             _removed.Remove(o);
             _updated.Remove(o);
@@ -101,6 +122,7 @@ namespace Sledge.BspEditor.Modification
         public Change AddRange(IEnumerable<IMapObject> objects)
         {
             var all = objects.ToList();
+            _selectionUpdated.ExceptWith(all);
             _added.UnionWith(all);
             _removed.ExceptWith(all);
             _updated.ExceptWith(all);
@@ -109,6 +131,7 @@ namespace Sledge.BspEditor.Modification
 
         public Change Update(IMapObject o)
         {
+            _selectionUpdated.Remove(o);
             _hasUntrackedObjectUpdates = true;
             if (_added.Contains(o)) return this;
             if (_removed.Contains(o)) return this;
@@ -123,6 +146,7 @@ namespace Sledge.BspEditor.Modification
         /// </summary>
         public Change Update(IMapObject o, IEnumerable<Type> objectDataTypes)
         {
+            _selectionUpdated.Remove(o);
             if (_added.Contains(o)) { TrackObjectDataTypes(objectDataTypes); return this; }
             if (_removed.Contains(o)) { TrackObjectDataTypes(objectDataTypes); return this; }
             _updated.Add(o);
@@ -169,6 +193,31 @@ namespace Sledge.BspEditor.Modification
         public Change UpdateRange(IEnumerable<IMapObject> objects)
         {
             var all = objects.ToList();
+            _selectionUpdated.ExceptWith(all);
+            return UpdateRangeCore(all);
+        }
+
+        /// <summary>
+        /// Report objects whose only change is being selected or deselected. Unlike
+        /// <see cref="UpdateRange"/>, this lets handlers and the scene tell the change apart from a real edit.
+        /// An object that was already updated for another reason stays a real update.
+        /// </summary>
+        public Change UpdateSelectionRange(IEnumerable<IMapObject> objects)
+        {
+            var all = objects.ToList();
+
+            // Objects already updated (not just selected) in this change, or added or removed by it, are not selection-only
+            var selectionOnly = all
+                .Where(o => !_added.Contains(o) && !_removed.Contains(o) && (!_updated.Contains(o) || _selectionUpdated.Contains(o)))
+                .ToList();
+
+            UpdateRangeCore(all);
+            _selectionUpdated.UnionWith(selectionOnly);
+            return this;
+        }
+
+        private Change UpdateRangeCore(List<IMapObject> all)
+        {
             // No object-data type information here (transforms, etc.), so per-data-type fast paths must not apply
             if (all.Count > 0) _hasUntrackedObjectUpdates = true;
             _updated.UnionWith(all);
@@ -191,6 +240,7 @@ namespace Sledge.BspEditor.Modification
 
         public Change Remove(IMapObject o)
         {
+            _selectionUpdated.Remove(o);
             _added.Remove(o);
             _updated.Remove(o);
             _removed.Add(o);
@@ -200,6 +250,7 @@ namespace Sledge.BspEditor.Modification
         public Change RemoveRange(IEnumerable<IMapObject> objects)
         {
             var all = objects.ToList();
+            _selectionUpdated.ExceptWith(all);
             _added.ExceptWith(all);
             _updated.ExceptWith(all);
             _removed.UnionWith(all);
@@ -208,6 +259,11 @@ namespace Sledge.BspEditor.Modification
 
         public Change Merge(Change change)
         {
+            // Objects with a real (non-selection) update in either change must stay real updates once merged
+            var realUpdates = _updated.Where(o => !_selectionUpdated.Contains(o))
+                .Concat(change._updated.Where(o => !change._selectionUpdated.Contains(o)))
+                .ToList();
+
             _added.UnionWith(change._added);
             _removed.ExceptWith(change._added);
             _updated.ExceptWith(change._added);
@@ -221,6 +277,10 @@ namespace Sledge.BspEditor.Modification
             _affectedData.UnionWith(change._affectedData);
             _affectedObjectDataTypes.UnionWith(change._affectedObjectDataTypes);
             _hasUntrackedObjectUpdates |= change._hasUntrackedObjectUpdates;
+
+            _selectionUpdated.UnionWith(change._selectionUpdated);
+            _selectionUpdated.ExceptWith(realUpdates);
+            _selectionUpdated.IntersectWith(_updated);
 
             return this;
         }
