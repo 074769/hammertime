@@ -275,6 +275,13 @@ namespace Sledge.BspEditor.Documents
 				MapGridSettingsManager.GetInstance()?.Apply(document.FileName, document.Map.Data.GetOne<GridData>());
 			}
 
+			// Entity relations are off by default and only on for maps where the user switched them on
+			{
+				var relFlags = document.Map.Data.GetOne<DisplayFlags>() ?? new DisplayFlags();
+				relFlags.ToggleEntityRelations = MapRelationsSettingsManager.GetInstance()?.IsOn(document.FileName) == true;
+				document.Map.Data.Replace(relFlags);
+			}
+
 			// Re-apply the remembered "3D Textured (No Shade)" display mode
 			if (ViewportRenderSettings.GetInstance()?.Unshaded3D == true)
 			{
@@ -341,6 +348,12 @@ namespace Sledge.BspEditor.Documents
 
 			// Remember the grid under the path being saved to (covers new maps and Save As)
 			if (MapGridSettingsManager.GetInstance()?.Set(location, map.Map.Data.GetOne<GridData>()) == true)
+			{
+				await Oy.Publish("Settings:Save");
+			}
+
+			// Remember the entity relations state under the path being saved to
+			if (MapRelationsSettingsManager.GetInstance()?.Set(location, map.Map.Data.GetOne<DisplayFlags>()?.ToggleEntityRelations == true) == true)
 			{
 				await Oy.Publish("Settings:Save");
 			}

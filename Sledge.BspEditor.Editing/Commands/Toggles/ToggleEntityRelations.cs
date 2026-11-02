@@ -36,7 +36,7 @@ namespace Sledge.BspEditor.Editing.Commands.Toggles
                 var tl = document.Map.Data.GetOne<DisplayFlags>() ?? new DisplayFlags();
                 return tl.ToggleEntityRelations;
             }
-            return true;
+            return false;
         }
 
         public async Task Invoke(IContext context, CommandParameters parameters)
@@ -47,15 +47,15 @@ namespace Sledge.BspEditor.Editing.Commands.Toggles
             }
             var tl = document.Map.Data.GetOne<DisplayFlags>() ?? new DisplayFlags();
             tl.ToggleEntityRelations = !tl.ToggleEntityRelations;
-            document.Map.Data.Replace(tl);
+            // Remember the choice for this map; the changed display flags make the scene rebuild once
+            if (Sledge.BspEditor.Environment.MapRelationsSettingsManager.GetInstance()?.Set(document.FileName, tl.ToggleEntityRelations) == true)
+            {
+                await LogicAndTrick.Oy.Oy.Publish("Settings:Save");
+            }
             await MapDocumentOperation.Perform(document,
                 new TrivialOperation(
                     x => x.Map.Data.Replace(tl),
-                    x =>
-                    {
-                        x.Update(tl);
-                        x.UpdateRange(x.Document.Map.Root.Find(s => s is Entity).Select(e => e as Entity).Where(e => e.Relations.Any()));
-                    })
+                    x => x.Update(tl))
             );
         }
 

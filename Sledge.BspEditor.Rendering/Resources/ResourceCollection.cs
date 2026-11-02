@@ -9,6 +9,7 @@ using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using SixLabors.ImageSharp.PixelFormats;
 using Sledge.BspEditor.Environment;
+using Sledge.Common.Logging;
 using Sledge.FileSystem;
 using Sledge.Providers.Model;
 using Sledge.Providers.Texture;
@@ -30,6 +31,11 @@ namespace Sledge.BspEditor.Rendering.Resources
 		private readonly ConcurrentDictionary<string, HashSet<string>> _textures;
 		private readonly ConcurrentDictionary<string, HashSet<ModelResource>> _models;
 		private readonly ConcurrentDictionary<string, List<IResource>> _resources;
+
+		// Decoded and uploaded sprite textures by "envID::name", so the many sprite entities that share a
+		// .spr (and every move/undo that re-creates their renderables) don't decode the file again each time.
+		private readonly ConcurrentDictionary<string, (Texture Texture, TextureItem Item)> _spriteTextures =
+			new ConcurrentDictionary<string, (Texture, TextureItem)>(StringComparer.InvariantCultureIgnoreCase);
 
 		[ImportingConstructor]
 		public ResourceCollection(
@@ -128,19 +134,37 @@ namespace Sledge.BspEditor.Rendering.Resources
 			var rList = _resources[environment.ID];
 			var tList = _textures[environment.ID];
 
-			var tc = await environment.GetTextureCollection();
-			var item = await tc.GetTextureItem(name);
+			var key = $"{environment.ID}::{name}";
+			Texture texture;
+			TextureItem item;
+			if (_spriteTextures.TryGetValue(key, out var cached))
+			{
+				texture = cached.Texture;
+				item = cached.Item;
+			}
+			else
+			{
+				using (PerfLog.Measure("Sprite: decode and upload texture"))
+				{
+					var tc = await environment.GetTextureCollection();
+					item = await tc.GetTextureItem(name);
+					if (item == null) return null;
 
-            using var ss = tc.GetStreamSource();
-            var texture = await UploadTexture(environment, item, ss) as Texture;
-            if (texture == null) return null;
-            tList.Add(item.Name);
-            var resource = new SpriteRenderable(texture, item);
+					using var ss = tc.GetStreamSource();
+					texture = await UploadTexture(environment, item, ss) as Texture;
+				}
+				if (texture == null) return null;
+				_spriteTextures[key] = (texture, item);
+				tList.Add(item.Name);
+			}
 
-			_engine.Value.CreateResource(resource);
-			rList.Add(resource);
+			var resource = new SpriteRenderable(texture, item);
 
-
+			using (PerfLog.Measure("Sprite: create resource"))
+			{
+				_engine.Value.CreateResource(resource);
+			}
+			lock (rList) rList.Add(resource);
 
 			return resource;
 		}
@@ -180,7 +204,7 @@ namespace Sledge.BspEditor.Rendering.Resources
 			var rlist = _resources[environment.ID];
 
 			_engine.Value.DestroyResource(renderable);
-			rlist.Remove(renderable);
+			lock (rlist) rlist.Remove(renderable);
 		}
 
 		/// <summary>
@@ -355,6 +379,10 @@ namespace Sledge.BspEditor.Rendering.Resources
 				_engine.Value.DestroyTextureByName($"{environment.ID}::{textureName}");
 			}
 			tlist.Clear();
+			foreach (var k in _spriteTextures.Keys.Where(x => x.StartsWith(environment.ID + "::", StringComparison.InvariantCultureIgnoreCase)).ToList())
+			{
+				_spriteTextures.TryRemove(k, out _);
+			}
 		}
 
 		/// <summary>
@@ -366,6 +394,8 @@ namespace Sledge.BspEditor.Rendering.Resources
 			foreach (var dt in _textures.Keys.Except(usedEnvironments.Select(x => x.ID)).ToList())
 			{
 				_textures.TryRemove(dt, out _);
+				foreach (var k in _spriteTextures.Keys.Where(x => x.StartsWith(dt + "::", StringComparison.InvariantCultureIgnoreCase)).ToList())
+					_spriteTextures.TryRemove(k, out _);
 			}
 			foreach (var dm in _models.Keys.Except(usedEnvironments.Select(x => x.ID)).ToList())
 			{
