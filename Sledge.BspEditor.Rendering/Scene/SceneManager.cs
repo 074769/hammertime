@@ -93,9 +93,6 @@ namespace Sledge.BspEditor.Rendering.Scene
 			// The skybox and the environment light come from the map's data, which selecting can't change
 			if (change.IsSelectionOnly) return;
 
-			// Anything cached for this map (such as the 2D overlays) is out of date from here on
-			DocumentRevision.Bump(change.Document);
-
 			await LoadSkybox();
 			await UpdateEnvironmentLight();
 
