@@ -137,6 +137,7 @@ namespace Sledge.BspEditor.Editing.Components
         {
             _source = source;
             InitializeComponent();
+            base.CancelButton = CancelButton; // let Escape trigger Cancel
             EntityPrefix.Enabled = PrefixEntityNamesCheckbox.Checked;
 
             ZeroOffsetXButton.Click += (sender, e) => OffsetX.Value = 0;

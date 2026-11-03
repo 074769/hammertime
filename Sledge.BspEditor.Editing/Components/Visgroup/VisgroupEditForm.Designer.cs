@@ -170,7 +170,7 @@
         private System.Windows.Forms.Label NameLabel;
         private System.Windows.Forms.Label ColorLabel;
         private System.Windows.Forms.Panel ColourPanel;
-        private System.Windows.Forms.Button CancelButton;
+        private new System.Windows.Forms.Button CancelButton;
         private System.Windows.Forms.Button AddButton;
         private System.Windows.Forms.Button RemoveButton;
         private System.Windows.Forms.Button OkButton;
