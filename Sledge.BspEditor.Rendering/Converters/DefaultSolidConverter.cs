@@ -231,7 +231,11 @@ namespace Sledge.BspEditor.Rendering.Converters
 
 				var opacity = tc.GetOpacity(f.Texture.Name);
 				var t = await tc.GetTextureItem(f.Texture.Name);
-				var transparent = entityHasTransparency || opacity < 0.95f || t?.Flags.HasFlag(TextureFlags.Transparent) == true;
+				// "{" textures are alpha tested (cut out), not blended: they don't need to be depth sorted and drawn
+				// one face at a time like real transparency. The opaque shader discards the cut out pixels, and the
+				// vertices already carry the AlphaTested flag, so they go through the batched opaque pipeline.
+				var isCutout = t != null && f.Texture.Name.StartsWith("{");
+				var transparent = entityHasTransparency || opacity < 0.95f || (!isCutout && t?.Flags.HasFlag(TextureFlags.Transparent) == true);
 
 				var texture = t == null ? string.Empty : $"{document.Environment.ID}::{f.Texture.Name}";
 				BufferGroup group;
