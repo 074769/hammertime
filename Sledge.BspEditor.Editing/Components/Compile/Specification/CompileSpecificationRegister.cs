@@ -11,7 +11,9 @@ namespace Sledge.BspEditor.Editing.Components.Compile.Specification
     [Export(typeof(IInitialiseHook))]
     public class CompileSpecificationRegister : IInitialiseHook
     {
+        #pragma warning disable CS0649 // assigned by MEF
         [ImportMany] private IEnumerable<Lazy<ICompileSpecificationProvider>> _specProviders;
+        #pragma warning restore CS0649
 
         public async Task OnInitialise()
         {

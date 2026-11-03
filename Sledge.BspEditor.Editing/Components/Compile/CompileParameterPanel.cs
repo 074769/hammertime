@@ -117,7 +117,6 @@ namespace Sledge.BspEditor.Editing.Components.Compile
         {
             public CompileParameter Parameter { get; private set; }
             public CheckBox CheckBox { get; private set; }
-            private Control _valueControl;
 
             public event EventHandler ValueChanged;
 

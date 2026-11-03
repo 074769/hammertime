@@ -32,7 +32,9 @@ namespace Sledge.BspEditor.Editing.Components.Properties.Tabs
         public bool HasChanges => false;
         string IObjectPropertyEditorTab.Name => "";
 
+        #pragma warning disable CS0067 // assigned by MEF
         public event PropertyChangedEventHandler PropertyChanged;
+        #pragma warning restore CS0067
 
         public EmptyTab()
         {

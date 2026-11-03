@@ -32,7 +32,6 @@ namespace Sledge.BspEditor.Editing.Components.Properties.Tabs
     [Export(typeof(IObjectPropertyEditorTab))]
     public sealed partial class FlagsTab : UserControl, IObjectPropertyEditorTab
     {
-        [ImportMany] private IEnumerable<Lazy<SmartEditControl>> _smartEditControls;
 
         /// <inheritdoc />
         public string OrderHint => "H";

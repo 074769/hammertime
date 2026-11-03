@@ -28,7 +28,9 @@ namespace Sledge.BspEditor.Editing.Components.Visgroup
     [OrderHint("G")]
     public partial class VisgroupSidebarPanel : UserControl, ISidebarComponent, IInitialiseHook
     {
+        #pragma warning disable CS0649 // assigned by MEF
         [Import] private ITranslationStringProvider _translation;
+        #pragma warning restore CS0649
 
         public Task OnInitialise()
         {
