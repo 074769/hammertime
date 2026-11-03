@@ -20,7 +20,9 @@ namespace Sledge.BspEditor.Editing.Commands
     [CommandID("BspEditor:Map:Visgroups")]
     public class EditVisgroups : BaseCommand
     {
+        #pragma warning disable CS0649 // assigned by MEF
         [Import] private Lazy<ITranslationStringProvider> _translator;
+        #pragma warning restore CS0649
 
         public override string Name { get; set; } = "Edit visgroups";
         public override string Details { get; set; } = "View and edit map visgroups";

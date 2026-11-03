@@ -80,6 +80,7 @@ namespace Sledge.BspEditor.Editing.Components
 			_source = source;
 			_pivot = pivot;
 			InitializeComponent();
+			base.CancelButton = CancelButton; // let Escape trigger Cancel
 
 			ZeroValueXButton.Click += (sender, e) => ValueX.Value = _zeroValue;
 			ZeroValueYButton.Click += (sender, e) => ValueY.Value = _zeroValue;

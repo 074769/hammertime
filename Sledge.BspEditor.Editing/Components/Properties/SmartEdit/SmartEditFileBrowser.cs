@@ -24,7 +24,9 @@ namespace Sledge.BspEditor.Editing.Components.Properties.SmartEdit
 		private WeakReference<IFile> _root;
 
 		// Optional: the sprite browser (lives in another project), so the model browser can switch to it
+		#pragma warning disable CS0649 // assigned by MEF
 		[ImportMany] private IEnumerable<Lazy<ISpriteBrowserLauncher>> _spriteBrowsers;
+		#pragma warning restore CS0649
 
 		private readonly TextBox _textBox;
 		private readonly Button _browseButton;

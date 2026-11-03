@@ -19,6 +19,7 @@ namespace Sledge.BspEditor.Editing.Components.Visgroup
         public VisgroupEditForm(MapDocument doc)
         {
             InitializeComponent();
+            base.CancelButton = CancelButton; // let Escape trigger Cancel
             _visgroups = new List<Vg>(doc.Map.Data.Get<Vg>().Select(x => (Vg) x.Clone()));
             _deleted = new List<Vg>();
             UpdateVisgroups();

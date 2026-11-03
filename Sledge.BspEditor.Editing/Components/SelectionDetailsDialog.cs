@@ -20,8 +20,12 @@ namespace Sledge.BspEditor.Editing.Components
     [AutoTranslate]
     public partial class SelectionDetailsDialog : Form, IDialog, IManualTranslate
     {
+        #pragma warning disable CS0649 // assigned by MEF
         [Import("Shell", typeof(Form))] private Lazy<Form> _parent;
+        #pragma warning restore CS0649
+        #pragma warning disable CS0649 // assigned by MEF
         [Import] private IContext _context;
+        #pragma warning restore CS0649
 
         private List<Subscription> _subscriptions;
 
