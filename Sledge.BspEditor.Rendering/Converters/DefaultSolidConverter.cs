@@ -240,9 +240,15 @@ namespace Sledge.BspEditor.Rendering.Converters
 				var texture = t == null ? string.Empty : $"{document.Environment.ID}::{f.Texture.Name}";
 				BufferGroup group;
 
+				// Tool textures (hint, skip, clip, origin, trigger) are a flat 50% blend. Sorting and drawing every one of
+				// their faces separately costs far more than the tiny ordering difference is worth, so they are batched
+				// per texture and drawn together, unsorted, before the sorted transparent objects.
+				var batchedBlend = transparent && !entityHasTransparency && pipeline == PipelineType.TexturedOpaque
+				                   && !(!isCutout && t?.Flags.HasFlag(TextureFlags.Transparent) == true);
+
 				group = new BufferGroup(
 				   pipeline == PipelineType.TexturedOpaque && transparent ? PipelineType.TexturedAlpha : pipeline,
-				   CameraType.Perspective, transparent, f.Origin, texture, texOffset, texInd
+				   CameraType.Perspective, transparent && !batchedBlend, batchedBlend ? Vector3.Zero : f.Origin, texture, texOffset, texInd
 			   );
 
 				groups.Add(group);

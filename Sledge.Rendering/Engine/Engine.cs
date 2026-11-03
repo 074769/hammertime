@@ -395,6 +395,12 @@ namespace Sledge.Rendering.Engine
 			{
 				transparent.SetupFrame(Context, _cameraBuffer);
 			}
+			// Flat blended faces (tool textures) are drawn batched per texture, unsorted, before the sorted transparent objects
+			foreach (var transparent in transparentPipelines)
+			{
+				if (transparent.Type != PipelineType.TexturedAlpha) continue;
+				using (PerfLog.MeasureForView("Pipeline transparent batch", transparent, renderTarget.ID)) transparent.Render(Context, renderTarget, _commandList, Scene.GetRenderables(transparent, renderTarget));
+			}
 			var sortTimer = PerfLog.MeasureForView("Transparent sort", renderTarget.ID);
 			var frustum = new ViewCulling.Frustum(renderTarget.Camera.View * renderTarget.Camera.Projection);
 			var candidates = candidateLocations.ToList();

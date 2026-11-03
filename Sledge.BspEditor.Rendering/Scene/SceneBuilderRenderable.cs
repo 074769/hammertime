@@ -35,7 +35,13 @@ namespace Sledge.BspEditor.Rendering.Scene
             {
                 for (var i = 0; i < buffer.NumBuffers; i++)
                 {
-                    var groups = buffer.IndirectBufferGroups[i].Where(x => x.Pipeline == pipeline.Type ).Where(x => x.Camera == CameraType.Both || x.Camera == viewport.Camera.Type).ToList();
+                    var groups = buffer.IndirectBufferGroups[i].Where(x => x.Pipeline == pipeline.Type)
+						// In the transparent pass only the unsorted batches are drawn here, the sorted ones go through the location path
+						.Where(x => pipeline.Group != PipelineGroup.Transparent || !x.HasTransparency)
+						.Where(x => x.Camera == CameraType.Both || x.Camera == viewport.Camera.Type)
+						// "Selected look" draws are empty while nothing in the buffer is selected
+						.Where(x => x.Filter != SelectionFilter.WhenSelected || buffer.HasSelectedDraws(i))
+						.ToList();
                     if (!groups.Any()) continue;
 
                     cl.SetVertexBuffer(0, buffer.VertexBuffers[i]);

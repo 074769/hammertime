@@ -33,7 +33,7 @@ namespace Sledge.Rendering.Renderables
         {
             for (var i = 0; i < _buffer.NumBuffers; i++)
             {
-                var groups = _buffer.IndirectBufferGroups[i].Where(x => x.Pipeline == pipeline.Type /*&& !x.HasTransparency*/).Where(x => x.Camera == CameraType.Both || x.Camera == viewport.Camera.Type).Where(x => x.Filter != SelectionFilter.WhenSelected || _buffer.HasSelectedDraws(i)).ToList();
+                var groups = _buffer.IndirectBufferGroups[i].Where(x => x.Pipeline == pipeline.Type && (pipeline.Group != PipelineGroup.Transparent || !x.HasTransparency)).Where(x => x.Camera == CameraType.Both || x.Camera == viewport.Camera.Type).Where(x => x.Filter != SelectionFilter.WhenSelected || _buffer.HasSelectedDraws(i)).ToList();
                 if (!groups.Any()) continue;
 
                 cl.SetVertexBuffer(0, _buffer.VertexBuffers[i]);
