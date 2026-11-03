@@ -46,6 +46,7 @@ namespace Sledge.Rendering.Engine
 			return new BufferBuilder(Engine.Instance.Device, size, Engine.Instance.Context.Selection);
 		}
 		public int InactiveTargetFps { get => Engine.Instance.InactiveTargetFps; set => Engine.Instance.InactiveTargetFps = value; }
+		public int MaxTargetFps { get => Engine.Instance.MaxTargetFps; set => Engine.Instance.MaxTargetFps = value; }
 		public struct DepthResource
 		{
 			public Veldrid.Texture Texture { get; set; }

@@ -40,7 +40,13 @@ namespace Sledge.Rendering.Engine
 		private RgbaFloat _clearColourPerspective;
 		private RgbaFloat _clearColourOrthographic;
 		internal int InactiveTargetFps { get; set; } = 10;
-		private long _previousFrameTime = DateTime.Now.Ticks;
+		/// <summary>Upper limit for the render loop, in frames per second. 0 means no limit.</summary>
+		internal int MaxTargetFps { get; set; } = 144;
+		// When each viewport was last rendered (Stopwatch ticks), so unfocused viewports can be throttled one by one
+		private readonly Dictionary<IViewport, long> _lastRendered = new Dictionary<IViewport, long>();
+
+		[System.Runtime.InteropServices.DllImport("winmm.dll")] private static extern uint timeBeginPeriod(uint uPeriod);
+		[System.Runtime.InteropServices.DllImport("winmm.dll")] private static extern uint timeEndPeriod(uint uPeriod);
 		private ViewProjectionBuffer _lightData;
 		private ViewProjectionBuffer _cameraBuffer;
 
@@ -219,21 +225,39 @@ namespace Sledge.Rendering.Engine
 		private void Loop(object o)
 		{
 			var token = (CancellationToken)o;
+			var timerRaised = false;
 			try
 			{
-				var lastFrame = _timer.ElapsedMilliseconds;
+				// Without this Thread.Sleep(1) sleeps for up to ~15 ms, which makes the frame times uneven
+				try { timerRaised = timeBeginPeriod(1) == 0; } catch { }
+
+				var next = Stopwatch.GetTimestamp();
 				while (!token.IsCancellationRequested)
 				{
-					var frame = _timer.ElapsedMilliseconds;
-					var diff = (frame - lastFrame);
-					if (diff < 8 || _paused > 0)
+					if (_paused > 0)
 					{
-						if (_paused > 0) _pauseThreadEvent.Set();
+						_pauseThreadEvent.Set();
 						Thread.Sleep(1);
+						next = Stopwatch.GetTimestamp();
 						continue;
 					}
 
-					lastFrame = frame;
+					// Wait for the next frame slot. Sleep while there is time to spare, then spin the last bit.
+					var max = MaxTargetFps;
+					var interval = max > 0 ? Stopwatch.Frequency / max : 0;
+					var now = Stopwatch.GetTimestamp();
+					if (interval > 0 && now < next)
+					{
+						var spare = (next - now) * 1000 / Stopwatch.Frequency;
+						if (spare > 2) Thread.Sleep((int) (spare - 1));
+						else Thread.SpinWait(50);
+						continue;
+					}
+
+					// Keep a fixed cadence instead of "now + interval", but don't try to catch up after a slow frame
+					next = (interval > 0 && now - next < interval) ? next + interval : now + interval;
+
+					var frame = _timer.ElapsedMilliseconds;
 					using (PerfLog.Measure("Engine: frame")) Render(frame);
 					using (PerfLog.Measure("Engine: GPU wait")) Device.WaitForIdle();
 					PerfLog.FlushIfDue("Engine and views (last 2 s)", 2000, "Engine:", "View update", "Overlay build", "Overlay renderable", "Render ", "Pipeline", "Transparent", "Submit", "ImGui", "Update:", "Listener:", "Scene:");
@@ -247,6 +271,10 @@ namespace Sledge.Rendering.Engine
 			{
 				// exit
 			}
+			finally
+			{
+				if (timerRaised) { try { timeEndPeriod(1); } catch { } }
+			}
 		}
 
 		private void Render(long frame)
@@ -256,25 +284,29 @@ namespace Sledge.Rendering.Engine
 				using (PerfLog.Measure("Engine: Scene.Update")) Scene.Update(frame);
 				var overlays = Scene.GetOverlayRenderables().ToList();
 
-				long currentTime = DateTime.Now.Ticks;
-				long elapsedTime = currentTime - _previousFrameTime;
-				double millisecondsPerFrame = 1000.0 / InactiveTargetFps;
-				bool shouldRender = (elapsedTime >= millisecondsPerFrame * TimeSpan.TicksPerMillisecond);
+				var nowTicks = Stopwatch.GetTimestamp();
+				var inactiveInterval = Stopwatch.Frequency / Math.Max(InactiveTargetFps, 1);
 
 				foreach (var rt in _renderTargets)
 				{
 					using (PerfLog.MeasureForView("View update", rt.ID)) rt.Update(frame);
-					if (!(rt.IsFocused || shouldRender)) PerfLog.CountForView("Render skipped", rt.ID);
-					if (rt.IsFocused || (!rt.IsFocused && shouldRender))
+
+					// A focused viewport renders every frame, the others only when their own turn comes up
+					var focused = rt.IsFocused;
+					var due = !_lastRendered.TryGetValue(rt, out var last) || nowTicks - last >= inactiveInterval;
+					if (!focused && !due)
 					{
-						_cameraBuffer = new ViewProjectionBuffer { Projection = rt.Camera.Projection, View = rt.Camera.View };
-						if (PerfLog.Enabled) PerfLog.SetViewLabel(rt.ID, rt.Camera.Type.ToString());
-						using (PerfLog.MeasureForView("Overlay build", rt.ID)) rt.Overlay.Build(overlays);
-						using (PerfLog.MeasureForView("Render view", rt.ID)) Render(rt);
+						PerfLog.CountForView("Render skipped", rt.ID);
+						continue;
 					}
+
+					PerfLog.CountForView(focused ? "Rendered (focused)" : "Rendered (unfocused)", rt.ID);
+					_lastRendered[rt] = nowTicks;
+					_cameraBuffer = new ViewProjectionBuffer { Projection = rt.Camera.Projection, View = rt.Camera.View };
+					if (PerfLog.Enabled) PerfLog.SetViewLabel(rt.ID, rt.Camera.Type.ToString());
+					using (PerfLog.MeasureForView("Overlay build", rt.ID)) rt.Overlay.Build(overlays);
+					using (PerfLog.MeasureForView("Render view", rt.ID)) Render(rt);
 				}
-				if (shouldRender)
-					_previousFrameTime = currentTime;
 			}
 		}
 
@@ -416,6 +448,7 @@ namespace Sledge.Rendering.Engine
 			lock (_lock)
 			{
 				_renderTargets.Remove(t);
+				_lastRendered.Remove(t);
 				Device.WaitForIdle();
 
 				if (!_renderTargets.Any()) Stop();

@@ -33,6 +33,7 @@ namespace Sledge.BspEditor.Rendering
 		[Setting] public static Color AxisGridLineColour { get; set; } = Color.FromArgb(0, 100, 100);
 		[Setting] public static Color BoundaryGridLineColour { get; set; } = Color.Red;
 		[Setting("UnfocusedViewportTargetFps")] private int _targetFps { get; set; } = 10;
+		[Setting("MaxFps")] private int _maxFps { get; set; } = 144;
 		[Setting] private static MSAA_OPTION MSAAoption { get; set; } = MSAA_OPTION.MSAA_1X;
 		[Setting] public static float GizmoScale { get; set; } = 1.0f;
 
@@ -51,6 +52,7 @@ namespace Sledge.BspEditor.Rendering
 			yield return new SettingKey("Rendering", "PerspectiveBackgroundColour", typeof(Color));
 			yield return new SettingKey("Rendering", "OrthographicBackgroundColour", typeof(Color));
 			yield return new SettingKey("Rendering", "UnfocusedViewportTargetFps", typeof(int));
+			yield return new SettingKey("Rendering", "MaxFps", typeof(int));
 			yield return new SettingKey("Rendering", "MSAAoption", typeof(MSAA_OPTION));
 			yield return new SettingKey("Rendering", "GizmoScale", typeof(decimal));
 
@@ -69,6 +71,7 @@ namespace Sledge.BspEditor.Rendering
 			_engine.Value.SetClearColour(CameraType.Perspective, PerspectiveBackgroundColour);
 			_engine.Value.SetClearColour(CameraType.Orthographic, OrthographicBackgroundColour);
 			_engine.Value.InactiveTargetFps = Math.Max(_targetFps, 1);
+			_engine.Value.MaxTargetFps = Math.Max(_maxFps, 0);
 			_engine.Value.SetMSAA((int)MSAAoption);
 			if (GizmoScale < .1f) GizmoScale = .1f;
 			Oy.Publish("Render:Gizmos:ScaleChanged", GizmoScale);

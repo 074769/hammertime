@@ -33,7 +33,24 @@ namespace Sledge.Rendering.Viewports
 		public Framebuffer ViewportFramebuffer { get; private set; }
 		public ViewportOverlay Overlay { get; }
 		public Resources.Texture ViewportRenderTexture { get; private set; }
-		public bool IsFocused => _isFocused;
+		// "Focused" means the mouse is over the viewport. The enter/leave events can be missed (fast moves off the
+		// window, dialogs opening), which left several viewports stuck as focused, so double check against the cursor.
+		public bool IsFocused => _isFocused && (CursorOverViewport() || Control.MouseButtons != MouseButtons.None);
+
+		[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+		private struct NativePoint { public int X, Y; }
+		[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+		private struct NativeRect { public int Left, Top, Right, Bottom; }
+		[System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool GetCursorPos(out NativePoint p);
+		[System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hWnd, out NativeRect r);
+		private IntPtr _nativeHandle;
+
+		private bool CursorOverViewport()
+		{
+			if (_nativeHandle == IntPtr.Zero) return true;
+			if (!GetCursorPos(out var p) || !GetWindowRect(_nativeHandle, out var r)) return true;
+			return p.X >= r.Left && p.X < r.Right && p.Y >= r.Top && p.Y < r.Bottom;
+		}
 
 		private bool _isFocused;
 		private int _unfocusedCounter = 0;
@@ -56,6 +73,7 @@ namespace Sledge.Rendering.Viewports
 			DoubleBuffered = false;
 
 			var hWnd = Handle; // Will call CreateHandle internally
+			_nativeHandle = hWnd;
 			var hInstance = HInstance;
 
 			uint w = (uint)Width, h = (uint)Height;
