@@ -77,13 +77,6 @@ namespace Sledge.Rendering.Pipelines
 		public void Render(RenderContext context, IViewport target, CommandList cl, IEnumerable<IRenderable> renderables)
 		{
 			return;
-			cl.SetPipeline(_pipeline);
-			cl.SetGraphicsResourceSet(0, _projectionResourceSet);
-			
-			foreach (var r in renderables.OfType<IModelRenderable>())
-			{
-				r.Render(context, this, target, cl);
-			}
 		}
 
 		public void Render(RenderContext context, IViewport target, CommandList cl, IRenderable renderable, ILocation locationObject)

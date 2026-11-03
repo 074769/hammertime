@@ -35,10 +35,8 @@ namespace Sledge.Rendering.Overlay
         private ResourceSet _fontTextureResourceSet;
 
         private IntPtr _fontAtlasID = (IntPtr)1;
-        private bool _controlDown;
         private bool _shiftDown;
         private bool _altDown;
-        private bool _winKeyDown;
 
         private int _windowWidth;
         private int _windowHeight;

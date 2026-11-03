@@ -27,9 +27,8 @@ namespace Sledge.Rendering.Pipelines
 
 
 
-		private SixLabors.ImageSharp.Image<Rgba32> _right, _left, _top, _bottom, _back, _front;
+		private SixLabors.ImageSharp.Image<Rgba32> _right, _left, _top, _back;
 		private Veldrid.Texture _texture;
-		private TextureView _view;
 
 
 		public void Bind(RenderContext context, CommandList cl, string binding)
