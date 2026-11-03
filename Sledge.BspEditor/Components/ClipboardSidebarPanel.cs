@@ -18,9 +18,7 @@ namespace Sledge.BspEditor.Components
     [OrderHint("K")]
     public partial class ClipboardSidebarPanel : UserControl, ISidebarComponent
     {
-#pragma warning disable CS0649 // assigned by MEF
         [Import] private Lazy<ClipboardManager> _clipboard;
-#pragma warning restore CS0649
 
         public string Title { get; set; } = "Clipboard";
         public object Control => this;

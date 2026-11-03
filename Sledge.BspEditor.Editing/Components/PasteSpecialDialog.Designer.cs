@@ -596,7 +596,7 @@
         private System.Windows.Forms.CheckBox PrefixEntityNamesCheckbox;
         private System.Windows.Forms.TextBox EntityPrefix;
         private System.Windows.Forms.Button OkButton;
-        private new System.Windows.Forms.Button CancelButton;
+        private System.Windows.Forms.Button CancelButton;
         private System.Windows.Forms.NumericUpDown OffsetY;
         private System.Windows.Forms.NumericUpDown OffsetZ;
         private System.Windows.Forms.NumericUpDown OffsetX;
