@@ -32,7 +32,7 @@
     "Renderer.SecondaryGridLineColour": "次网格线高亮颜色",
     "Renderer.AxisGridLineColour": "轴线网格线颜色",
     "Renderer.BoundaryGridLineColour": "世界边界网格线颜色",
-    "Renderer.UnfocusedViewportTargetFps": "非焦点视口的目标 FPS（1 到 100）"
+    "Renderer.UnfocusedViewportTargetFps": "非焦点视口的目标 FPS（1 到 999）"
   },
   "Components.ViewportZoomStatusItem.Zoom": "缩放",
   "Viewport.MapViewportControlFactory.Perspective": "3D 视图",

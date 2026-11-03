@@ -287,20 +287,47 @@ namespace Sledge.Rendering.Engine
 				var nowTicks = Stopwatch.GetTimestamp();
 				var inactiveInterval = Stopwatch.Frequency / Math.Max(InactiveTargetFps, 1);
 
+				// Focused viewports render every frame. Unfocused ones render when their turn is due, but at most one
+				// per frame (the most overdue), so the work per frame stays even instead of every unfocused view
+				// landing on the same frame and causing a long frame every so often.
+				var toRender = new List<IViewport>();
+				var focusedViews = new HashSet<IViewport>();
+				IViewport overdue = null;
+				var overdueBy = -1L;
 				foreach (var rt in _renderTargets)
 				{
 					using (PerfLog.MeasureForView("View update", rt.ID)) rt.Update(frame);
 
-					// A focused viewport renders every frame, the others only when their own turn comes up
-					var focused = rt.IsFocused;
-					var due = !_lastRendered.TryGetValue(rt, out var last) || nowTicks - last >= inactiveInterval;
-					if (!focused && !due)
+					if (rt.IsFocused)
+					{
+						focusedViews.Add(rt);
+						toRender.Add(rt);
+						continue;
+					}
+
+					var late = _lastRendered.TryGetValue(rt, out var last) ? nowTicks - last : long.MaxValue;
+					if (late < inactiveInterval)
 					{
 						PerfLog.CountForView("Render skipped", rt.ID);
 						continue;
 					}
 
-					PerfLog.CountForView(focused ? "Rendered (focused)" : "Rendered (unfocused)", rt.ID);
+					if (late > overdueBy)
+					{
+						if (overdue != null) PerfLog.CountForView("Render deferred", overdue.ID);
+						overdue = rt;
+						overdueBy = late;
+					}
+					else
+					{
+						PerfLog.CountForView("Render deferred", rt.ID);
+					}
+				}
+				if (overdue != null) toRender.Add(overdue);
+
+				foreach (var rt in toRender)
+				{
+					PerfLog.CountForView(focusedViews.Contains(rt) ? "Render focused" : "Render unfocused", rt.ID);
 					_lastRendered[rt] = nowTicks;
 					_cameraBuffer = new ViewProjectionBuffer { Projection = rt.Camera.Projection, View = rt.Camera.View };
 					if (PerfLog.Enabled) PerfLog.SetViewLabel(rt.ID, rt.Camera.Type.ToString());

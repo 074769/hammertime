@@ -51,8 +51,8 @@ namespace Sledge.BspEditor.Rendering
 		{
 			yield return new SettingKey("Rendering", "PerspectiveBackgroundColour", typeof(Color));
 			yield return new SettingKey("Rendering", "OrthographicBackgroundColour", typeof(Color));
-			yield return new SettingKey("Rendering", "UnfocusedViewportTargetFps", typeof(int));
-			yield return new SettingKey("Rendering", "MaxFps", typeof(int));
+			yield return new SettingKey("Rendering", "UnfocusedViewportTargetFps", typeof(int)) { EditorHint = "1,999,1" };
+			yield return new SettingKey("Rendering", "MaxFps", typeof(int)) { EditorHint = "0,999,1" };
 			yield return new SettingKey("Rendering", "MSAAoption", typeof(MSAA_OPTION));
 			yield return new SettingKey("Rendering", "GizmoScale", typeof(decimal));
 
