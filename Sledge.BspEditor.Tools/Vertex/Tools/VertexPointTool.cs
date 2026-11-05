@@ -878,6 +878,12 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 		private void CircleMouseUp(MapViewport viewport, ViewportEvent e)
 		{
 			e.Handled = true;
+			// Right click is handled on release: the viewport only opens the context menu on click, and that is skipped once this event is handled
+			if (e.Button == MouseButtons.Right)
+			{
+				_circle.Exit();
+				return;
+			}
 			if (e.Button != MouseButtons.Left && e.Button != MouseButtons.Middle) return;
 			_circle.Move(viewport, e.X, e.Y);
 			var add = e.Button == MouseButtons.Left;
