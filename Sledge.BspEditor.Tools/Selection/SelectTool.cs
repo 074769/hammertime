@@ -622,9 +622,17 @@ namespace Sledge.BspEditor.Tools.Selection
 			else if (CircleSelectMode.LeftHeld) ApplyCircle(document, viewport, true, false);
 		}
 
-		private void ApplyCircle(MapDocument document, MapViewport viewport, bool add, bool force)
+		private void CircleMouseUp(MapDocument document, MapViewport viewport, ViewportEvent e)
 		{
-			if (!force && !_circle.NeedsApply()) return;
+			if (e.Button != MouseButtons.Left && e.Button != MouseButtons.Middle) return;
+			e.Handled = true;
+			_circle.Move(viewport, e.X, e.Y);
+			ApplyCircle(document, viewport, e.Button == MouseButtons.Left, false, true);
+		}
+
+		private void ApplyCircle(MapDocument document, MapViewport viewport, bool add, bool force, bool final = false)
+		{
+			if (!force && !_circle.NeedsApply(final)) return;
 			_circle.MarkApplied();
 
 			List<IMapObject> hits;
@@ -663,7 +671,7 @@ namespace Sledge.BspEditor.Tools.Selection
 
 		protected override void MouseUp(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
 		{
-			if (CircleBlocks(e)) return;
+			if (_circle.Active) { CircleMouseUp(document, viewport, e); return; }
 			base.MouseUp(document, viewport, camera, e);
 		}
 
@@ -796,7 +804,7 @@ namespace Sledge.BspEditor.Tools.Selection
 
 		protected override void MouseUp(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
 		{
-			if (_circle.Active) { CircleBlocks(e); return; }
+			if (_circle.Active) { CircleMouseUp(document, viewport, e); return; }
 			IntersectingObjectsFor3DSelection = null;
 			ChosenItemFor3DSelection = null;
 			_paint3D = false;

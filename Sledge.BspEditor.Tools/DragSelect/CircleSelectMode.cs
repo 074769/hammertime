@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Numerics;
@@ -73,15 +74,26 @@ namespace Sledge.BspEditor.Tools.DragSelect
             Radius = Math.Max(MinRadius, Math.Min(MaxRadius, r));
         }
 
-        public bool NeedsApply()
+        private readonly Stopwatch _clock = Stopwatch.StartNew();
+        private long _lastAppliedMs = long.MinValue / 2;
+        private const long MinIntervalMs = 40;
+
+        /// <summary>
+        /// The hit test runs at most ~25 times a second while dragging, and only if the circle moved or resized.
+        /// The final position (button release) always runs, so nothing is lost by the throttle.
+        /// </summary>
+        public bool NeedsApply(bool final = false)
         {
-            return Vector2.Distance(Center, LastAppliedCenter) >= 3f || Math.Abs(Radius - LastAppliedRadius) > 0.01f;
+            var changed = Vector2.Distance(Center, LastAppliedCenter) >= 3f || Math.Abs(Radius - LastAppliedRadius) > 0.01f;
+            if (!changed) return false;
+            return final || _clock.ElapsedMilliseconds - _lastAppliedMs >= MinIntervalMs;
         }
 
         public void MarkApplied()
         {
             LastAppliedCenter = Center;
             LastAppliedRadius = Radius;
+            _lastAppliedMs = _clock.ElapsedMilliseconds;
         }
 
         public static bool LeftHeld => (Control.MouseButtons & MouseButtons.Left) == MouseButtons.Left;
@@ -123,7 +135,7 @@ namespace Sledge.BspEditor.Tools.DragSelect
             MapObjectExtensions.IgnoreOptions ignore)
         {
             var found = new HashSet<IMapObject>();
-            var step = Math.Max(5f, radius / 8f);
+            var step = Math.Max(6f, radius / 5f);
             var r2 = radius * radius;
 
             for (var dy = -radius; dy <= radius; dy += step)

@@ -890,9 +890,17 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 			else if (CircleSelectMode.LeftHeld) ApplyCircle(viewport, true, false);
 		}
 
-		private void ApplyCircle(MapViewport viewport, bool add, bool force)
+		private void CircleMouseUp(MapViewport viewport, ViewportEvent e)
 		{
-			if (!force && !_circle.NeedsApply()) return;
+			if (e.Button != MouseButtons.Left && e.Button != MouseButtons.Middle) return;
+			e.Handled = true;
+			_circle.Move(viewport, e.X, e.Y);
+			ApplyCircle(viewport, e.Button == MouseButtons.Left, false, true);
+		}
+
+		private void ApplyCircle(MapViewport viewport, bool add, bool force, bool final = false)
+		{
+			if (!force && !_circle.NeedsApply(final)) return;
 			_circle.MarkApplied();
 
 			var camera = viewport.Viewport.Camera;
@@ -924,7 +932,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 
 		protected override void MouseUp(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
 		{
-			if (CircleBlocks(e)) return;
+			if (_circle.Active) { CircleMouseUp(viewport, e); return; }
 			base.MouseUp(document, viewport, camera, e);
 		}
 
@@ -966,7 +974,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 
 		protected override void MouseUp(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
 		{
-			if (CircleBlocks(e)) return;
+			if (_circle.Active) { CircleMouseUp(viewport, e); return; }
 			base.MouseUp(document, viewport, camera, e);
 		}
 
