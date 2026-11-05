@@ -849,34 +849,48 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 			return false;
 		}
 
-		/// <summary>While circle select is on, the normal box / click / drag handling is skipped entirely.</summary>
+		/// <summary>While circle select is on, every other mouse, drag and wheel event is swallowed here.</summary>
 		private bool CircleBlocks(ViewportEvent e)
 		{
 			if (!_circle.Active) return false;
-			if (e.Button == MouseButtons.Left || e.Button == MouseButtons.Middle) e.Handled = true;
+			e.Handled = true;
 			return true;
+		}
+
+		/// <summary>Click handling: right click cancels circle select and does not open the context menu.</summary>
+		private bool CircleClickBlocks(ViewportEvent e)
+		{
+			if (!_circle.Active) return false;
+			if (e.Button == MouseButtons.Right) _circle.Exit();
+			return CircleBlocks(e);
 		}
 
 		private void CircleMouseDown(MapViewport viewport, ViewportEvent e)
 		{
+			e.Handled = true;
 			if (e.Button != MouseButtons.Left && e.Button != MouseButtons.Middle) return;
-			e.Handled = true; // also stops the middle button from panning (2D) or free-looking (3D)
+			// One button at a time: a second button pressed while one is held does nothing
+			if (!_circle.TryBegin(e.Button == MouseButtons.Left)) return;
 			_circle.Move(viewport, e.X, e.Y);
 			ApplyCircle(viewport, e.Button == MouseButtons.Left, true);
 		}
 
+		private void CircleMouseUp(MapViewport viewport, ViewportEvent e)
+		{
+			e.Handled = true;
+			if (e.Button != MouseButtons.Left && e.Button != MouseButtons.Middle) return;
+			_circle.Move(viewport, e.X, e.Y);
+			var add = e.Button == MouseButtons.Left;
+			if (_circle.End(add)) ApplyCircle(viewport, add, false, true);
+		}
+
 		private void CircleMouseMove(MapViewport viewport, ViewportEvent e)
 		{
+			e.Handled = true;
 			_circle.Move(viewport, e.X, e.Y);
-			if (CircleSelectMode.MiddleHeld)
-			{
-				e.Handled = true;
-				ApplyCircle(viewport, false, false);
-			}
-			else if (CircleSelectMode.LeftHeld)
-			{
-				ApplyCircle(viewport, true, false);
-			}
+			_circle.ReleaseIfNotHeld();
+			if (_circle.Held == CircleSelectMode.HeldButton.None) return;
+			ApplyCircle(viewport, _circle.Held == CircleSelectMode.HeldButton.Add, false);
 		}
 
 		private void CircleWheel(MapViewport viewport, ViewportEvent e)
@@ -885,43 +899,42 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 			e.Handled = true;
 			_circle.Move(viewport, e.X, e.Y);
 			_circle.Resize(e.Delta);
-
-			if (CircleSelectMode.MiddleHeld) ApplyCircle(viewport, false, false);
-			else if (CircleSelectMode.LeftHeld) ApplyCircle(viewport, true, false);
-		}
-
-		private void CircleMouseUp(MapViewport viewport, ViewportEvent e)
-		{
-			if (e.Button != MouseButtons.Left && e.Button != MouseButtons.Middle) return;
-			e.Handled = true;
-			_circle.Move(viewport, e.X, e.Y);
-			ApplyCircle(viewport, e.Button == MouseButtons.Left, false, true);
+			if (_circle.Held != CircleSelectMode.HeldButton.None)
+			{
+				ApplyCircle(viewport, _circle.Held == CircleSelectMode.HeldButton.Add, false);
+			}
 		}
 
 		private void ApplyCircle(MapViewport viewport, bool add, bool force, bool final = false)
 		{
 			if (!force && !_circle.NeedsApply(final)) return;
-			_circle.MarkApplied();
-
-			var camera = viewport.Viewport.Camera;
-			var is3D = viewport.Is3D;
-			var inside = GetVisiblePoints().Where(p =>
+			var started = _circle.BeginApply();
+			try
 			{
-				var c = camera.WorldToScreen(p.Position);
-				return (!is3D || c.Z <= 1) && CircleSelectMode.ScreenPointInside(c, _circle.Center, _circle.Radius);
-			}).ToList();
+				var camera = viewport.Viewport.Camera;
+				var is3D = viewport.Is3D;
+				var inside = GetVisiblePoints().Where(p =>
+				{
+					var c = camera.WorldToScreen(p.Position);
+					return (!is3D || c.Z <= 1) && CircleSelectMode.ScreenPointInside(c, _circle.Center, _circle.Radius);
+				}).ToList();
 
-			// Like the box: real vertices win, midpoints are only picked when no vertex is inside
-			var points = inside.Where(x => !x.IsMidpoint).ToList();
-			if (!points.Any()) points = inside;
+				// Like the box: real vertices win, midpoints are only picked when no vertex is inside
+				var points = inside.Where(x => !x.IsMidpoint).ToList();
+				if (!points.Any()) points = inside;
 
-			// Only touch handles that actually change, so a stationary circle costs nothing
-			points = points.Where(x => x.IsSelected != add).ToList();
-			if (!points.Any()) return;
+				// Only touch handles that actually change, so a stationary circle costs nothing
+				points = points.Where(x => x.IsSelected != add).ToList();
+				if (!points.Any()) return;
 
-			points.ForEach(x => x.IsSelected = add);
-			UpdateSplitEnabled();
-			Invalidate();
+				points.ForEach(x => x.IsSelected = add);
+				UpdateSplitEnabled();
+				Invalidate();
+			}
+			finally
+			{
+				_circle.EndApply(started);
+			}
 		}
 
 		protected override void MouseDown(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
@@ -950,7 +963,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 
 		protected override void MouseClick(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
 		{
-			if (CircleBlocks(e)) return;
+			if (CircleClickBlocks(e)) return;
 			base.MouseClick(document, viewport, camera, e);
 		}
 
@@ -992,7 +1005,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 
 		protected override void MouseClick(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
 		{
-			if (CircleBlocks(e)) return;
+			if (CircleClickBlocks(e)) return;
 			base.MouseClick(document, viewport, camera, e);
 		}
 
