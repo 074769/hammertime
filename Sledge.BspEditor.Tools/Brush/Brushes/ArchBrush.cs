@@ -130,6 +130,43 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
         }
 
         /// <summary>
+        /// Splits a convex piece into its triangulation: each hull face together with an interior point forms
+        /// one tetrahedral brush, so every triangle of the triangulated geometry is its own brush.
+        /// The interior point is shared by all of them, so neighbouring brushes meet on identical faces.
+        /// </summary>
+        private IEnumerable<Solid> ConvexTriangleBrushes(UniqueNumberGenerator generator, IList<Vector3> points, string texture, Color colour, int decimals)
+        {
+            var hull = ConvexFaces(points).ToList();
+
+            var centre = Vector3.Zero;
+            foreach (var p in points) centre += p;
+            centre = (centre / points.Count).Round(decimals);
+
+            foreach (var face in hull)
+            {
+                var faceCentre = Vector3.Zero;
+                foreach (var p in face) faceCentre += p;
+                faceCentre = faceCentre / face.Length;
+
+                // Winding sign used by the hull faces, so the new faces are wound the same way
+                var sign = Math.Sign(Vector3.Dot(Vector3.Cross(face[1] - face[0], face[2] - face[0]), faceCentre - centre));
+
+                var faces = new List<Vector3[]> { face };
+                for (var k = 0; k < face.Length; k++)
+                {
+                    var a = face[k];
+                    var b = face[(k + 1) % face.Length];
+                    var side = new[] { a, b, centre };
+                    var outward = (a + b) / 2 - faceCentre;
+                    if (Math.Sign(Vector3.Dot(Vector3.Cross(b - a, centre - a), outward)) != sign) side = new[] { b, a, centre };
+                    faces.Add(side);
+                }
+
+                yield return MakeSolid(generator, faces, texture, colour);
+            }
+        }
+
+        /// <summary>
         /// The convex solid through a set of points: every plane through three of them that has all the others
         /// on one side. Used for the pieces of a sloped wall, whose top corners can drop onto the bottom ones.
         /// </summary>
@@ -257,8 +294,8 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
                     var mid1 = ((outer[i + 1] + inner[i + 1]) / 2).Round(roundDecimals);
                     var top0 = (mid0 + z).Round(roundDecimals);
                     var top1 = (mid1 + z).Round(roundDecimals);
-                    yield return MakeSolid(generator, ConvexFaces(new[] { outer[i], outer[i + 1], mid0, mid1, top0, top1 }), texture, colour);
-                    yield return MakeSolid(generator, ConvexFaces(new[] { mid0, mid1, inner[i], inner[i + 1], top0, top1 }), texture, colour);
+                    foreach (var piece in ConvexTriangleBrushes(generator, new[] { outer[i], outer[i + 1], mid0, mid1, top0, top1 }, texture, colour, roundDecimals)) yield return piece;
+                    foreach (var piece in ConvexTriangleBrushes(generator, new[] { mid0, mid1, inner[i], inner[i + 1], top0, top1 }, texture, colour, roundDecimals)) yield return piece;
                     continue;
                 }
 
