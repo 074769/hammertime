@@ -50,6 +50,9 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 		public override Control Control => _control;
 
 		private readonly BoxDraggableState _boxState;
+
+		// C toggles circle select (Blender style): wheel resizes, left adds, middle removes vertex handles
+		private readonly CircleSelectMode _circle = new CircleSelectMode();
 		private ConcurrentDictionary<VertexSolid, VertexList> _vertices;
 
 		private VisiblePoints _showPoints;
@@ -244,6 +247,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 
 		protected override void KeyDown(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
 		{
+			if (HandleCircleKey(viewport, e)) return;
 			HandleKeyDown(e);
 			base.KeyDown(document, viewport, camera, e);
 
@@ -279,6 +283,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 
 		protected override void KeyDown(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
 		{
+			if (HandleCircleKey(viewport, e)) return;
 			HandleKeyDown(e);
 			base.KeyDown(document, viewport, camera, e);
 		}
@@ -378,6 +383,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 
 		public override async Task ToolSelected()
 		{
+			_circle.Exit();
 			await UpdateVertices();
 			await base.ToolSelected();
 
@@ -434,6 +440,7 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 
 		public override async Task ToolDeselected()
 		{
+			_circle.Exit();
 			_vertices.Clear();
 			await base.ToolDeselected();
 		}
@@ -819,11 +826,212 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 
 		#endregion
 
+		#region Circle select
+
+		/// <summary>C toggles circle select; Escape leaves it. Both are swallowed so nothing else reacts to them.</summary>
+		private bool HandleCircleKey(MapViewport viewport, ViewportEvent e)
+		{
+			if (e.KeyCode == Keys.C && !KeyboardState.Ctrl && !KeyboardState.Alt && !KeyboardState.Shift)
+			{
+				_circle.Toggle(viewport);
+				e.Handled = true;
+				return true;
+			}
+
+			if (_circle.Active && e.KeyCode == Keys.Escape)
+			{
+				_circle.Exit();
+				e.Handled = true;
+				return true;
+			}
+
+			return false;
+		}
+
+		/// <summary>While circle select is on, the normal box / click / drag handling is skipped entirely.</summary>
+		private bool CircleBlocks(ViewportEvent e)
+		{
+			if (!_circle.Active) return false;
+			if (e.Button == MouseButtons.Left || e.Button == MouseButtons.Middle) e.Handled = true;
+			return true;
+		}
+
+		private void CircleMouseDown(MapViewport viewport, ViewportEvent e)
+		{
+			if (e.Button != MouseButtons.Left && e.Button != MouseButtons.Middle) return;
+			e.Handled = true; // also stops the middle button from panning (2D) or free-looking (3D)
+			_circle.Move(viewport, e.X, e.Y);
+			ApplyCircle(viewport, e.Button == MouseButtons.Left, true);
+		}
+
+		private void CircleMouseMove(MapViewport viewport, ViewportEvent e)
+		{
+			_circle.Move(viewport, e.X, e.Y);
+			if (CircleSelectMode.MiddleHeld)
+			{
+				e.Handled = true;
+				ApplyCircle(viewport, false, false);
+			}
+			else if (CircleSelectMode.LeftHeld)
+			{
+				ApplyCircle(viewport, true, false);
+			}
+		}
+
+		private void CircleWheel(MapViewport viewport, ViewportEvent e)
+		{
+			// Always swallowed while circle select is on, so the wheel never zooms (2D) or moves the camera (3D)
+			e.Handled = true;
+			_circle.Move(viewport, e.X, e.Y);
+			_circle.Resize(e.Delta);
+
+			if (CircleSelectMode.MiddleHeld) ApplyCircle(viewport, false, false);
+			else if (CircleSelectMode.LeftHeld) ApplyCircle(viewport, true, false);
+		}
+
+		private void ApplyCircle(MapViewport viewport, bool add, bool force)
+		{
+			if (!force && !_circle.NeedsApply()) return;
+			_circle.MarkApplied();
+
+			var camera = viewport.Viewport.Camera;
+			var is3D = viewport.Is3D;
+			var inside = GetVisiblePoints().Where(p =>
+			{
+				var c = camera.WorldToScreen(p.Position);
+				return (!is3D || c.Z <= 1) && CircleSelectMode.ScreenPointInside(c, _circle.Center, _circle.Radius);
+			}).ToList();
+
+			// Like the box: real vertices win, midpoints are only picked when no vertex is inside
+			var points = inside.Where(x => !x.IsMidpoint).ToList();
+			if (!points.Any()) points = inside;
+
+			// Only touch handles that actually change, so a stationary circle costs nothing
+			points = points.Where(x => x.IsSelected != add).ToList();
+			if (!points.Any()) return;
+
+			points.ForEach(x => x.IsSelected = add);
+			UpdateSplitEnabled();
+			Invalidate();
+		}
+
+		protected override void MouseDown(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
+		{
+			if (_circle.Active) { CircleMouseDown(viewport, e); return; }
+			base.MouseDown(document, viewport, camera, e);
+		}
+
+		protected override void MouseUp(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
+		{
+			if (CircleBlocks(e)) return;
+			base.MouseUp(document, viewport, camera, e);
+		}
+
+		protected override void MouseMove(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
+		{
+			if (_circle.Active) { CircleMouseMove(viewport, e); return; }
+			base.MouseMove(document, viewport, camera, e);
+		}
+
+		protected override void MouseWheel(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
+		{
+			if (_circle.Active) { CircleWheel(viewport, e); return; }
+			base.MouseWheel(document, viewport, camera, e);
+		}
+
+		protected override void MouseClick(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
+		{
+			if (CircleBlocks(e)) return;
+			base.MouseClick(document, viewport, camera, e);
+		}
+
+		protected override void DragStart(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
+		{
+			if (CircleBlocks(e)) return;
+			base.DragStart(document, viewport, camera, e);
+		}
+
+		protected override void DragMove(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
+		{
+			if (CircleBlocks(e)) return;
+			base.DragMove(document, viewport, camera, e);
+		}
+
+		protected override void DragEnd(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
+		{
+			if (CircleBlocks(e)) return;
+			base.DragEnd(document, viewport, camera, e);
+		}
+
+		protected override void MouseUp(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
+		{
+			if (CircleBlocks(e)) return;
+			base.MouseUp(document, viewport, camera, e);
+		}
+
+		protected override void MouseMove(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
+		{
+			if (_circle.Active) { CircleMouseMove(viewport, e); return; }
+			base.MouseMove(document, viewport, camera, e);
+		}
+
+		protected override void MouseWheel(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
+		{
+			if (_circle.Active) { CircleWheel(viewport, e); return; }
+			base.MouseWheel(document, viewport, camera, e);
+		}
+
+		protected override void MouseClick(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
+		{
+			if (CircleBlocks(e)) return;
+			base.MouseClick(document, viewport, camera, e);
+		}
+
+		protected override void MouseDoubleClick(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
+		{
+			if (CircleBlocks(e)) return;
+			base.MouseDoubleClick(document, viewport, camera, e);
+		}
+
+		protected override void DragStart(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
+		{
+			if (CircleBlocks(e)) return;
+			base.DragStart(document, viewport, camera, e);
+		}
+
+		protected override void DragMove(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
+		{
+			if (CircleBlocks(e)) return;
+			base.DragMove(document, viewport, camera, e);
+		}
+
+		protected override void DragEnd(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
+		{
+			if (CircleBlocks(e)) return;
+			base.DragEnd(document, viewport, camera, e);
+		}
+
+		protected override void Render(MapDocument document, IViewport viewport, OrthographicCamera camera, Vector3 worldMin, Vector3 worldMax, I2DRenderer im)
+		{
+			base.Render(document, viewport, camera, worldMin, worldMax, im);
+			_circle.Draw(viewport, im);
+		}
+
+		protected override void Render(MapDocument document, IViewport viewport, PerspectiveCamera camera, I2DRenderer im)
+		{
+			base.Render(document, viewport, camera, im);
+			_circle.Draw(viewport, im);
+		}
+
+		#endregion
+
 		#region Point selection
 
 		protected override void MouseDown(MapDocument document, MapViewport viewport, PerspectiveCamera camera,
 			ViewportEvent e)
 		{
+			if (_circle.Active) { CircleMouseDown(viewport, e); return; }
+
 			var toggle = KeyboardState.Ctrl;
 
 			var l = camera.EyeLocation;
