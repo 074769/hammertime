@@ -113,20 +113,20 @@ namespace Sledge.BspEditor.Tools.Texture
             // 
             // ShiftXValue
             // 
-            ShiftXValue.DecimalPlaces = 2;
+            ShiftXValue.DecimalPlaces = 4;
             ShiftXValue.Location = new System.Drawing.Point(72, 23);
-            ShiftXValue.Maximum = new decimal(new int[] { 4096, 0, 0, 0 });
-            ShiftXValue.Minimum = new decimal(new int[] { 4096, 0, 0, int.MinValue });
+            ShiftXValue.Maximum = new decimal(new int[] { 1000000, 0, 0, 0 });
+            ShiftXValue.Minimum = new decimal(new int[] { 1000000, 0, 0, int.MinValue });
             ShiftXValue.Name = "ShiftXValue";
             ShiftXValue.Size = new System.Drawing.Size(90, 23);
             ShiftXValue.TabIndex = 1;
             // 
             // ShiftYValue
             // 
-            ShiftYValue.DecimalPlaces = 2;
+            ShiftYValue.DecimalPlaces = 4;
             ShiftYValue.Location = new System.Drawing.Point(168, 23);
-            ShiftYValue.Maximum = new decimal(new int[] { 4096, 0, 0, 0 });
-            ShiftYValue.Minimum = new decimal(new int[] { 4096, 0, 0, int.MinValue });
+            ShiftYValue.Maximum = new decimal(new int[] { 1000000, 0, 0, 0 });
+            ShiftYValue.Minimum = new decimal(new int[] { 1000000, 0, 0, int.MinValue });
             ShiftYValue.Name = "ShiftYValue";
             ShiftYValue.Size = new System.Drawing.Size(90, 23);
             ShiftYValue.TabIndex = 2;

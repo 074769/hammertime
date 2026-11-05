@@ -418,10 +418,11 @@
             // ShiftXValue
             // 
             ShiftXValue.CtrlWheelMultiplier = new decimal(new int[] { 0, 0, 0, 0 });
+            ShiftXValue.DecimalPlaces = 4;
             ShiftXValue.Location = new System.Drawing.Point(106, 34);
             ShiftXValue.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
-            ShiftXValue.Maximum = new decimal(new int[] { 4096, 0, 0, 0 });
-            ShiftXValue.Minimum = new decimal(new int[] { 4096, 0, 0, int.MinValue });
+            ShiftXValue.Maximum = new decimal(new int[] { 1000000, 0, 0, 0 });
+            ShiftXValue.Minimum = new decimal(new int[] { 1000000, 0, 0, int.MinValue });
             ShiftXValue.Name = "ShiftXValue";
             ShiftXValue.Size = new System.Drawing.Size(68, 23);
             ShiftXValue.TabIndex = 1;
@@ -432,10 +433,11 @@
             // ShiftYValue
             // 
             ShiftYValue.CtrlWheelMultiplier = new decimal(new int[] { 0, 0, 0, 0 });
+            ShiftYValue.DecimalPlaces = 4;
             ShiftYValue.Location = new System.Drawing.Point(106, 64);
             ShiftYValue.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
-            ShiftYValue.Maximum = new decimal(new int[] { 4096, 0, 0, 0 });
-            ShiftYValue.Minimum = new decimal(new int[] { 4096, 0, 0, int.MinValue });
+            ShiftYValue.Maximum = new decimal(new int[] { 1000000, 0, 0, 0 });
+            ShiftYValue.Minimum = new decimal(new int[] { 1000000, 0, 0, int.MinValue });
             ShiftYValue.Name = "ShiftYValue";
             ShiftYValue.Size = new System.Drawing.Size(68, 23);
             ShiftYValue.TabIndex = 1;
