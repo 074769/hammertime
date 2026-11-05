@@ -27,8 +27,6 @@ using Sledge.Common.Translations;
 using Sledge.DataStructures.Geometric;
 using Sledge.Rendering.Cameras;
 using Sledge.Rendering.Engine;
-using Sledge.Rendering.Overlay;
-using Sledge.Rendering.Viewports;
 using Sledge.Shell.Input;
 using System;
 using System.Collections.Generic;
@@ -69,9 +67,6 @@ namespace Sledge.BspEditor.Tools.Selection
 		private bool _paint3D;
 		private bool _paint3DAdds;
 		private IMapObject _paint3DLast;
-
-		// C toggles circle select (Blender style): wheel resizes, left adds, middle removes
-		private readonly CircleSelectMode _circle = new CircleSelectMode();
 
 		// A history of previous selection states used by "select less" (Ctrl+-) to step back
 		// through the levels reached by repeated "select more" (Ctrl++).
@@ -400,7 +395,6 @@ namespace Sledge.BspEditor.Tools.Selection
 
 		public override async Task ToolSelected()
 		{
-			_circle.Exit();
 			TransformationModeChanged(SelectionBoxDraggableState.TransformationMode.Resize);
 
 			var document = GetDocument();
@@ -559,193 +553,10 @@ namespace Sledge.BspEditor.Tools.Selection
 
 		#endregion
 
-		#region Circle select
-
-		/// <summary>C toggles circle select; Escape leaves it. Both are swallowed so nothing else reacts to them.</summary>
-		private bool HandleCircleKey(MapViewport viewport, ViewportEvent e)
-		{
-			if (e.KeyCode == Keys.C && !KeyboardState.Ctrl && !KeyboardState.Alt && !KeyboardState.Shift)
-			{
-				_circle.Toggle(viewport);
-				e.Handled = true;
-				return true;
-			}
-
-			if (_circle.Active && e.KeyCode == Keys.Escape)
-			{
-				_circle.Exit();
-				e.Handled = true;
-				return true;
-			}
-
-			return false;
-		}
-
-		/// <summary>While circle select is on, the normal box / click / drag handling is skipped entirely.</summary>
-		private bool CircleBlocks(ViewportEvent e)
-		{
-			if (!_circle.Active) return false;
-			if (e.Button == MouseButtons.Left || e.Button == MouseButtons.Middle) e.Handled = true;
-			return true;
-		}
-
-		private void CircleMouseDown(MapDocument document, MapViewport viewport, ViewportEvent e)
-		{
-			if (e.Button != MouseButtons.Left && e.Button != MouseButtons.Middle) return;
-			e.Handled = true; // also stops the middle button from panning (2D) or free-looking (3D)
-			_circle.Move(viewport, e.X, e.Y);
-			ApplyCircle(document, viewport, e.Button == MouseButtons.Left, true);
-		}
-
-		private void CircleMouseMove(MapDocument document, MapViewport viewport, ViewportEvent e)
-		{
-			_circle.Move(viewport, e.X, e.Y);
-			if (CircleSelectMode.MiddleHeld)
-			{
-				e.Handled = true;
-				ApplyCircle(document, viewport, false, false);
-			}
-			else if (CircleSelectMode.LeftHeld)
-			{
-				ApplyCircle(document, viewport, true, false);
-			}
-		}
-
-		private void CircleWheel(MapDocument document, MapViewport viewport, ViewportEvent e)
-		{
-			// Always swallowed while circle select is on, so the wheel never zooms (2D) or moves the camera (3D)
-			e.Handled = true;
-			_circle.Move(viewport, e.X, e.Y);
-			_circle.Resize(e.Delta);
-
-			if (CircleSelectMode.MiddleHeld) ApplyCircle(document, viewport, false, false);
-			else if (CircleSelectMode.LeftHeld) ApplyCircle(document, viewport, true, false);
-		}
-
-		private void ApplyCircle(MapDocument document, MapViewport viewport, bool add, bool force)
-		{
-			if (!force && !_circle.NeedsApply()) return;
-			_circle.MarkApplied();
-
-			List<IMapObject> hits;
-			if (viewport.Is2D)
-			{
-				var ortho = (OrthographicCamera) viewport.Viewport.Camera;
-				hits = CircleSelectMode.FindInOrtho(document, ortho, _circle.Center, _circle.Radius,
-					x => GetPickGeometry(x) ?? x.GetPolygons(),
-					x => GetPickGeometry(x) != null ? GetPickCentre(x) : x.BoundingBox.Center);
-			}
-			else
-			{
-				var tf = document.Map.Data.GetOne<DisplayFlags>() ?? new DisplayFlags();
-				IgnoreOptions iopt = (tf.HideClipTextures ? IgnoreOptions.IgnoreClip : IgnoreOptions.None) | (tf.HideNullTextures ? IgnoreOptions.IgnoreNull : IgnoreOptions.None);
-				hits = CircleSelectMode.FindInPerspective(document, (PerspectiveCamera) viewport.Viewport.Camera, _circle.Center, _circle.Radius, iopt).ToList();
-			}
-
-			var ignoreGrouping = IgnoreGrouping();
-			if (add)
-			{
-				var list = hits.Where(x => !x.IsSelected).ToList();
-				if (list.Count > 0) SetSelected(document, null, list, false, ignoreGrouping);
-			}
-			else
-			{
-				var list = hits.Where(x => x.IsSelected).ToList();
-				if (list.Count > 0) SetSelected(document, list, null, false, ignoreGrouping);
-			}
-		}
-
-		protected override void MouseDown(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
-		{
-			if (_circle.Active) { CircleMouseDown(document, viewport, e); return; }
-			base.MouseDown(document, viewport, camera, e);
-		}
-
-		protected override void MouseUp(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
-		{
-			if (CircleBlocks(e)) return;
-			base.MouseUp(document, viewport, camera, e);
-		}
-
-		protected override void MouseMove(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
-		{
-			if (_circle.Active) { CircleMouseMove(document, viewport, e); return; }
-			base.MouseMove(document, viewport, camera, e);
-		}
-
-		protected override void MouseWheel(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
-		{
-			if (_circle.Active) { CircleWheel(document, viewport, e); return; }
-			base.MouseWheel(document, viewport, camera, e);
-		}
-
-		protected override void MouseClick(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
-		{
-			if (CircleBlocks(e)) return;
-			base.MouseClick(document, viewport, camera, e);
-		}
-
-		protected override void MouseClick(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
-		{
-			if (CircleBlocks(e)) return;
-			base.MouseClick(document, viewport, camera, e);
-		}
-
-		protected override void DragStart(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
-		{
-			if (CircleBlocks(e)) return;
-			base.DragStart(document, viewport, camera, e);
-		}
-
-		protected override void DragMove(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
-		{
-			if (CircleBlocks(e)) return;
-			base.DragMove(document, viewport, camera, e);
-		}
-
-		protected override void DragEnd(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
-		{
-			if (CircleBlocks(e)) return;
-			base.DragEnd(document, viewport, camera, e);
-		}
-
-		protected override void DragStart(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
-		{
-			if (CircleBlocks(e)) return;
-			base.DragStart(document, viewport, camera, e);
-		}
-
-		protected override void DragMove(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
-		{
-			if (CircleBlocks(e)) return;
-			base.DragMove(document, viewport, camera, e);
-		}
-
-		protected override void DragEnd(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
-		{
-			if (CircleBlocks(e)) return;
-			base.DragEnd(document, viewport, camera, e);
-		}
-
-		protected override void Render(MapDocument document, IViewport viewport, OrthographicCamera camera, Vector3 worldMin, Vector3 worldMax, I2DRenderer im)
-		{
-			base.Render(document, viewport, camera, worldMin, worldMax, im);
-			_circle.Draw(viewport, im);
-		}
-
-		protected override void Render(MapDocument document, IViewport viewport, PerspectiveCamera camera, I2DRenderer im)
-		{
-			base.Render(document, viewport, camera, im);
-			_circle.Draw(viewport, im);
-		}
-
-		#endregion
-
 		#region 3D interaction
 
 		protected override void MouseDoubleClick(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
 		{
-			if (_circle.Active) { e.Handled = true; return; }
 			if (document.Selection.IsEmpty) return;
 			Oy.Publish("Context:Add", new ContextInfo("BspEditor:ObjectProperties"));
 		}
@@ -759,7 +570,6 @@ namespace Sledge.BspEditor.Tools.Selection
 		/// <param name="e">The click event</param>
 		protected override void MouseDown(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
 		{
-			if (_circle.Active) { CircleMouseDown(document, viewport, e); return; }
 			if (e.Button != MouseButtons.Left) return;
 			var tf = document.Map.Data.GetOne<DisplayFlags>() ?? new DisplayFlags();
 			IgnoreOptions iopt = (tf.HideClipTextures ? IgnoreOptions.IgnoreClip : IgnoreOptions.None) | (tf.HideNullTextures ? IgnoreOptions.IgnoreNull : IgnoreOptions.None);
@@ -796,7 +606,6 @@ namespace Sledge.BspEditor.Tools.Selection
 
 		protected override void MouseUp(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
 		{
-			if (_circle.Active) { CircleBlocks(e); return; }
 			IntersectingObjectsFor3DSelection = null;
 			ChosenItemFor3DSelection = null;
 			_paint3D = false;
@@ -806,7 +615,6 @@ namespace Sledge.BspEditor.Tools.Selection
 
 		protected override void MouseMove(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
 		{
-			if (_circle.Active) { CircleMouseMove(document, viewport, e); return; }
 			if (!_paint3D)
 			{
 				base.MouseMove(document, viewport, camera, e);
@@ -844,8 +652,6 @@ namespace Sledge.BspEditor.Tools.Selection
 
 		protected override void MouseWheel(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
 		{
-			if (_circle.Active) { CircleWheel(document, viewport, e); return; }
-
 			// If we're not in 3D cycle mode, carry on
 			if (IntersectingObjectsFor3DSelection == null || ChosenItemFor3DSelection == null)
 			{
@@ -1057,7 +863,6 @@ namespace Sledge.BspEditor.Tools.Selection
 
 		protected override void KeyDown(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
 		{
-			if (HandleCircleKey(viewport, e)) return;
 			if (e.KeyCode == Keys.Enter) Confirm(document);
 			else if (e.KeyCode == Keys.Escape) Cancel(document);
 
@@ -1089,7 +894,6 @@ namespace Sledge.BspEditor.Tools.Selection
 
 		protected override void KeyDown(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
 		{
-			if (HandleCircleKey(viewport, e)) return;
 			if (e.KeyCode == Keys.Enter) Confirm(document);
 			else if (e.KeyCode == Keys.Escape) Cancel(document);
 
