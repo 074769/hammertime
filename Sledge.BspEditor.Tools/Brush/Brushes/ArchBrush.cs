@@ -184,8 +184,9 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
             var tiltInterp = curvedRamp && _tiltInterp.GetValue();
             var slopeOuter = curvedRamp && _outerOffset.GetValue();
             var slopeInner = curvedRamp && _innerOffset.GetValue();
-            // Both edges dropped onto the bottom would leave no wall at all
-            if (slopeOuter && slopeInner) yield break;
+            // Both edges dropped onto the bottom: the top becomes a ridge along the middle of the wall (a wedge)
+            var wedge = slopeOuter && slopeInner;
+            if (wedge && box.Height < 1) yield break;
             var fitSelection = _fitSelection.GetValue();
             
             // Very similar to the pipe brush, except with options for start angle, arc, height and tilt
@@ -247,6 +248,15 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
             for (var i = 0; i < numSides; i++)
             {
                 var faces = new List<Vector3[]>();
+
+                // Both edges on the floor and the top along the middle of the wall: a triangular prism per segment
+                if (wedge)
+                {
+                    var ridge0 = ((outer[i] + inner[i]) / 2 + z).Round(roundDecimals);
+                    var ridge1 = ((outer[i + 1] + inner[i + 1]) / 2 + z).Round(roundDecimals);
+                    yield return MakeSolid(generator, ConvexFaces(new[] { outer[i], outer[i + 1], inner[i], inner[i + 1], ridge0, ridge1 }), texture, colour);
+                    continue;
+                }
 
                 // A sloped edge drops its top vertices onto its bottom vertices. Each half of the segment is then
                 // the convex solid through its corners, which can be a tetrahedron or a wedge.

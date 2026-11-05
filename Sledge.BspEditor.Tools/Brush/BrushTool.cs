@@ -300,8 +300,9 @@ namespace Sledge.BspEditor.Tools.Brush
 			if (_updatePreview)
 			{
 				var bbox = new Box(box.State.Start, box.State.End);
-				var brush = GetBrush(document, bbox, new UniqueNumberGenerator()).FindAll();
-				_preview = brush;
+				// Some brushes (e.g. an arch with both outer and inner offsets ticked) create nothing, so there is no preview
+				var created = GetBrush(document, bbox, new UniqueNumberGenerator());
+				_preview = created?.FindAll();
 			}
 
 			_updatePreview = false;
