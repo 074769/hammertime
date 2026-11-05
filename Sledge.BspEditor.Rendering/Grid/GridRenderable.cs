@@ -75,6 +75,9 @@ namespace Sledge.BspEditor.Rendering.Grid
 		{
 			if (UpdateRequired()) Update();
 
+			// With no grid lines the buffer is never created (Buffer.Update skips empty data), so there is nothing to bind or draw
+			if (_indexCount == 0) return;
+
 			_buffer.Bind(cl, 0);
 			cl.DrawIndexed(_indexCount, 1, 0, 0, 0);
 		}
