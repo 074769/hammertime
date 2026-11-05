@@ -249,12 +249,16 @@ namespace Sledge.BspEditor.Tools.Brush.Brushes
             {
                 var faces = new List<Vector3[]>();
 
-                // Both edges on the floor and the top along the middle of the wall: a triangular prism per segment
+                // Both edges sloped: the outer and inner arches are separate pieces that only meet on the middle line,
+                // each rising from the floor at its own edge to full height at the middle
                 if (wedge)
                 {
-                    var ridge0 = ((outer[i] + inner[i]) / 2 + z).Round(roundDecimals);
-                    var ridge1 = ((outer[i + 1] + inner[i + 1]) / 2 + z).Round(roundDecimals);
-                    yield return MakeSolid(generator, ConvexFaces(new[] { outer[i], outer[i + 1], inner[i], inner[i + 1], ridge0, ridge1 }), texture, colour);
+                    var mid0 = ((outer[i] + inner[i]) / 2).Round(roundDecimals);
+                    var mid1 = ((outer[i + 1] + inner[i + 1]) / 2).Round(roundDecimals);
+                    var top0 = (mid0 + z).Round(roundDecimals);
+                    var top1 = (mid1 + z).Round(roundDecimals);
+                    yield return MakeSolid(generator, ConvexFaces(new[] { outer[i], outer[i + 1], mid0, mid1, top0, top1 }), texture, colour);
+                    yield return MakeSolid(generator, ConvexFaces(new[] { mid0, mid1, inner[i], inner[i + 1], top0, top1 }), texture, colour);
                     continue;
                 }
 
