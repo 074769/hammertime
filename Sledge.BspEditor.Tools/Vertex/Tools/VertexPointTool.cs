@@ -510,9 +510,9 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 			var moved = false;
 			foreach (var point in pts)
 			{
-				var delta = grid.Snap(point.Position) - point.Position;
-				if (delta == Vector3.Zero) continue;
-				point.Move(delta);
+				var target = grid.Snap(point.Position);
+				if (point.Vertices.All(v => v.Position == target)) continue;
+				point.SetExact(target);
 				moved = true;
 			}
 			if (!moved) return;
@@ -543,8 +543,13 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 				.SelectMany(x => x.GetStandardPointList()).Distinct().ToList();
 			if (!selected.Any()) return;
 
-			var originals = selected.ToDictionary(x => x, x => x.Position);
-			var origin = selected.Aggregate(Vector3.Zero, (a, b) => a + b.Position) / selected.Count;
+			// Scale the real vertices, not the rounded handles: a handle's Position is rounded to 2dp,
+			// so scaling from it moves each vertex by a different amount.
+			var originals = new Dictionary<MutableVertex, Vector3>();
+			foreach (var p in selected)
+				foreach (var v in p.Vertices)
+					originals[v] = v.Position;
+			var origin = originals.Values.Aggregate(Vector3.Zero, (a, b) => a + b) / originals.Count;
 			var solids = selected.Select(x => x.Solid).Distinct().ToList();
 
 			var confirmed = false;
@@ -562,37 +567,52 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 			}
 			else
 			{
-				// Cancelled: put every point back exactly where it started
-				foreach (var kv in originals) kv.Key.Move(kv.Value - kv.Key.Position);
-				foreach (var midpoint in solids.SelectMany(x => _vertices.TryGetValue(x, out var l) ? l.Points.Where(p => p.IsMidpoint) : new List<VertexPoint>()))
-				{
-					midpoint.DraggingPosition = midpoint.Position = (midpoint.MidpointStart.Position + midpoint.MidpointEnd.Position) / 2;
-				}
+				// Cancelled: put every vertex back exactly where it started
+				foreach (var kv in originals) kv.Key.Set(kv.Value);
+				foreach (var solid in solids) solid.IsDirty = true;
+				RefreshHandles(solids);
 			}
 
 			// Refresh the point lists once, now that the dialog is closed
 			UpdateSolids(solids);
 		}
 
-		private void ApplyScale(Dictionary<VertexPoint, Vector3> originals, Vector3 origin, List<VertexSolid> solids, float[] factors)
+		private void ApplyScale(Dictionary<MutableVertex, Vector3> originals, Vector3 origin, List<VertexSolid> solids, float[] factors)
 		{
 			var factor = new Vector3(factors[0], factors[1], factors[2]);
 
-			// Scale each axis by its own factor, relative to the centre of the selection
+			// Scale each axis by its own factor, relative to the centre of the selection.
+			// Each real vertex is computed from its own original position, so every vertex gets the same transform.
 			foreach (var kv in originals)
 			{
-				var target = origin + (kv.Value - origin) * factor;
-				kv.Key.Move(target - kv.Key.Position);
-			}
-
-			foreach (var midpoint in solids.SelectMany(x => _vertices.TryGetValue(x, out var l) ? l.Points.Where(p => p.IsMidpoint) : new List<VertexPoint>()))
-			{
-				midpoint.DraggingPosition = midpoint.Position = (midpoint.MidpointStart.Position + midpoint.MidpointEnd.Position) / 2;
+				kv.Key.Set(origin + (kv.Value - origin) * factor);
 			}
 
 			// Mark dirty and redraw only. The point lists are rebuilt once, when the dialog closes.
 			foreach (var solid in solids) solid.IsDirty = true;
+			RefreshHandles(solids);
 			Invalidate();
+		}
+
+		/// <summary>
+		/// Moves each handle onto its vertices (rounded to 2dp, the same as VertexList.Update) and
+		/// recomputes the midpoints of the given solids. Vertices are never changed here.
+		/// </summary>
+		private void RefreshHandles(IEnumerable<VertexSolid> solids)
+		{
+			var list = solids.ToList();
+			foreach (var solid in list)
+			{
+				if (!_vertices.TryGetValue(solid, out var vl)) continue;
+				foreach (var p in vl.Points.Where(x => !x.IsMidpoint && x.Vertices.Count > 0))
+				{
+					p.Position = p.DraggingPosition = p.Vertices[0].Position.Round(2);
+				}
+			}
+			foreach (var midpoint in list.SelectMany(x => _vertices.TryGetValue(x, out var l) ? l.Points.Where(p => p.IsMidpoint) : new List<VertexPoint>()))
+			{
+				midpoint.DraggingPosition = midpoint.Position = (midpoint.MidpointStart.Position + midpoint.MidpointEnd.Position) / 2;
+			}
 		}
 
 		#endregion
@@ -1284,6 +1304,16 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 				get => _isDragging;
 				set
 				{
+					if (value && !_isDragging)
+					{
+						_dragStart = Vertices.Select(v => v.Position).ToList();
+					}
+					else if (!value && _isDragging && _dragStart != null)
+					{
+						// Drag preview ends: put the vertices back at their exact starting positions before the final Move
+						for (var i = 0; i < Vertices.Count && i < _dragStart.Count; i++) Vertices[i].Set(_dragStart[i]);
+						_dragStart = null;
+					}
 					_isDragging = value;
 					if (!IsMidpoint) return;
 
@@ -1344,7 +1374,16 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 				}
 
 				DraggingPosition = Position;
-				Vertices.ForEach(x => x.Set(Position));
+				// Offset each real vertex. Setting them to the rounded handle position would lose their exact coordinates.
+				Vertices.ForEach(x => x.Set(x.Position + delta));
+				Solid.IsDirty = true;
+			}
+
+			/// <summary>Puts every real vertex at exactly this position (grid snap).</summary>
+			public void SetExact(Vector3 target)
+			{
+				Position = DraggingPosition = target.Round(2);
+				Vertices.ForEach(x => x.Set(target));
 				Solid.IsDirty = true;
 			}
 
@@ -1357,8 +1396,14 @@ namespace Sledge.BspEditor.Tools.Vertex.Tools
 					MidpointEnd.DragMove(delta);
 				}
 
-				Vertices.ForEach(x => x.Set(DraggingPosition));
+				// Preview from the vertices' positions at the start of the drag, so repeated moves don't accumulate
+				if (_dragStart != null && _dragStart.Count == Vertices.Count)
+				{
+					for (var i = 0; i < Vertices.Count; i++) Vertices[i].Set(_dragStart[i] + delta);
+				}
 			}
+
+			private List<Vector3> _dragStart;
 
 			private VertexPoint[] _selfArray;
 
