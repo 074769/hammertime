@@ -147,13 +147,17 @@ namespace Sledge.BspEditor.Commands.Clipboard
 				// unselected, then select them with everything inside them, the way a click on them would
 				foreach (var o in content.SelectMany(x => x.FindAll())) o.IsSelected = false;
 
+				var tl = _document.Map.Data.GetOne<TransformationFlags>() ?? new TransformationFlags();
 				var transaction = new Transaction(
 				new Deselect(_document.Selection),
 				new Attach(_document.Map.Root.ID, content),
-				new Transform(translation, content),
-				new TransformTexturesUniform(translation, content.SelectMany(x => x.FindAll())),
-				new Select(content.SelectMany(x => x.FindAll()))
+				new Transform(translation, content)
 			);
+
+				// With texture lock on the pasted textures travel with their geometry; with it off they keep their values
+				if (tl.TextureLock) transaction.Add(new TransformTexturesUniform(translation, content.SelectMany(x => x.FindAll())));
+
+				transaction.Add(new Select(content.SelectMany(x => x.FindAll())));
 
 				await MapDocumentOperation.Perform(_document, transaction);
 

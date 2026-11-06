@@ -41,13 +41,18 @@ namespace Sledge.BspEditor.Editing.Commands.Modification
                         * Matrix4x4.CreateScale(GetScale())
                         * Matrix4x4.CreateTranslation(selBox.Center);
 
-            var transformOperation = new BspEditor.Modification.Operations.Mutation.Transform(tform, document.Selection.GetSelectedParents());
+            // Move, flip and retexture exactly the same objects. Selected groups and entities contain solids that
+            // the move already reaches, so everything is taken from the selected parents and their full hierarchy.
+            var parents = document.Selection.GetSelectedParents().ToList();
+            var all = parents.SelectMany(x => x.FindAll()).Distinct().ToList();
+
+            var transformOperation = new BspEditor.Modification.Operations.Mutation.Transform(tform, parents);
             transaction.Add(transformOperation);
 
-            transaction.Add(new FlipFaces(document.Selection));
+            transaction.Add(new FlipFaces(all));
 
             // Check for texture transform
-            if (tl.TextureLock) transaction.Add(new TransformTexturesUniform(tform, document.Selection));
+            if (tl.TextureLock) transaction.Add(new TransformTexturesUniform(tform, all));
 
             await MapDocumentOperation.Perform(document, transaction);
         }
