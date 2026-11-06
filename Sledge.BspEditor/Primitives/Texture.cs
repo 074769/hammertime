@@ -155,17 +155,18 @@ namespace Sledge.BspEditor.Primitives
             // If the determinant isn't 1, then we can't transform safely. (-1 is okay too)
             if (Math.Abs(matrix.GetDeterminant()) - 1 > 0.0001f) return;
 
-            var startU = Vector3.Transform(UAxis, matrix);
-            var startV = Vector3.Transform(VAxis, matrix);
-
-            var origin = Vector3.Transform(Vector3.Zero, matrix);
-            UAxis = (startU - origin).Normalise();
-            VAxis = (startV - origin).Normalise();
+            // The new axis directions come from the rotation part of the matrix only. Transforming each axis as a point and
+            // subtracting the transformed origin loses float precision when the matrix has a large translation (paste and
+            // duplicate offsets, rotating about a distant pivot): the axes came out slightly tilted, and the texture then
+            // slid further the further the face was from the world origin.
+            var translation = new Vector3(matrix.M41, matrix.M42, matrix.M43);
+            UAxis = Vector3.TransformNormal(UAxis, matrix).Normalise();
+            VAxis = Vector3.TransformNormal(VAxis, matrix).Normalise();
 
             if (Math.Abs(XScale) > 0.001f && Math.Abs(YScale) > 0.001f)
             {
-                XShift -= (startU - UAxis).Dot(UAxis) / XScale;
-                YShift -= (startV - VAxis).Dot(VAxis) / YScale;
+                XShift -= translation.Dot(UAxis) / XScale;
+                YShift -= translation.Dot(VAxis) / YScale;
             }
         }
 
