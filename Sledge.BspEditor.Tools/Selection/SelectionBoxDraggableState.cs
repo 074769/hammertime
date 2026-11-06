@@ -164,18 +164,6 @@ namespace Sledge.BspEditor.Tools.Selection
 					transaction.Add(new Attach(document.Map.Root.ID, clone));
 					var transformOperation = new Transform(matrix, clone);
 					transaction.Add(transformOperation);
-
-					// Duplicates get the same texture treatment as the originals, otherwise their textures stay
-					// world-anchored while the geometry moves
-					var dtl = document.Map.Data.GetOne<TransformationFlags>() ?? new TransformationFlags();
-					if (dtl.TextureLock && sender.IsUniformTransformation)
-					{
-						transaction.Add(new TransformTexturesUniform(matrix, clone.SelectMany(x => x.FindAll())));
-					}
-					else if ((dtl.TextureScaleLock || dtl.UVLock) && sender.IsScaleTransformation)
-					{
-						transaction.Add(new TransformTexturesScale(matrix, clone.SelectMany(x => x.FindAll())));
-					}
 					transaction.Add(new Select(clone));
 				}
 				if (sender is RotationWidget)

@@ -1105,7 +1105,7 @@ namespace Sledge.BspEditor.Tools.Selection
 				var translate = camera.Expand(nudge.Value);
 				var transformation = Matrix4x4.CreateTranslation(translate.X, translate.Y, translate.Z);
 				var matrix = transformation;
-				ExecuteTransform(document, matrix, KeyboardState.Shift, _selectionBox.GetTextureTransformationType(document));
+				ExecuteTransform(document, matrix, KeyboardState.Shift, TextureTransformationType.Uniform);
 				SelectionChanged(document);
 			}
 		}
