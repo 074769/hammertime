@@ -42,25 +42,6 @@ namespace Sledge.Rendering.Engine
 		internal int InactiveTargetFps { get; set; } = 10;
 		/// <summary>Upper limit for the render loop, in frames per second. 0 means no limit.</summary>
 		internal int MaxTargetFps { get; set; } = 144;
-		/// <summary>
-		/// When the mouse is outside every viewport, keep rendering the last viewport that had it at full speed. Without
-		/// this everything drops to the unfocused rate and the window updates only a few times a second, which makes a
-		/// variable refresh rate display (G-Sync/FreeSync) flicker.
-		/// </summary>
-		internal bool KeepActiveViewportRendering { get; set; } = true;
-		private IViewport _lastFocusedViewport;
-		private static readonly uint CurrentProcessId = (uint) System.Diagnostics.Process.GetCurrentProcess().Id;
-
-		[System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
-		[System.Runtime.InteropServices.DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
-
-		private static bool IsApplicationForeground()
-		{
-			var hWnd = GetForegroundWindow();
-			if (hWnd == IntPtr.Zero) return false;
-			GetWindowThreadProcessId(hWnd, out var pid);
-			return pid == CurrentProcessId;
-		}
 		// When each viewport was last rendered (Stopwatch ticks), so unfocused viewports can be throttled one by one
 		private readonly Dictionary<IViewport, long> _lastRendered = new Dictionary<IViewport, long>();
 
@@ -311,28 +292,13 @@ namespace Sledge.Rendering.Engine
 				// landing on the same frame and causing a long frame every so often.
 				var toRender = new List<IViewport>();
 				var focusedViews = new HashSet<IViewport>();
-
-				// The viewport the mouse is over, or else the last one it was over while this application is in front
-				IViewport activeView = null;
-				foreach (var rt in _renderTargets)
-				{
-					if (!rt.IsFocused) continue;
-					activeView = rt;
-					_lastFocusedViewport = rt;
-				}
-				if (activeView == null && KeepActiveViewportRendering && _lastFocusedViewport != null
-				    && _renderTargets.Contains(_lastFocusedViewport) && IsApplicationForeground())
-				{
-					activeView = _lastFocusedViewport;
-				}
-
 				IViewport overdue = null;
 				var overdueBy = -1L;
 				foreach (var rt in _renderTargets)
 				{
 					using (PerfLog.MeasureForView("View update", rt.ID)) rt.Update(frame);
 
-					if (rt == activeView || rt.IsFocused)
+					if (rt.IsFocused)
 					{
 						focusedViews.Add(rt);
 						toRender.Add(rt);
@@ -516,7 +482,6 @@ namespace Sledge.Rendering.Engine
 			{
 				_renderTargets.Remove(t);
 				_lastRendered.Remove(t);
-				if (_lastFocusedViewport == t) _lastFocusedViewport = null;
 				Device.WaitForIdle();
 
 				if (!_renderTargets.Any()) Stop();
