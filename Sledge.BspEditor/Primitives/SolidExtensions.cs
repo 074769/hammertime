@@ -22,6 +22,18 @@ namespace Sledge.BspEditor.Primitives
                 return false;
             }
 
+            // Merge vertices that came out slightly apart and drop collapsed faces. A piece that
+            // is left with no real volume is a sliver, so it is not kept.
+            frontPoly = DataStructures.Geometric.Precision.PolyhedronCleanup.Weld(frontPoly);
+            backPoly = DataStructures.Geometric.Precision.PolyhedronCleanup.Weld(backPoly);
+            if (frontPoly == null || backPoly == null)
+            {
+                // Nothing worth cutting off: the whole solid is on one side of the plane
+                if (backPoly != null) back = solid;
+                else if (frontPoly != null) front = solid;
+                return false;
+            }
+
             front = MakeSolid(generator, solid, frontPoly);
             back = MakeSolid(generator, solid, backPoly);
             return true;
