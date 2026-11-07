@@ -46,6 +46,7 @@
             "BoundaryGridLineColour": "Grid line colour for world boundaries",
             "UnfocusedViewportTargetFps": "Target FPS for inactive viewports (1 to 999)",
             "MaxFps": "Maximum FPS (0 for no limit)",
+            "VSync": "Vertical sync (stops horizontal tearing lines)",
             "KeepActiveViewportRendering": "Keep rendering the last used viewport at full speed when the mouse is outside the viewports (smoother with G-Sync/FreeSync)",
             "MSAAoption": "MSAA",
             "GizmoScale": "Gizmos scale (entity icon scale)"
