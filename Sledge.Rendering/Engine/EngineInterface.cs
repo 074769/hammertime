@@ -47,7 +47,6 @@ namespace Sledge.Rendering.Engine
 		}
 		public int InactiveTargetFps { get => Engine.Instance.InactiveTargetFps; set => Engine.Instance.InactiveTargetFps = value; }
 		public int MaxTargetFps { get => Engine.Instance.MaxTargetFps; set => Engine.Instance.MaxTargetFps = value; }
-		public bool VSync { get => Engine.Instance.VSync; set => Engine.Instance.VSync = value; }
 		public bool KeepActiveViewportRendering { get => Engine.Instance.KeepActiveViewportRendering; set => Engine.Instance.KeepActiveViewportRendering = value; }
 		public struct DepthResource
 		{

@@ -42,8 +42,6 @@ namespace Sledge.Rendering.Engine
 		internal int InactiveTargetFps { get; set; } = 10;
 		/// <summary>Upper limit for the render loop, in frames per second. 0 means no limit.</summary>
 		internal int MaxTargetFps { get; set; } = 144;
-		// Presents the focused viewport in sync with the monitor refresh, which stops horizontal tearing lines
-		internal bool VSync { get; set; } = true;
 		/// <summary>
 		/// When the mouse is outside every viewport, keep rendering the last viewport that had it at full speed. Without
 		/// this everything drops to the unfocused rate and the window updates only a few times a second, which makes a
@@ -368,12 +366,12 @@ namespace Sledge.Rendering.Engine
 					_cameraBuffer = new ViewProjectionBuffer { Projection = rt.Camera.Projection, View = rt.Camera.View };
 					if (PerfLog.Enabled) PerfLog.SetViewLabel(rt.ID, rt.Camera.Type.ToString());
 					using (PerfLog.MeasureForView("Overlay build", rt.ID)) rt.Overlay.Build(overlays);
-					using (PerfLog.MeasureForView("Render view", rt.ID)) Render(rt, VSync && focusedViews.Contains(rt));
+					using (PerfLog.MeasureForView("Render view", rt.ID)) Render(rt);
 				}
 			}
 		}
 
-		private void Render(IViewport renderTarget, bool vsync)
+		private void Render(IViewport renderTarget)
 		{
 			_commandList.Begin();
 			_commandList.SetFramebuffer(renderTarget.ViewportFramebuffer);
@@ -484,9 +482,6 @@ namespace Sledge.Rendering.Engine
 			}
 			_commandList.End();
 			using (PerfLog.MeasureForView("Submit", renderTarget.ID)) Device.SubmitCommands(_commandList);
-			// Only the focused viewport waits for the vertical blank, otherwise every viewport rendered in a frame
-			// would add its own wait and cut the frame rate
-			renderTarget.Swapchain.SyncToVerticalBlank = vsync;
 			Device.SwapBuffers(renderTarget.Swapchain);
 		}
 
