@@ -43,11 +43,7 @@ namespace Sledge.BspEditor.Modification.Operations.Mutation
             {
                 if (rigid)
                 {
-                    foreach (var it in o.Data.OfType<ITextured>())
-                    {
-                        it.Texture.TransformUniform(_matrix);
-                        ch.Update(o);
-                    }
+                    if (_lock.Snapshot(o, t => t.TransformUniform(_matrix))) ch.Update(o);
                 }
                 else if (_lock.Apply(o, _matrix, t => t.TransformUniform(_matrix))) ch.Update(o);
             }
@@ -67,11 +63,7 @@ namespace Sledge.BspEditor.Modification.Operations.Mutation
             {
                 if (rigid)
                 {
-                    foreach (var it in o.Data.OfType<ITextured>())
-                    {
-                        it.Texture.TransformUniform(inv);
-                        ch.Update(o);
-                    }
+                    if (_lock.Undo(o, t => t.TransformUniform(inv))) ch.Update(o);
                 }
                 else if (_lock.Undo(o, t => t.TransformUniform(inv))) ch.Update(o);
             }

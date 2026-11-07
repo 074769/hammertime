@@ -44,6 +44,25 @@ namespace Sledge.BspEditor.Modification.Operations.Mutation
         }
 
         /// <summary>
+        /// For transforms that carry the texture along directly (rigid moves/rotations): remembers each face's texture,
+        /// then runs <paramref name="transform"/> on every texture. <see cref="Undo"/> then restores the remembered
+        /// textures exactly, so repeated undo/redo can't accumulate float error. Returns true if anything is textured.
+        /// </summary>
+        public bool Snapshot(IMapObject obj, Action<Texture> transform)
+        {
+            var any = false;
+            var index = 0;
+            foreach (var it in obj.Data.OfType<ITextured>())
+            {
+                any = true;
+                if (it is Face) _before[(obj.ID, index)] = it.Texture.Clone();
+                transform(it.Texture);
+                index++;
+            }
+            return any;
+        }
+
+        /// <summary>
         /// Puts the textures back the way <see cref="Apply"/> found them.
         /// Returns true if the object has anything textured.
         /// </summary>
