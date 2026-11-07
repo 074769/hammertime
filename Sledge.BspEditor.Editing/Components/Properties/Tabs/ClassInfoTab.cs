@@ -209,6 +209,7 @@ namespace Sledge.BspEditor.Editing.Components.Properties.Tabs
 		}
 		public bool IsInContext(IContext context, List<IMapObject> objects)
 		{
+			objects = GroupedEntities.Resolve(objects);
 			return context.TryGet("ActiveDocument", out MapDocument _) &&
 				   objects.Any(x => x.Data.GetOne<EntityData>() != null);
 		}
@@ -220,6 +221,7 @@ namespace Sledge.BspEditor.Editing.Components.Properties.Tabs
 			if (document != null) _gameData = await document.Environment.GetGameData();
 			if (_gameData == null) _gameData = new GameData();
 			if (objects == null) objects = new List<IMapObject>();
+			objects = GroupedEntities.Resolve(objects);
 			this.InvokeLater(() =>
 			{
 				UpdateObjects(objects);
@@ -228,6 +230,8 @@ namespace Sledge.BspEditor.Editing.Components.Properties.Tabs
 
 		public IEnumerable<IOperation> GetChanges(MapDocument document, List<IMapObject> objects)
 		{
+			objects = GroupedEntities.Resolve(objects);
+
 			// Update the class if it has changed (this doesn't touch keyvalues)
 			if (_tableValues.ClassChanged)
 			{
@@ -368,11 +372,11 @@ namespace Sledge.BspEditor.Editing.Components.Properties.Tabs
 			var classes = _tableValues.OriginalClasses.ToHashSet();
 			if (classes.Count == 0) cmbClass.Text = "";
 			else if (classes.Count > 1) cmbClass.Text = MultipleClassesText + @" " + String.Join("; ", classes.Select(x => x.Name));
-			else if (classes.Count == 1 && objects.Count == 1)
+			else if (classes.Count == 1)
 			{
 				var entityClass = classes.First();
 				cmbClass.Text = entityClass.Name;
-				if (entityClass.ClassType == ClassType.Point)
+				if (objects.Count == 1 && entityClass.ClassType == ClassType.Point)
 				{
 					var location = objects.First().Data.GetOne<Origin>().Location.ToString().Trim('<', '>').Replace(",", "");
 					_tableValues.Add(new TableValue(new Property("Location", VariableType.Vector), "Location", new[] { location }));
@@ -749,6 +753,9 @@ namespace Sledge.BspEditor.Editing.Components.Properties.Tabs
 					// For unknown classes, create a dummy object to represent them
 					var n = (d.Name ?? "").ToLower();
 					var cls = gameDataClasses.ContainsKey(n) ? gameDataClasses[n] : new GameDataObject(n, "", ClassType.Any);
+
+					// One entry per distinct class: several entities of the same class are still a single class
+					if (OriginalClasses.Any(x => String.Equals(x.Name, cls.Name, StringComparison.InvariantCultureIgnoreCase))) continue;
 					OriginalClasses.Add(cls);
 				}
 

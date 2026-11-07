@@ -53,6 +53,7 @@ namespace Sledge.BspEditor.Editing.Components.Properties.Tabs
         /// <inheritdoc />
         public bool IsInContext(IContext context, List<IMapObject> objects)
         {
+            objects = GroupedEntities.Resolve(objects);
             return context.TryGet("ActiveDocument", out MapDocument _) &&
                    // All selected entities must be the same class
                    objects.GroupBy(x => x.Data.GetOne<EntityData>()?.Name).Count(x => x.Key != null) == 1;
@@ -65,6 +66,7 @@ namespace Sledge.BspEditor.Editing.Components.Properties.Tabs
             if (document != null) gd = await document.Environment.GetGameData();
             if (gd == null) gd = new GameData();
             if (objects == null) objects = new List<IMapObject>();
+            objects = GroupedEntities.Resolve(objects);
             this.InvokeLater(() =>
             {
                 UpdateObjects(gd, objects);
@@ -74,6 +76,8 @@ namespace Sledge.BspEditor.Editing.Components.Properties.Tabs
         /// <inheritdoc />
         public IEnumerable<IOperation> GetChanges(MapDocument document, List<IMapObject> objects)
         {
+            objects = GroupedEntities.Resolve(objects);
+
             var cv = GetChangedValues();
             if (cv.Count == 0) yield break;
 

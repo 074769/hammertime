@@ -310,10 +310,12 @@ namespace Sledge.BspEditor.Editing.Components.Properties
 			_selectedObjects = _selectionForced
 				? _selectedObjects
 				: _currentDocument?.Selection.GetSelectedParents().ToList() ?? new List<IMapObject>();
-			var entityParent = _selectedObjects.Select(obj => obj.Hierarchy.Parent).Where(x => x != null).Distinct();
-			if (entityParent.Count() == 1 && entityParent.FirstOrDefault() != _currentDocument?.Map.Root)
+			// Objects inside a brush entity (its solids, for example) edit the entity itself. A group isn't an entity,
+			// so entities selected inside a group stay selected as they are and can be edited directly.
+			var entityParent = _selectedObjects.Select(obj => obj.Hierarchy.Parent).Where(x => x != null).Distinct().ToList();
+			if (entityParent.Count == 1 && entityParent[0] is Entity && entityParent[0] != _currentDocument?.Map.Root)
 			{
-				_selectedObjects = entityParent.ToList();
+				_selectedObjects = entityParent;
 			}
 
 			foreach (var tab in _tabs)
