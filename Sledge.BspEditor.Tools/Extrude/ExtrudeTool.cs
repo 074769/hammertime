@@ -241,8 +241,8 @@ namespace Sledge.BspEditor.Tools.Extrude
 
                 if (!_extrudeMode)
                 {
-                    if (_faces.Count == 0) return "Click a face, or hold the mouse and sweep over faces. Ctrl adds or removes. Then press the tool hotkey to extrude.";
-                    return _faces.Count + (_faces.Count == 1 ? " face picked." : " faces picked.") + " Press the tool hotkey to extrude them.";
+                    if (_faces.Count == 0) return "Click a face, or hold the mouse and sweep over faces. Ctrl adds or removes. Then press the tool hotkey to extrude, or pick two faces and press F to fill between them.";
+                    return _faces.Count + (_faces.Count == 1 ? " face picked." : " faces picked.") + " Press the tool hotkey to extrude them." + (_faces.Count == 2 ? " Or press the Fill hotkey (F) to fill the space between them." : "");
                 }
 
                 if (_faces.Count == 0) return "No faces picked. Press the tool hotkey to go back and pick some.";
@@ -633,6 +633,59 @@ namespace Sledge.BspEditor.Tools.Extrude
                 _faces.Clear();
                 _faces.AddRange(created);
                 _status = "Extruded " + created.Count + (created.Count == 1 ? " face" : " faces") + " by " + Units(distance) + ".";
+            }
+        }
+
+        /// <summary>
+        /// Fills the space between exactly two picked faces with a new brush (the convex hull of both faces), like F in Blender
+        /// bridges two faces. Every face of the new brush is null textured and it sits flush against both picked faces.
+        /// It joins the parent both solids share (a group or brush entity), otherwise the world. One undo reverses it.
+        /// </summary>
+        public async Task Fill()
+        {
+            var document = GetDocument();
+            if (document == null) return;
+
+            List<PickedFace> faces;
+            lock (_lock) faces = _faces.ToList();
+
+            if (faces.Count != 2)
+            {
+                SetStatus("Pick exactly two faces to fill the space between them.");
+                return;
+            }
+
+            var a = faces[0];
+            var b = faces[1];
+            var loops = FillGeometry.ConvexHull(a.Face.Vertices.Concat(b.Face.Vertices));
+            if (loops == null)
+            {
+                SetStatus("Can't fill: the two faces don't enclose any space.");
+                return;
+            }
+
+            var gen = document.Map.NumberGenerator;
+            var nullTexture = a.Face.Texture.Clone();
+            nullTexture.Name = "null";
+
+            var filled = new Solid(gen.Next("MapObject"));
+            foreach (var loop in loops) filled.Data.Add(MakeFace(gen, loop, nullTexture.Clone(), true));
+            filled.DescendantsChanged();
+
+            var parentA = a.Solid.Hierarchy.Parent;
+            var parentB = b.Solid.Hierarchy.Parent;
+            var parent = ReferenceEquals(parentA, parentB) && parentA != null && !(parentA is Root) ? parentA : document.Map.Root;
+
+            var transaction = new Transaction();
+            transaction.Add(new Attach(parent.ID, filled));
+
+            CancelDrag();
+            await MapDocumentOperation.Perform(document, transaction);
+
+            lock (_lock)
+            {
+                _faces.Clear();
+                _status = "Filled the space between the two faces (" + loops.Count + " faces).";
             }
         }
 
