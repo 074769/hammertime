@@ -148,12 +148,12 @@ namespace Sledge.BspEditor.Tools.Bevel
             }
 
             /// <summary>
-            /// How far along each face to cut for a requested distance. With clamping, a side that has run out of face stops
+            /// How far along each face to cut for a requested distance. Cut per side, a side that has run out of face stops
             /// where it is (at the far side, or where it meets another bevel) while the other side carries on.
             /// </summary>
-            public (float A, float B) DistancesFor(float distance, bool clamp)
+            public (float A, float B) DistancesFor(float distance, bool perSide)
             {
-                if (!clamp) return (distance, distance);
+                if (!perSide) return (distance, distance);
                 return (Limited(distance, LimitA), Limited(distance, LimitB));
             }
 
@@ -322,7 +322,7 @@ namespace Sledge.BspEditor.Tools.Bevel
         /// <param name="faces">The faces of the solid (planes facing outwards, plus their vertices).</param>
         /// <param name="edges">The edges to bevel, as the pairs of end points the user picked.</param>
         /// <param name="requested">How far to cut back along each face.</param>
-        /// <param name="clamp">True: shrink the distance until the result is valid. False: all or nothing.</param>
+        /// <param name="clamp">True: both sides go the same distance, shrunk until it is valid, so a bevel stops where it meets. False: each side stops where it runs out of face while the other side keeps going, and the distance is never shrunk.</param>
         /// <param name="segments">How many flat faces each bevel is made of (1 = a flat chamfer, more = a rounded profile).</param>
         public static Result Bevel(IReadOnlyList<FaceInput> faces, IReadOnlyList<(Vector3 Start, Vector3 End)> edges, float requested, bool clamp, int segments = 1)
         {
@@ -421,49 +421,60 @@ namespace Sledge.BspEditor.Tools.Bevel
                 return result;
             }
 
+            // Clamp on: both sides always go the same distance, which stops where the first side runs out of face.
+            // Clamp off: each side goes as far as it can on its own, so the distance is never shrunk.
+            var perSide = !clamp;
             var distance = requested;
+            if (clamp)
+            {
+                // Within a sliver of the limit counts as at it
+                var reach = cuts.Min(c => Math.Min(c.LimitA, c.LimitB));
+                distance = requested >= reach - MinEdgeLength ? reach : requested;
+            }
             if (distance < minDistance)
             {
                 Fail(result, "There is not enough room to bevel here.");
                 return result;
             }
 
-            var built = Build(faces, cuts, distance, clamp, segments);
+            var built = Build(faces, cuts, distance, perSide, segments);
             if (built == null && clamp)
             {
-                // Something other than a single face's own limit is in the way (bevels meeting each other): find the largest distance that works
+                // Something other than a face's own limit is in the way: find the largest even distance that works
                 // Zero is the untouched solid, so it counts as valid; tiny distances are never tried because the search only moves up from there
                 float lo = 0, hi = distance;
                 for (var i = 0; i < 24 && hi - lo > Step * 0.25f; i++)
                 {
                     var mid = (lo + hi) / 2;
-                    if (Build(faces, cuts, mid, clamp, segments) != null) lo = mid; else hi = mid;
+                    if (Build(faces, cuts, mid, perSide, segments) != null) lo = mid; else hi = mid;
                 }
 
                 var rounded = (float) Math.Floor(lo / Step) * Step;
                 if (rounded >= minDistance)
                 {
                     distance = rounded;
-                    built = Build(faces, cuts, distance, clamp, segments);
+                    built = Build(faces, cuts, distance, perSide, segments);
                 }
                 if (built == null && lo >= minDistance)
                 {
                     // Rounding can only fail if validity is not monotonic; fall back to the unrounded value
                     distance = lo;
-                    built = Build(faces, cuts, distance, clamp, segments);
+                    built = Build(faces, cuts, distance, perSide, segments);
                 }
             }
 
             if (built == null)
             {
-                Fail(result, clamp ? "There is not enough room to bevel here." : "That distance would make invalid geometry. Turn Clamp on or use a smaller distance.");
+                Fail(result, clamp
+                    ? "There is not enough room to bevel here."
+                    : "There is not enough room to bevel here at this distance. Turn Clamp on to bevel both sides by the same smaller distance.");
                 return result;
             }
 
             result.Success = true;
             result.Applied = distance;
             var shrunk = clamp && distance < requested - 0.001f;
-            var held = clamp && cuts.Any(c =>
+            var held = perSide && cuts.Any(c =>
             {
                 var (a, b) = c.DistancesFor(distance, true);
                 return a < distance - 0.001f || b < distance - 0.001f;
@@ -471,7 +482,7 @@ namespace Sledge.BspEditor.Tools.Bevel
             result.Clamped = shrunk || held;
             result.Faces = built;
             var notes = new List<string>();
-            if (shrunk) notes.Add("Clamped to " + distance.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + " units to keep the geometry valid.");
+            if (shrunk) notes.Add("Stopped at " + distance.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + " units: that is as far as both sides can go.");
             if (held) notes.Add("One side stopped where the bevel meets the far side of the face or another bevel; the other side carried on.");
             result.Message = notes.Count > 0 ? string.Join(" ", notes) : null;
             return result;
@@ -546,12 +557,12 @@ namespace Sledge.BspEditor.Tools.Bevel
         }
 
         /// <summary>Builds the solid at the given distance. Null if the result is anything but a clean, valid, convex solid.</summary>
-        private static List<ResultFace> Build(IReadOnlyList<FaceInput> faces, List<Cut> cuts, float distance, bool clamp, int segments)
+        private static List<ResultFace> Build(IReadOnlyList<FaceInput> faces, List<Cut> cuts, float distance, bool perSide, int segments)
         {
             var cutPlanes = new List<Plane>();
             foreach (var cut in cuts)
             {
-                var (distanceA, distanceB) = cut.DistancesFor(distance, clamp);
+                var (distanceA, distanceB) = cut.DistancesFor(distance, perSide);
                 var cutFaces = cut.PlanesAt(distanceA, distanceB);
                 if (cutFaces == null) return null;
                 cutPlanes.AddRange(cutFaces);
