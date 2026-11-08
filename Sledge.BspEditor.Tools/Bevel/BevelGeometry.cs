@@ -431,13 +431,76 @@ namespace Sledge.BspEditor.Tools.Bevel
             return result;
         }
 
+        /// <summary>
+        /// True when a face has been squeezed out by the other planes: nothing of it is left, or what is left is a sliver or a speck
+        /// (the bevels on either side have met, or all but met, in the middle of it).
+        /// </summary>
+        private static bool IsSqueezedOut(IReadOnlyList<Plane> planes, int index)
+        {
+            var verts = new Polygon(planes[index]).Vertices.ToList();
+            for (var j = 0; j < planes.Count && verts.Count >= 3; j++)
+            {
+                if (j == index) continue;
+                verts = ClipToInside(verts, planes[j]);
+            }
+            if (verts.Count < 3) return true;
+
+            var perimeter = 0f;
+            for (var i = 0; i < verts.Count; i++) perimeter += (verts[i] - verts[(i + 1) % verts.Count]).Length();
+            var area = Area(verts);
+            return area < MinFaceArea || (perimeter > 0 && 2 * area / perimeter < MinEdgeLength);
+        }
+
+        /// <summary>The part of a convex polygon on the inside (behind) of a plane.</summary>
+        private static List<Vector3> ClipToInside(List<Vector3> verts, Plane plane)
+        {
+            const float epsilon = 0.001f;
+            var result = new List<Vector3>();
+            for (var i = 0; i < verts.Count; i++)
+            {
+                var a = verts[i];
+                var b = verts[(i + 1) % verts.Count];
+                var da = Vector3.Dot(plane.Normal, a) - plane.DistanceFromOrigin;
+                var db = Vector3.Dot(plane.Normal, b) - plane.DistanceFromOrigin;
+                var aIn = da <= epsilon;
+                var bIn = db <= epsilon;
+
+                if (aIn) result.Add(a);
+                if (aIn != bIn)
+                {
+                    var t = da / (da - db);
+                    result.Add(a + (b - a) * t);
+                }
+            }
+            return result;
+        }
+
         /// <summary>Builds the solid at the given distance. Null if the result is anything but a clean, valid, convex solid.</summary>
         private static List<ResultFace> Build(IReadOnlyList<FaceInput> faces, List<Cut> cuts, float distance, int segments)
         {
             var cutPlanes = cuts.SelectMany(c => c.PlanesAt(distance)).ToList();
             if (cutPlanes.Any(p => !IsFinite(p.Normal) || float.IsNaN(p.DistanceFromOrigin) || float.IsInfinity(p.DistanceFromOrigin))) return null;
 
-            var planes = faces.Select(f => f.Plane).Concat(cutPlanes).ToList();
+            // A face between two bevels can be squeezed out of existence: the bevels meet in the middle of it and merge into one edge.
+            // That is fine as long as what is left is valid, so such a face is dropped before the solid is built.
+            // Only faces that a bevelled edge runs along can go, and they are found by clipping, not by trusting the plane solver.
+            var everyPlane = faces.Select(f => f.Plane).Concat(cutPlanes).ToList();
+            var beveled = new HashSet<int>(cuts.SelectMany(c => new[] { c.FaceA, c.FaceB }));
+            var planes = new List<Plane>();
+            var planeFace = new List<int>(); // for each plane: the original face it came from, or -1 for a bevel plane
+            for (var i = 0; i < faces.Count; i++)
+            {
+                if (beveled.Contains(i) && IsSqueezedOut(everyPlane, i)) continue;
+                planes.Add(faces[i].Plane);
+                planeFace.Add(i);
+            }
+            var keptFaces = planes.Count;
+            foreach (var plane in cutPlanes)
+            {
+                planes.Add(plane);
+                planeFace.Add(-1);
+            }
+            if (planes.Count < 4) return null;
 
             Polyhedron poly;
             try
@@ -492,8 +555,8 @@ namespace Sledge.BspEditor.Tools.Bevel
                     if ((verts[i] - verts[(i + 1) % verts.Count]).Length() < MinEdgeLength) return null;
                 }
 
-                if (p < faces.Count) result.Add(new ResultFace(polygon, p, -1));
-                else result.Add(new ResultFace(polygon, -1, cuts[(p - faces.Count) / segments].FaceA));
+                if (planeFace[p] >= 0) result.Add(new ResultFace(polygon, planeFace[p], -1));
+                else result.Add(new ResultFace(polygon, -1, cuts[(p - keptFaces) / segments].FaceA));
             }
 
             // The plane solver does not clip reliably when a cut swallows a face (it can hand back the unclipped face),
