@@ -184,6 +184,18 @@ namespace Sledge.BspEditor.Primitives.MapObjects
 		}
 
 		/// <summary>
+		/// Checks if an object is hidden, or sits inside a hidden parent (group, entity or visgroup).
+		/// </summary>
+		public static bool IsHiddenOrInHidden(this IMapObject obj)
+		{
+			for (var o = obj; o != null; o = o.Hierarchy.Parent)
+			{
+				if (o.IsHidden()) return true;
+			}
+			return false;
+		}
+
+		/// <summary>
 		/// Get a list of visible objects where the bounding box intersects with a line.
 		/// The resulting list is a rough intersection only and should be further filtered
 		/// using <see cref="GetIntersectionPoint"/> or similar methods.

@@ -951,10 +951,10 @@ namespace Sledge.BspEditor.Tools.Texture
 
             bool Matches(Face f) => String.Equals(f.Texture.Name, name, StringComparison.InvariantCultureIgnoreCase);
 
-            // Mark (face-select) every face in the map that uses this texture
+            // Mark (face-select) every face on visible objects that uses this texture
             var sel = GetFaceSelection();
             sel.Clear();
-            foreach (var obj in doc.Map.Root.Find(x => x.Data.OfType<Face>().Any(Matches)).ToList())
+            foreach (var obj in doc.Map.Root.Find(x => x.Data.OfType<Face>().Any(Matches) && !x.IsHiddenOrInHidden()).ToList())
             {
                 sel.Add(obj, obj.Data.OfType<Face>().Where(Matches).ToArray());
             }

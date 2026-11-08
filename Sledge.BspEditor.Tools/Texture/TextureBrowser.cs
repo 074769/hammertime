@@ -600,9 +600,9 @@ namespace Sledge.BspEditor.Tools.Texture
 				_document.Map.Data.Add(fs);
 			}
 
-			// Mark (face-select) every face in the map that uses one of the highlighted textures
+			// Mark (face-select) every face on visible objects that uses one of the highlighted textures
 			fs.Clear();
-			foreach (var obj in _document.Map.Root.Find(x => x.Data.OfType<Face>().Any(f => textures.Contains(f.Texture.Name))).ToList())
+			foreach (var obj in _document.Map.Root.Find(x => x.Data.OfType<Face>().Any(f => textures.Contains(f.Texture.Name)) && !x.IsHiddenOrInHidden()).ToList())
 			{
 				fs.Add(obj, obj.Data.OfType<Face>().Where(f => textures.Contains(f.Texture.Name)).ToArray());
 			}
