@@ -116,7 +116,7 @@ namespace Sledge.BspEditor.Tools.Bevel
             tips.SetToolTip(_all, "Select every edge of the selected solids.");
             tips.SetToolTip(_clear, "Deselect all edges (Esc).");
             tips.SetToolTip(_distance, "Distance along each face, in map units.");
-            tips.SetToolTip(_clamp, "Shrinks the distance to the largest one that keeps the solid valid, instead of refusing.");
+            tips.SetToolTip(_clamp, "A side that runs out of face (the far side, or where two bevels meet in the middle) stops there while the other side keeps going. Anything else that would make the solid invalid shrinks the distance instead of refusing.");
 
             // The info text wraps to the sidebar's width
             Resize += (s, e) => _info.MaximumSize = new Size(Math.Max(80, ClientSize.Width - 28), 0);
