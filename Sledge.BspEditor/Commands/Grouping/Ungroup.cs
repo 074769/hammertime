@@ -1,6 +1,7 @@
 using System.ComponentModel.Composition;
 using System.Linq;
 using System.Threading.Tasks;
+using Sledge.BspEditor.Commands.Clipboard;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Modification;
 using Sledge.BspEditor.Modification.Operations.Tree;
@@ -48,6 +49,7 @@ namespace Sledge.BspEditor.Commands.Grouping
 				{
                     tns = DetachRecursively(tns, solid);
 				}
+				foreach (var op in GroupCleanup.DetatchEmptiedGroups(solids.Where(x => !(x.Hierarchy.Parent is Entity)))) tns.Add(op);
 				await MapDocumentOperation.Perform(document, tns);
 			}
 

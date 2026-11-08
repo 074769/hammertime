@@ -332,7 +332,10 @@ namespace Sledge.BspEditor.Editing.Components
 
 			var selected = GetSelected();
 			if (selected == null) return;
-			MapDocumentOperation.Perform(doc, new Detatch(selected.First().Hierarchy.Parent.ID, selected.ToArray()));
+			var removing = selected.ToList();
+			var t = new Transaction(removing.GroupBy(x => x.Hierarchy.Parent.ID).Select(x => new Detatch(x.Key, x)));
+			t.AddRange(Sledge.BspEditor.Commands.Clipboard.GroupCleanup.DetatchEmptiedGroups(removing));
+			MapDocumentOperation.Perform(doc, t);
 		}
 
 		private void OpenEntityProperties(object sender, EventArgs e)

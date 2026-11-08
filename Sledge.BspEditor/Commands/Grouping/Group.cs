@@ -1,6 +1,7 @@
 using System.ComponentModel.Composition;
 using System.Linq;
 using System.Threading.Tasks;
+using Sledge.BspEditor.Commands.Clipboard;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Modification;
 using Sledge.BspEditor.Modification.Operations.Tree;
@@ -26,7 +27,7 @@ namespace Sledge.BspEditor.Commands.Grouping
 
 		protected override async Task Invoke(MapDocument document, CommandParameters parameters)
 		{
-			var sel = document.Selection.GetSelectedParents().Select(@object => @object.Hierarchy.Parent != document.Map.Root && @object.Hierarchy.Parent is Entity entity ? entity : @object).ToList();
+			var sel = document.Selection.GetSelectedParents().Select(@object => @object.Hierarchy.Parent != document.Map.Root && @object.Hierarchy.Parent is Entity entity ? entity : @object).Distinct().ToList();
 
 			if (sel.Count > 1)
 			{
@@ -39,6 +40,8 @@ namespace Sledge.BspEditor.Commands.Grouping
 				}
 				tns.Add(new Attach(document.Map.Root.ID, group));
 				tns.Add(new Attach(group.ID, sel));
+				// Groups and brush entities that were emptied by moving their contents into the new group go too
+				foreach (var op in GroupCleanup.DetatchEmptiedGroups(sel)) tns.Add(op);
 
 				await MapDocumentOperation.Perform(document, tns);
 			}

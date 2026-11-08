@@ -1,5 +1,6 @@
 ﻿using LogicAndTrick.Oy;
 using Sledge.BspEditor.Commands;
+using Sledge.BspEditor.Commands.Clipboard;
 using Sledge.BspEditor.Documents;
 using Sledge.BspEditor.Editing.Components.Properties.Tabs;
 using Sledge.BspEditor.Editing.Properties;
@@ -175,17 +176,11 @@ namespace Sledge.BspEditor.Editing.Commands
 				ops.Add(new Attach(existing.ID, obj));
 			}
 
-			// An entity that has nothing left after the move is removed
-			var movedSet = new HashSet<IMapObject>(moved);
-			var sources = moved.Select(x => x.Hierarchy.Parent).OfType<Entity>()
-				.Where(x => !ReferenceEquals(x, existing) && !selectedEntities.Contains(x))
-				.Distinct()
-				.ToList();
-			foreach (var source in sources)
-			{
-				if (source.Hierarchy.Any(x => !movedSet.Contains(x))) continue;
-				ops.Add(new Detatch(source.Hierarchy.Parent.ID, source));
-			}
+			// Entities and groups that have nothing left after the move are removed.
+			// Everything that left its parent counts: the moved objects, the entities merged away, and the target if it was moved to the world.
+			var leaving = moved.Concat(selectedEntities.Where(x => !ReferenceEquals(x, existing))).ToList();
+			if (existing.Hierarchy.Parent != null) leaving.Add(existing);
+			ops.AddRange(GroupCleanup.DetatchEmptiedGroups(leaving));
 
 			if (ops.Any())
 			{
