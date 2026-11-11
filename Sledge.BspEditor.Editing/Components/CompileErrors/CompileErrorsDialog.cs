@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.ComponentModel.Composition;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -13,20 +15,28 @@ using Sledge.BspEditor.Modification;
 using Sledge.BspEditor.Modification.Operations.Selection;
 using Sledge.BspEditor.Primitives.MapObjects;
 using Sledge.BspEditor.Rendering.Overlay;
+using Sledge.Common.Shell.Components;
+using Sledge.Common.Shell.Context;
+using Sledge.Shell;
 
 namespace Sledge.BspEditor.Editing.Components.CompileErrors
 {
     /// <summary>
-    /// Non-modal window listing the errors and warnings from the compile log beside the open map.
-    /// Separate from Check for Problems: those are editor problems, these are compiler output.
+    /// Window listing the errors and warnings from the compile log beside the open map.
+    /// Hosted by the shell like the other dialogs (opened through the context), and kept separate from
+    /// Check for Problems: those are editor problems, these are compiler output.
     /// </summary>
-    public class CompileErrorsDialog : Form
+    [Export(typeof(IDialog))]
+    public class CompileErrorsDialog : Form, IDialog
     {
-        private static CompileErrorsDialog _current;
+        #pragma warning disable CS0649 // assigned by MEF
+        [Import("Shell", typeof(Form))] private Lazy<Form> _parent;
+        #pragma warning restore CS0649
 
-        private readonly MapDocument _document;
+        private MapDocument _document;
         private string _logPath;
         private List<CompileErrorsEntry> _entries = new List<CompileErrorsEntry>();
+        private List<Subscription> _subscriptions;
 
         private readonly Label _header = new Label { Dock = DockStyle.Top, Height = 24, TextAlign = ContentAlignment.MiddleLeft };
         private readonly CheckedListBox _types = new CheckedListBox { Dock = DockStyle.Left, Width = 300, CheckOnClick = true, IntegralHeight = false };
@@ -36,9 +46,8 @@ namespace Sledge.BspEditor.Editing.Components.CompileErrors
         private readonly Button _reload = new Button { Text = "Reload", Width = 90 };
         private readonly Button _close = new Button { Text = "Close", Width = 90 };
 
-        private CompileErrorsDialog(MapDocument doc)
+        public CompileErrorsDialog()
         {
-            _document = doc;
             Text = "Compile Log";
             Size = new Size(1100, 580);
             MinimumSize = new Size(760, 320);
@@ -66,34 +75,67 @@ namespace Sledge.BspEditor.Editing.Components.CompileErrors
             Controls.Add(_buttons);
             Controls.Add(_header);
 
-            Shown += async (s, e) => await LoadAsync();
-            FormClosed += (s, e) =>
+        }
+
+        public bool IsInContext(IContext context)
+        {
+            return context.HasAny("BspEditor:CompileErrors");
+        }
+
+        public void SetVisible(IContext context, bool visible)
+        {
+            this.InvokeLater(() =>
             {
-                CompileErrorsOverlay.Clear();
-                if (_current == this) _current = null;
+                if (visible)
+                {
+                    _document = context.Get<MapDocument>("ActiveDocument");
+                    if (!Visible) Show(_parent.Value);
+                    Subscribe();
+                    _ = LoadAsync();
+                }
+                else
+                {
+                    Hide();
+                    Unsubscribe();
+                    CompileErrorsOverlay.Clear();
+                }
+            });
+        }
+
+        protected override void OnClosing(CancelEventArgs e)
+        {
+            // Closing only hides; the shell owns the window and its context decides when it shows again
+            e.Cancel = true;
+            Oy.Publish("Context:Remove", new ContextInfo("BspEditor:CompileErrors"));
+        }
+
+        private void Subscribe()
+        {
+            if (_subscriptions != null) return;
+            _subscriptions = new List<Subscription>
+            {
+                Oy.Subscribe<MapDocument>("Document:Activated", DocumentActivated)
             };
         }
 
-        /// <summary>Opens the window for a document, or brings the existing one forward.</summary>
-        public static void ShowFor(MapDocument doc)
+        private void Unsubscribe()
         {
-            if (_current != null && !_current.IsDisposed)
-            {
-                if (_current._document == doc)
-                {
-                    _current.Activate();
-                    return;
-                }
-                _current.Close();
-            }
+            if (_subscriptions == null) return;
+            _subscriptions.ForEach(x => x.Dispose());
+            _subscriptions = null;
+        }
 
-            _current = new CompileErrorsDialog(doc);
-            _current.Show();
+        private async Task DocumentActivated(MapDocument document)
+        {
+            if (!Visible) return;
+            _document = document;
+            CompileErrorsOverlay.Clear();
+            await LoadAsync();
         }
 
         private async Task LoadAsync()
         {
-            var mapPath = _document.FileName;
+            var mapPath = _document?.FileName;
             _logPath = string.IsNullOrWhiteSpace(mapPath) ? null : Path.ChangeExtension(mapPath, ".log");
 
             if (_logPath != null && File.Exists(_logPath))
@@ -179,7 +221,7 @@ namespace Sledge.BspEditor.Editing.Components.CompileErrors
 
         private async Task GoToSelected()
         {
-            if (_list.SelectedItems.Count == 0) return;
+            if (_document == null || _list.SelectedItems.Count == 0) return;
             if (!(_list.SelectedItems[0].Tag is CompileErrorsEntry entry)) return;
 
             var obj = CompileErrorsLookup.FindObject(_document, entry);

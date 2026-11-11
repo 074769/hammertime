@@ -1,10 +1,11 @@
 using System.ComponentModel.Composition;
 using System.Threading.Tasks;
+using LogicAndTrick.Oy;
 using Sledge.BspEditor.Commands;
 using Sledge.BspEditor.Documents;
-using Sledge.BspEditor.Editing.Components.CompileErrors;
 using Sledge.BspEditor.Editing.Properties;
 using Sledge.Common.Shell.Commands;
+using Sledge.Common.Shell.Context;
 using Sledge.Common.Shell.Menu;
 
 namespace Sledge.BspEditor.Editing.Commands.CompileErrors
@@ -18,10 +19,9 @@ namespace Sledge.BspEditor.Editing.Commands.CompileErrors
         public override string Name { get; set; } = "Compile log";
         public override string Details { get; set; } = "Show the errors and warnings from the last compile";
 
-        protected override Task Invoke(MapDocument document, CommandParameters parameters)
+        protected override async Task Invoke(MapDocument document, CommandParameters parameters)
         {
-            CompileErrorsDialog.ShowFor(document);
-            return Task.CompletedTask;
+            await Oy.Publish("Context:Add", new ContextInfo("BspEditor:CompileErrors"));
         }
     }
 }
