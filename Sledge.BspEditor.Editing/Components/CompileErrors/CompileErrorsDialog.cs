@@ -75,6 +75,10 @@ namespace Sledge.BspEditor.Editing.Components.CompileErrors
             Controls.Add(_buttons);
             Controls.Add(_header);
 
+            // The shell calls SetVisible through InvokeLater, which does nothing until the window handle
+            // exists. Dialogs without a Translate method (like Map Information) create it here.
+            CreateHandle();
+
         }
 
         public bool IsInContext(IContext context)
