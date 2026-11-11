@@ -610,7 +610,7 @@ namespace Sledge.BspEditor.Tools.Spin
                 var pieces = new List<Solid>();
                 for (var j = 0; j < plan.Steps; j++)
                 {
-                    var outlines = SpinGeometry.BuildLoft(profile, plan.Pivot, plan.Frame.Axis, plan.Frame.U, plan.Frame.V, plan.A0, plan.Delta, j, out var outlineEdges);
+                    var outlines = SpinGeometry.BuildLoft(profile, plan.Pivot, plan.Frame.Axis, plan.Frame.U, plan.Frame.V, plan.A0, plan.Delta, j);
                     if (outlines == null) return null;
 
                     // The texture mapping of this piece: the first piece keeps the original mapping, and every
@@ -631,7 +631,7 @@ namespace Sledge.BspEditor.Tools.Spin
                         if (k >= 2)
                         {
                             // A side face: the texture of the original face that holds this profile edge
-                            face.Texture = faces[edgeFaces[outlineEdges[k]]].Texture.Clone();
+                            face.Texture = faces[edgeFaces[k - 2]].Texture.Clone();
                             face.Texture.TransformUniform(rotation);
                         }
                         else

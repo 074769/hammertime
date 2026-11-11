@@ -401,9 +401,8 @@ namespace Sledge.BspEditor.Tools.Spin
         /// one plane facing both ways, and the two pieces join exactly.
         /// </summary>
         public static List<List<Vector3>> BuildLoft(IReadOnlyList<(double R, double Z)> profile, Vector3 pivot, Vector3 axis, Vector3 u, Vector3 v,
-            float profileAngle, float delta, int piece, out List<int> edges)
+            float profileAngle, float delta, int piece)
         {
-            edges = null;
             var count = profile.Count;
             if (count < 3) return null;
 
@@ -431,40 +430,11 @@ namespace Sledge.BspEditor.Tools.Spin
             var all = start.Concat(end).ToList();
             var centre = all.Aggregate(Vector3.Zero, (a, b) => a + b) / all.Count;
 
-            // A profile vertex on the spin axis (or a profile edge lying on it) gives the same point on both seams.
-            // Join those into one vertex, so the quad becomes a triangle (or disappears) instead of keeping a
-            // repeated vertex, which breaks the plane the face is written with
-            List<Vector3> Merge(List<Vector3> face)
-            {
-                var merged = new List<Vector3>();
-                foreach (var vertex in face)
-                {
-                    if (merged.Count == 0 || Vector3.Distance(vertex, merged[merged.Count - 1]) > 0.01f) merged.Add(vertex);
-                }
-                while (merged.Count > 1 && Vector3.Distance(merged[0], merged[merged.Count - 1]) <= 0.01f) merged.RemoveAt(merged.Count - 1);
-                return merged;
-            }
-
-            // The normal of a polygon from all of its vertices; stays valid when the first three are collinear
-            Vector3 Newell(List<Vector3> face)
-            {
-                var n = Vector3.Zero;
-                for (var i = 0; i < face.Count; i++)
-                {
-                    var a = face[i];
-                    var b = face[(i + 1) % face.Count];
-                    n.X += (a.Y - b.Y) * (a.Z + b.Z);
-                    n.Y += (a.Z - b.Z) * (a.X + b.X);
-                    n.Z += (a.X - b.X) * (a.Y + b.Y);
-                }
-                return n;
-            }
-
             // Turn a vertex list so the face looks away from the middle of the piece
             List<Vector3> Outward(List<Vector3> face)
             {
                 var middle = face.Aggregate(Vector3.Zero, (a, b) => a + b) / face.Count;
-                if (Vector3.Dot(Newell(face), middle - centre) >= 0) return face;
+                if (Vector3.Dot(FaceNormal(face), middle - centre) >= 0) return face;
                 var reversed = new List<Vector3>(face);
                 reversed.Reverse();
                 return reversed;
@@ -484,24 +454,19 @@ namespace Sledge.BspEditor.Tools.Spin
             }
 
             var faces = new List<List<Vector3>> { SeamFace(start), SeamFace(end) };
-            var sources = new List<int> { -1, -1 };
             for (var i = 0; i < count; i++)
             {
                 var next = (i + 1) % count;
-                var side = Merge(new List<Vector3> { start[i], start[next], end[next], end[i] });
-                if (side.Count < 3 || Newell(side).Length() < 0.001f) continue; // an edge on the axis sweeps no surface
-                faces.Add(Outward(side));
-                sources.Add(i);
+                faces.Add(Outward(new List<Vector3> { start[i], start[next], end[next], end[i] }));
             }
 
             // Every vertex must lie behind every face
             foreach (var face in faces)
             {
                 var normal = FaceNormal(face).Normalise();
-                if (float.IsNaN(normal.X) || all.Any(x => Vector3.Dot(x - face[0], normal) > 0.01f)) return null;
+                if (all.Any(x => Vector3.Dot(x - face[0], normal) > 0.01f)) return null;
             }
 
-            edges = sources;
             return faces;
         }
 
