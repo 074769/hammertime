@@ -268,7 +268,7 @@ namespace Sledge.BspEditor.Tools.Spin
             if (!TryGetCaps(end, tE, out var lowE, out var highE)) { error = "The end piece has no two end caps."; return false; }
 
             var axis = Vector3.Cross(tS, tE);
-            if (axis.Length() < 0.1f) { error = "The start and end pieces are extruded along the same direction, so there is nothing to turn between them."; return false; }
+            if (axis.Length() < 0.1f) { error = "The start and end pieces are extruded along the same direction, so there is nothing to turn between them. Rotate or flip the end piece so it points in a different direction than the start piece."; return false; }
             axis = axis.Normalise();
 
             var cS = Middle(start);
