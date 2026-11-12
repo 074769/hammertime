@@ -52,6 +52,13 @@ namespace Sledge.BspEditor.Editing.Components.CompileErrors
             Size = new Size(1100, 580);
             MinimumSize = new Size(760, 320);
 
+            // Same window style as the Entity Report and Map Information dialogs: no taskbar button,
+            // no minimise/maximise, and centred on the editor window that owns it
+            ShowInTaskbar = false;
+            MinimizeBox = false;
+            MaximizeBox = false;
+            StartPosition = FormStartPosition.CenterParent;
+
             _list.Columns.Add("Tool", 60);
             _list.Columns.Add("Sev", 60);
             _list.Columns.Add("Type", 240);
@@ -111,6 +118,7 @@ namespace Sledge.BspEditor.Editing.Components.CompileErrors
             // Closing only hides; the shell owns the window and its context decides when it shows again
             e.Cancel = true;
             Oy.Publish("Context:Remove", new ContextInfo("BspEditor:CompileErrors"));
+            Owner?.Focus();
         }
 
         private void Subscribe()
