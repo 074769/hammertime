@@ -436,6 +436,47 @@ namespace Sledge.BspEditor.Terrain
 
         #endregion
 
+        #region From existing geometry
+
+        /// <summary>
+        /// A height grid that follows an existing shape. The grid covers the box (min to max); top(x, y) gives the height of the
+        /// shape's upper surface at a point, or null where it has none. The grid's zero level is the box top, so a flat block
+        /// is a flat terrain, and the thickness is set so the generated brushes end at the original bottom.
+        /// </summary>
+        public static Heightfield FromSurface(Vector3 min, Vector3 max, float cellSize, float levelHeight, Func<float, float, float?> top)
+        {
+            cellSize = Math.Max(1f, cellSize);
+            levelHeight = Math.Max(1f, levelHeight);
+
+            var cellsX = Math.Max(1, (int) Math.Round((max.X - min.X) / cellSize));
+            var cellsY = Math.Max(1, (int) Math.Round((max.Y - min.Y) / cellSize));
+            var field = new Heightfield(cellsX, cellsY, cellSize, levelHeight, new Vector3(min.X, min.Y, max.Z));
+
+            const float inset = 0.01f;
+            var lowest = int.MaxValue;
+            for (var y = 0; y <= cellsY; y++)
+            {
+                for (var x = 0; x <= cellsX; x++)
+                {
+                    // Points on the far edge are nudged inside, so the surface is found there too
+                    var wx = Math.Min(max.X - inset, Math.Max(min.X + inset, min.X + x * cellSize));
+                    var wy = Math.Min(max.Y - inset, Math.Max(min.Y + inset, min.Y + y * cellSize));
+                    var z = top(wx, wy) ?? max.Z;
+                    var level = (int) Math.Round((z - max.Z) / levelHeight);
+                    field.Levels[field.Index(x, y)] = level;
+                    lowest = Math.Min(lowest, level);
+                }
+            }
+
+            // Thick enough that the bottom of the brushes is the bottom of the original shape
+            var lowestZ = max.Z + lowest * levelHeight;
+            field.ThicknessLevels = Math.Max(1, (int) Math.Round((lowestZ - min.Z) / levelHeight));
+            field.Touch();
+            return field;
+        }
+
+        #endregion
+
         #region Brush generation
 
         /// <summary>

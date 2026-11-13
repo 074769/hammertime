@@ -47,8 +47,9 @@ namespace Sledge.BspEditor.Tools.Terrain
     /// "Bake to brushes" makes the convex brushes (and, if wanted, coarse CLIP collision blocks); "Edit heightfield" removes
     /// them again and brings the grid back, because the grid is kept while the terrain is brushes.
     ///
-    /// New terrain: press "New terrain", then drag a box in the Top view. Sculpt by dragging over a terrain in the 3D view
-    /// (or the Top view). Ctrl swaps Raise and Lower.
+    /// Make a terrain: select a brush with the Select tool, then press "Terrain from selected brush". The brush is replaced
+    /// by a height grid that follows its top surface. Sculpt by dragging over a terrain in the 3D view (or the Top view).
+    /// Ctrl swaps Raise and Lower.
     /// </summary>
     [Export(typeof(ITool))]
     [Export]
@@ -67,11 +68,6 @@ namespace Sledge.BspEditor.Tools.Terrain
         // New terrain settings
         public float NewCellSize { get; set; } = 32f;
         public float NewLevelHeight { get; set; } = 16f;
-        public float NewBaseHeight { get; set; } = 0f;
-        public int NewThickness { get; set; } = 2;
-
-        /// <summary>True after "New terrain" was pressed: the next drag in the Top view makes a terrain.</summary>
-        public bool CreateMode { get; private set; }
 
         public long ActiveId { get; private set; }
 
@@ -93,11 +89,6 @@ namespace Sledge.BspEditor.Tools.Terrain
         private (Vector3 Start, Vector3 End)? _lastRay;
         private OrthographicCamera.OrthographicType _lastView = OrthographicCamera.OrthographicType.Top;
         private readonly Stopwatch _clock = Stopwatch.StartNew();
-
-        // Create drag (Top view)
-        private bool _creating;
-        private Vector3 _createStart;
-        private Vector3 _createEnd;
 
         // Brush count shown in the sidebar, cached per terrain version
         private long _countId;
@@ -151,29 +142,48 @@ namespace Sledge.BspEditor.Tools.Terrain
             ((Action) (async () => await MapDocumentOperation.Perform(document, operation)))();
         }
 
-        public void BeginCreate()
+        /// <summary>
+        /// Turns the selected brushes into a terrain: the grid covers their combined box and follows their upper surface.
+        /// The brushes are replaced by the terrain (one undo step brings them back). Returns a message when it can't.
+        /// </summary>
+        public string FromSelection()
         {
-            CreateMode = true;
-        }
+            var document = GetDocument();
+            if (document == null) return "No map is open.";
 
-        public void CancelCreate()
-        {
-            CreateMode = false;
-            _creating = false;
-        }
+            var solids = document.Selection.OfType<Solid>().Where(x => x.Hierarchy.Parent != null).ToList();
+            if (solids.Count == 0) return "Select a brush with the Select tool first, then press this button.";
 
-        private void CreateTerrain(MapDocument document, Vector3 a, Vector3 b)
-        {
-            var cell = Math.Max(1f, NewCellSize);
-            var minX = Math.Min(a.X, b.X);
-            var minY = Math.Min(a.Y, b.Y);
-            var cellsX = (int) Math.Round(Math.Abs(a.X - b.X) / cell);
-            var cellsY = (int) Math.Round(Math.Abs(a.Y - b.Y) / cell);
-            if (cellsX < 1 || cellsY < 1) return;
-            if (cellsX > 256 || cellsY > 256)
+            var min = new Vector3(float.MaxValue);
+            var max = new Vector3(float.MinValue);
+            foreach (var v in solids.SelectMany(x => x.Faces).SelectMany(f => f.Vertices))
             {
-                MessageBox.Show("A terrain can be at most 256 x 256 cells. Use a larger cell size.", "Terrain Tool", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
+                min = Vector3.Min(min, v);
+                max = Vector3.Max(max, v);
+            }
+
+            var cell = Math.Max(1f, NewCellSize);
+            if ((max.X - min.X) / cell > 256 || (max.Y - min.Y) / cell > 256)
+            {
+                return "That would be more than 256 x 256 cells. Use a larger cell size.";
+            }
+
+            var faces = solids.SelectMany(x => x.Faces)
+                .Where(f => f.Plane.Normal.Z > 0.001f && f.Vertices.Count >= 3)
+                .Select(f => (Normal: f.Plane.Normal, Vertices: f.Vertices.ToList()))
+                .ToList();
+
+            float? Top(float x, float y)
+            {
+                float? best = null;
+                foreach (var f in faces)
+                {
+                    if (!Inside(f.Vertices, x, y)) continue;
+                    var v0 = f.Vertices[0];
+                    var z = v0.Z - (f.Normal.X * (x - v0.X) + f.Normal.Y * (y - v0.Y)) / f.Normal.Z;
+                    if (!best.HasValue || z > best.Value) best = z;
+                }
+                return best;
             }
 
             var number = document.Map.Data.Get<TerrainData>().Count() + 1;
@@ -181,15 +191,47 @@ namespace Sledge.BspEditor.Tools.Terrain
             {
                 ID = document.Map.NumberGenerator.Next("MapObject"),
                 Name = "Terrain " + number,
-                SurfaceTexture = document.Map.Data.GetOne<ActiveTexture>()?.Name ?? "GROUND",
-                Field = new Heightfield(cellsX, cellsY, cell, Math.Max(1f, NewLevelHeight), new Vector3(minX, minY, NewBaseHeight))
-                {
-                    ThicknessLevels = Math.Max(1, NewThickness)
-                }
+                SurfaceTexture = TopTexture(solids) ?? document.Map.Data.GetOne<ActiveTexture>()?.Name ?? "GROUND",
+                Field = Heightfield.FromSurface(min, max, cell, NewLevelHeight, Top)
             };
 
+            var transaction = new Transaction();
+            foreach (var group in solids.GroupBy(x => x.Hierarchy.Parent.ID))
+            {
+                transaction.Add(new Detatch(group.Key, group.Cast<IMapObject>()));
+            }
+            transaction.Add(new AddMapData(terrain));
+
             ActiveId = terrain.ID;
-            Run(document, new AddMapData(terrain));
+            Run(document, transaction);
+            return $"{terrain.Name}: {terrain.Field.CellsX} x {terrain.Field.CellsY} cells.";
+        }
+
+        /// <summary>The texture of the highest upward-facing face, for the new terrain's surface.</summary>
+        private static string TopTexture(List<Solid> solids)
+        {
+            return solids.SelectMany(x => x.Faces)
+                .Where(f => f.Plane.Normal.Z > 0.5f && f.Texture != null && !string.IsNullOrWhiteSpace(f.Texture.Name))
+                .OrderByDescending(f => f.Vertices.Max(v => v.Z))
+                .Select(f => f.Texture.Name)
+                .FirstOrDefault();
+        }
+
+        /// <summary>Whether the point is inside the polygon seen from above (a convex polygon, edges count as inside).</summary>
+        private static bool Inside(List<Vector3> polygon, float x, float y)
+        {
+            var sign = 0;
+            for (var i = 0; i < polygon.Count; i++)
+            {
+                var a = polygon[i];
+                var b = polygon[(i + 1) % polygon.Count];
+                var c = (b.X - a.X) * (y - a.Y) - (b.Y - a.Y) * (x - a.X);
+                if (Math.Abs(c) < 1e-3f) continue;
+                var side = c > 0 ? 1 : -1;
+                if (sign == 0) sign = side;
+                else if (side != sign) return false;
+            }
+            return true;
         }
 
         public void DeleteActive()
@@ -461,8 +503,7 @@ namespace Sledge.BspEditor.Tools.Terrain
             if (document == null) return "";
 
             var terrain = Active;
-            if (CreateMode) return "Drag a box in the Top view to make a terrain (it snaps to the cell size).";
-            if (terrain == null) return "No terrain yet. Press \"New terrain\" and drag a box in the Top view.";
+            if (terrain == null) return "No terrain yet. Select a brush with the Select tool, then press \"Terrain from selected brush\".";
 
             var f = terrain.Field;
             if (_countId != terrain.ID || _countVersion != f.Version || _countMerge != terrain.MergeCoplanar)
@@ -531,14 +572,6 @@ namespace Sledge.BspEditor.Tools.Terrain
 
             var world = camera.ScreenToWorld(e.X, e.Y);
 
-            if (CreateMode)
-            {
-                var snapped = SnapIfNeeded(world);
-                _creating = true;
-                _createStart = _createEnd = snapped;
-                return;
-            }
-
             var terrain = PickIn2D(document, world, out var hit);
             if (terrain == null) return;
             BeginStroke(document, viewport, terrain, hit);
@@ -555,18 +588,6 @@ namespace Sledge.BspEditor.Tools.Terrain
 
             var world = camera.ScreenToWorld(e.X, e.Y);
 
-            if (_creating)
-            {
-                _createEnd = SnapIfNeeded(world);
-                return;
-            }
-
-            if (CreateMode)
-            {
-                _hover = null;
-                return;
-            }
-
             var terrain = PickIn2D(document, world, out var h);
             _hoverTerrain = terrain;
             _hover = terrain != null ? h : (Vector3?) null;
@@ -576,14 +597,6 @@ namespace Sledge.BspEditor.Tools.Terrain
         protected override void MouseUp(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
         {
             if (e.Button != MouseButtons.Left) return;
-
-            if (_creating)
-            {
-                _creating = false;
-                CreateMode = false;
-                CreateTerrain(document, _createStart, _createEnd);
-                return;
-            }
 
             EndStroke(document);
         }
@@ -617,18 +630,7 @@ namespace Sledge.BspEditor.Tools.Terrain
         {
             var document = GetDocument();
             EndStroke(document);
-            CancelCreate();
             return base.PreToolDeselect();
-        }
-
-        protected override void KeyDown(MapDocument document, MapViewport viewport, OrthographicCamera camera, ViewportEvent e)
-        {
-            if (e.KeyCode == Keys.Escape) CancelCreate();
-        }
-
-        protected override void KeyDown(MapDocument document, MapViewport viewport, PerspectiveCamera camera, ViewportEvent e)
-        {
-            if (e.KeyCode == Keys.Escape) CancelCreate();
         }
 
         #endregion
@@ -671,7 +673,7 @@ namespace Sledge.BspEditor.Tools.Terrain
             }
 
             // The brush ring, lying on the surface
-            if (_hover.HasValue && !CreateMode)
+            if (_hover.HasValue)
             {
                 var terrain = _hoverTerrain ?? Active;
                 var centre = _hover.Value;
@@ -705,25 +707,6 @@ namespace Sledge.BspEditor.Tools.Terrain
                 Texture = Vector2.Zero,
                 Tint = Vector4.One
             };
-        }
-
-        protected override void Render(MapDocument document, IViewport viewport, OrthographicCamera camera, Vector3 worldMin, Vector3 worldMax, I2DRenderer im)
-        {
-            base.Render(document, viewport, camera, worldMin, worldMax, im);
-
-            // The box being dragged for a new terrain
-            if (!_creating || camera.ViewType != OrthographicCamera.OrthographicType.Top) return;
-
-            var a = _createStart;
-            var b = _createEnd;
-            var corners = new[]
-            {
-                new Vector3(a.X, a.Y, 0), new Vector3(b.X, a.Y, 0), new Vector3(b.X, b.Y, 0), new Vector3(a.X, b.Y, 0)
-            };
-            for (var i = 0; i < 4; i++)
-            {
-                im.AddLine(camera.WorldToScreen(corners[i]).ToVector2(), camera.WorldToScreen(corners[(i + 1) % 4]).ToVector2(), Color.Yellow);
-            }
         }
 
         #endregion

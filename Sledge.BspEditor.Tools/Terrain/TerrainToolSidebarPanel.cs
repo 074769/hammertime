@@ -28,12 +28,10 @@ namespace Sledge.BspEditor.Tools.Terrain
 
         private readonly ComboBox _terrains;
         private readonly TextBox _name;
-        private readonly Button _new;
+        private readonly Button _fromSelection;
         private readonly Button _delete;
         private readonly NumericUpDown _cell;
         private readonly NumericUpDown _levelHeight;
-        private readonly NumericUpDown _baseHeight;
-        private readonly NumericUpDown _thickness;
 
         private readonly ComboBox _mode;
         private readonly NumericUpDown _radius;
@@ -82,18 +80,14 @@ namespace Sledge.BspEditor.Tools.Terrain
             Full(_terrains);
             _name = new TextBox { Dock = DockStyle.Fill };
             Row("Name:", _name);
-            _new = MakeButton("New terrain");
+            _fromSelection = MakeButton("Terrain from selected brush");
+            Full(_fromSelection);
             _delete = MakeButton("Delete terrain");
-            _layout.Controls.Add(_new, 0, _layout.RowCount);
-            _layout.Controls.Add(_delete, 1, _layout.RowCount++);
+            Full(_delete);
             _cell = Number(1, 1024, 32);
             _levelHeight = Number(1, 256, 16);
-            _baseHeight = Number(-65536, 65536, 0);
-            _thickness = Number(1, 64, 2);
             Row("Cell size (units):", _cell);
             Row("Level height:", _levelHeight);
-            Row("Base height:", _baseHeight);
-            Row("Thickness (levels):", _thickness);
 
             // Sculpt
             Header("Sculpt (drag on the terrain)");
@@ -209,13 +203,16 @@ namespace Sledge.BspEditor.Tools.Terrain
                 if (_terrains.SelectedIndex >= 0 && _terrains.SelectedIndex < list.Count) _tool.SetActive(list[_terrains.SelectedIndex].ID);
             };
             _name.Leave += (s, e) => _tool?.RenameActive(_name.Text);
-            _new.Click += (s, e) => _tool?.BeginCreate();
+            _fromSelection.Click += (s, e) =>
+            {
+                if (_tool == null) return;
+                var text = _tool.FromSelection();
+                _info.Text = text;
+            };
             _delete.Click += (s, e) => _tool?.DeleteActive();
 
             _cell.ValueChanged += (s, e) => { if (_tool != null) _tool.NewCellSize = (float) _cell.Value; };
             _levelHeight.ValueChanged += (s, e) => { if (_tool != null) _tool.NewLevelHeight = (float) _levelHeight.Value; };
-            _baseHeight.ValueChanged += (s, e) => { if (_tool != null) _tool.NewBaseHeight = (float) _baseHeight.Value; };
-            _thickness.ValueChanged += (s, e) => { if (_tool != null) _tool.NewThickness = (int) _thickness.Value; };
 
             _mode.SelectedIndexChanged += (s, e) => { if (_tool != null) _tool.Mode = (SculptMode) _mode.SelectedIndex; };
             _radius.ValueChanged += (s, e) => { if (_tool != null) _tool.Radius = (float) _radius.Value; };
