@@ -27,6 +27,7 @@ using Sledge.BspEditor.Tools.Selection;
 using Sledge.BspEditor.Tools.Bevel;
 using Sledge.BspEditor.Tools.Extrude;
 using Sledge.BspEditor.Tools.Spin;
+using Sledge.BspEditor.Tools.Terrain;
 using Sledge.BspEditor.Tools.Texture;
 using Sledge.BspEditor.Tools.Vertex;
 using Sledge.BspEditor.Tools.WrapTexture;
@@ -181,6 +182,7 @@ namespace Sledge.BspEditor.Environment.Goldsource
 				BrushTool.BrushToolCapability,
 				ClipTool.ClipToolCapability,
 				SpinTool.SpinToolCapability,
+				TerrainTool.TerrainToolCapability,
 				BevelTool.BevelToolCapability,
 				ExtrudeTool.ExtrudeToolCapability,
 				CordonTool.CordonToolCapability,
