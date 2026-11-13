@@ -46,6 +46,9 @@ namespace Sledge.BspEditor.Terrain
             public int CollisionBlock { get; set; }
             public int CollisionSampling { get; set; }
             public string ClipTexture { get; set; }
+            public string CellTextures { get; set; }
+            public string OriginalBrushes { get; set; }
+            public long OriginalParentId { get; set; }
             public float[] GroupBox { get; set; }
             public float[] CollisionGroupBox { get; set; }
         }
@@ -108,6 +111,9 @@ namespace Sledge.BspEditor.Terrain
                         CollisionBlock = t.CollisionBlock,
                         CollisionSampling = (int) t.CollisionSampling,
                         ClipTexture = t.ClipTexture,
+                        CellTextures = TerrainCellTextures.Write(t.CellTextures),
+                        OriginalBrushes = t.OriginalBrushes,
+                        OriginalParentId = t.OriginalParentId,
                         GroupBox = t.State == TerrainState.Brushes ? BoxOf(document, t.GroupId) : null,
                         CollisionGroupBox = t.State == TerrainState.Brushes ? BoxOf(document, t.CollisionGroupId) : null
                     });
@@ -154,6 +160,9 @@ namespace Sledge.BspEditor.Terrain
                     CollisionBlock = Math.Max(1, e.CollisionBlock),
                     CollisionSampling = (CollisionSampling) e.CollisionSampling,
                     ClipTexture = e.ClipTexture ?? "CLIP",
+                    CellTextures = TerrainCellTextures.Read(e.CellTextures, e.CellsX * e.CellsY),
+                    OriginalBrushes = e.OriginalBrushes ?? "",
+                    OriginalParentId = e.OriginalParentId,
                     Field = new Heightfield
                     {
                         CellsX = e.CellsX,

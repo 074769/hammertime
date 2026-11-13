@@ -53,6 +53,18 @@ namespace Sledge.BspEditor.Terrain
         public CollisionSampling CollisionSampling { get; set; } = CollisionSampling.Lowest;
         public string ClipTexture { get; set; } = "CLIP";
 
+        /// <summary>
+        /// Texture of each top face, row by row (null where the surface texture is used). Filled in when the terrain goes back from
+        /// brushes to a height grid, so textures put on the brushes by hand are not lost, and used again when it is baked.
+        /// </summary>
+        public TerrainTextureInfo[] CellTextures { get; set; }
+
+        /// <summary>The brushes this terrain was made from (see <see cref="TerrainOriginalBrushes"/>), so it can be turned back into them.</summary>
+        public string OriginalBrushes { get; set; } = "";
+
+        /// <summary>The object the original brushes were in, so they go back there.</summary>
+        public long OriginalParentId { get; set; }
+
         /// <summary>Object ID of the group holding the generated brushes (0 when there are none).</summary>
         public long GroupId { get; set; }
 
@@ -89,6 +101,10 @@ namespace Sledge.BspEditor.Terrain
             };
             field.Levels = ParseLevels(obj.Get<string>("Levels"), (field.CellsX + 1) * (field.CellsY + 1));
             Field = field;
+
+            CellTextures = TerrainCellTextures.Read(obj.Get<string>("CellTextures"), field.CellsX * field.CellsY);
+            OriginalBrushes = obj.Get<string>("OriginalBrushes") ?? "";
+            OriginalParentId = obj.Get<long>("OriginalParentId");
         }
 
         [Export(typeof(IMapElementFormatter))]
@@ -107,6 +123,9 @@ namespace Sledge.BspEditor.Terrain
                 Name = Name,
                 State = State,
                 Field = Field.Clone(),
+                CellTextures = TerrainCellTextures.Clone(CellTextures),
+                OriginalBrushes = OriginalBrushes,
+                OriginalParentId = OriginalParentId,
                 SurfaceTexture = SurfaceTexture,
                 HiddenTexture = HiddenTexture,
                 MergeCoplanar = MergeCoplanar,
@@ -148,6 +167,9 @@ namespace Sledge.BspEditor.Terrain
             so.Set("OriginY", Field.Origin.Y);
             so.Set("OriginZ", Field.Origin.Z);
             so.Set("Levels", FormatLevels(Field.Levels));
+            so.Set("CellTextures", TerrainCellTextures.Write(CellTextures));
+            so.Set("OriginalBrushes", OriginalBrushes ?? "");
+            so.Set("OriginalParentId", OriginalParentId);
             return so;
         }
 
@@ -173,6 +195,8 @@ namespace Sledge.BspEditor.Terrain
         public sealed class Snapshot
         {
             public Heightfield Field;
+            public TerrainTextureInfo[] CellTextures;
+            public string SurfaceTexture;
             public TerrainState State;
             public long GroupId;
             public long CollisionGroupId;
@@ -180,13 +204,23 @@ namespace Sledge.BspEditor.Terrain
 
         public Snapshot Capture()
         {
-            return new Snapshot { Field = Field.Clone(), State = State, GroupId = GroupId, CollisionGroupId = CollisionGroupId };
+            return new Snapshot
+            {
+                Field = Field.Clone(),
+                CellTextures = TerrainCellTextures.Clone(CellTextures),
+                SurfaceTexture = SurfaceTexture,
+                State = State,
+                GroupId = GroupId,
+                CollisionGroupId = CollisionGroupId
+            };
         }
 
         public void Restore(Snapshot snapshot)
         {
             Field = snapshot.Field.Clone();
             Field.Touch();
+            CellTextures = TerrainCellTextures.Clone(snapshot.CellTextures);
+            SurfaceTexture = snapshot.SurfaceTexture ?? SurfaceTexture;
             State = snapshot.State;
             GroupId = snapshot.GroupId;
             CollisionGroupId = snapshot.CollisionGroupId;

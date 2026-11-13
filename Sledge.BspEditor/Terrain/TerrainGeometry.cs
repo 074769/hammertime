@@ -52,6 +52,18 @@ namespace Sledge.BspEditor.Terrain
     public sealed class TerrainBrush
     {
         public List<TerrainFace> Faces = new List<TerrainFace>();
+
+        /// <summary>The cells (inclusive) the top face covers; -1 when the brush isn't made from whole cells.</summary>
+        public int CellX0 = -1, CellY0 = -1, CellX1 = -1, CellY1 = -1;
+
+        public TerrainBrush WithCells(int x0, int y0, int x1, int y1)
+        {
+            CellX0 = x0;
+            CellY0 = y0;
+            CellX1 = x1;
+            CellY1 = y1;
+            return this;
+        }
     }
 
     /// <summary>
@@ -395,6 +407,135 @@ namespace Sledge.BspEditor.Terrain
 
         #endregion
 
+        #region Units-based sculpting
+
+        /// <summary>
+        /// A brush stamp where strength is in world units per stamp (at the full weight of the brush). The heights are whole
+        /// levels, so what is too small to move a level is kept in <paramref name="residual"/> (one value per vertex, kept for the
+        /// whole stroke) and adds up over the next stamps: a small strength is slower, not nothing.
+        /// Raise and Lower move by the amount; Flatten and Smooth move towards their target by at most the amount; Set jumps to the level.
+        /// </summary>
+        public bool ApplyBrushUnits(float x, float y, float radius, SculptMode mode, float units, BrushFalloff falloff, int targetLevel, float[] residual)
+        {
+            var perStamp = Math.Max(0f, units) / Math.Max(0.0001f, LevelHeight);
+            var changed = false;
+
+            var minX = Math.Max(0, (int) Math.Floor((x - radius - Origin.X) / CellSize));
+            var maxX = Math.Min(CellsX, (int) Math.Ceiling((x + radius - Origin.X) / CellSize));
+            var minY = Math.Max(0, (int) Math.Floor((y - radius - Origin.Y) / CellSize));
+            var maxY = Math.Min(CellsY, (int) Math.Ceiling((y + radius - Origin.Y) / CellSize));
+
+            // The neighbours of a vertex are read from the heights before this stamp, so the result doesn't depend on the order
+            var before = mode == SculptMode.Smooth ? (int[]) Levels.Clone() : Levels;
+
+            for (var vy = minY; vy <= maxY; vy++)
+            {
+                for (var vx = minX; vx <= maxX; vx++)
+                {
+                    var px = Origin.X + vx * CellSize - x;
+                    var py = Origin.Y + vy * CellSize - y;
+                    var w = Weight((float) Math.Sqrt(px * px + py * py), radius, falloff);
+                    if (w <= 0) continue;
+
+                    var idx = Index(vx, vy);
+                    var current = Levels[idx];
+                    var cap = perStamp * w;
+                    float move;
+
+                    switch (mode)
+                    {
+                        case SculptMode.Raise:
+                            move = cap;
+                            break;
+                        case SculptMode.Lower:
+                            move = -cap;
+                            break;
+                        case SculptMode.Flatten:
+                            move = Math.Max(-cap, Math.Min(cap, targetLevel - current));
+                            break;
+                        case SculptMode.Smooth:
+                            move = Math.Max(-cap, Math.Min(cap, NeighbourAverage(before, vx, vy) - current));
+                            break;
+                        default: // Set
+                            if (current != targetLevel)
+                            {
+                                Levels[idx] = targetLevel;
+                                changed = true;
+                            }
+                            if (residual != null) residual[idx] = 0;
+                            continue;
+                    }
+
+                    var r = (residual != null ? residual[idx] : 0f) + move;
+                    var whole = (int) Math.Truncate(r);
+                    if (residual != null) residual[idx] = r - whole;
+                    if (whole != 0)
+                    {
+                        Levels[idx] = current + whole;
+                        changed = true;
+                    }
+                }
+            }
+
+            if (changed) Version++;
+            return changed;
+        }
+
+        #endregion
+
+        #region Resizing
+
+        /// <summary>
+        /// The same terrain with another cell size: the area stays the same (to a whole number of cells) and heights are
+        /// taken from the old surface.
+        /// </summary>
+        public Heightfield Resample(float newCellSize)
+        {
+            newCellSize = Math.Max(1f, newCellSize);
+            var width = CellsX * CellSize;
+            var depth = CellsY * CellSize;
+            var cx = Math.Max(1, (int) Math.Round(width / newCellSize));
+            var cy = Math.Max(1, (int) Math.Round(depth / newCellSize));
+
+            var result = new Heightfield(cx, cy, newCellSize, LevelHeight, Origin);
+            for (var y = 0; y <= cy; y++)
+            {
+                for (var x = 0; x <= cx; x++)
+                {
+                    var wx = Math.Min(Origin.X + width, Origin.X + x * newCellSize);
+                    var wy = Math.Min(Origin.Y + depth, Origin.Y + y * newCellSize);
+                    var z = HeightAt(wx, wy) ?? Origin.Z;
+                    result.Levels[result.Index(x, y)] = (int) Math.Round((z - Origin.Z) / LevelHeight);
+                }
+            }
+
+            // Keep the bottom where it was
+            result.ThicknessLevels = Math.Max(1, ThicknessLevels + result.MinLevel - MinLevel);
+            result.Touch();
+            return result;
+        }
+
+        /// <summary>The same terrain with another level height: the shape is kept, rounded to the new levels.</summary>
+        public Heightfield WithLevelHeight(float newLevelHeight)
+        {
+            newLevelHeight = Math.Max(1f, newLevelHeight);
+            var result = Clone();
+            result.LevelHeight = newLevelHeight;
+            for (var i = 0; i < Levels.Length; i++)
+            {
+                result.Levels[i] = (int) Math.Round(Levels[i] * LevelHeight / newLevelHeight);
+            }
+
+            var bottomLevel = (int) Math.Round((BottomZ - Origin.Z) / newLevelHeight);
+            result.ThicknessLevels = Math.Max(1, result.MinLevel - bottomLevel);
+            result.Touch();
+            return result;
+        }
+
+        public int CellCount => CellsX * CellsY;
+
+        #endregion
+
         #region Weld
 
         /// <summary>
@@ -483,11 +624,14 @@ namespace Sledge.BspEditor.Terrain
         /// The brushes of the terrain. With mergeCoplanar, rectangles of cells that lie in one plane become one brush
         /// (a flat area is a single block); the remaining cells are split into two triangles each.
         /// </summary>
-        public List<TerrainBrush> BuildBrushes(bool mergeCoplanar = true)
+        public List<TerrainBrush> BuildBrushes(bool mergeCoplanar = true, int[] cellKeys = null)
         {
             var result = new List<TerrainBrush>();
             var bottom = BottomZ;
             var used = new bool[CellsX * CellsY];
+
+            // Cells with different keys (textures) are never merged into one brush
+            int Key(int x, int y) => cellKeys == null || cellKeys.Length != used.Length ? 0 : cellKeys[y * CellsX + x];
 
             for (var cy = 0; cy < CellsY; cy++)
             {
@@ -501,34 +645,42 @@ namespace Sledge.BspEditor.Terrain
                         if (RectPlanar(cx, cy, cx, cy))
                         {
                             // A planar cell is one brush even without merging
-                            result.Add(Prism(new[] { Vertex(cx, cy), Vertex(cx + 1, cy), Vertex(cx + 1, cy + 1), Vertex(cx, cy + 1) }, bottom));
+                            result.Add(Prism(new[] { Vertex(cx, cy), Vertex(cx + 1, cy), Vertex(cx + 1, cy + 1), Vertex(cx, cy + 1) }, bottom).WithCells(cx, cy, cx, cy));
                         }
                         else
                         {
                             foreach (var t in CellTriangles(cx, cy))
                             {
-                                result.Add(Prism(new[] { Vertex(t[0].X, t[0].Y), Vertex(t[1].X, t[1].Y), Vertex(t[2].X, t[2].Y) }, bottom));
+                                result.Add(Prism(new[] { Vertex(t[0].X, t[0].Y), Vertex(t[1].X, t[1].Y), Vertex(t[2].X, t[2].Y) }, bottom).WithCells(cx, cy, cx, cy));
                             }
                         }
                         continue;
                     }
 
-                    // Grow right, then down, while the rectangle stays in one plane
+                    var key = Key(cx, cy);
+
+                    // Grow right, then down, while the rectangle stays in one plane and one texture
                     var x1 = cx;
-                    while (x1 + 1 < CellsX && !used[cy * CellsX + x1 + 1] && RectPlanar(cx, cy, x1 + 1, cy)) x1++;
+                    while (x1 + 1 < CellsX && !used[cy * CellsX + x1 + 1] && Key(x1 + 1, cy) == key && RectPlanar(cx, cy, x1 + 1, cy)) x1++;
 
                     var y1 = cy;
-                    while (y1 + 1 < CellsY && RowFree(used, cx, x1, y1 + 1) && RectPlanar(cx, cy, x1, y1 + 1)) y1++;
+                    while (y1 + 1 < CellsY && RowFree(used, cx, x1, y1 + 1) && RowKey(Key, cx, x1, y1 + 1, key) && RectPlanar(cx, cy, x1, y1 + 1)) y1++;
 
                     for (var yy = cy; yy <= y1; yy++)
                         for (var xx = cx; xx <= x1; xx++)
                             used[yy * CellsX + xx] = true;
 
-                    result.Add(Prism(new[] { Vertex(cx, cy), Vertex(x1 + 1, cy), Vertex(x1 + 1, y1 + 1), Vertex(cx, y1 + 1) }, bottom));
+                    result.Add(Prism(new[] { Vertex(cx, cy), Vertex(x1 + 1, cy), Vertex(x1 + 1, y1 + 1), Vertex(cx, y1 + 1) }, bottom).WithCells(cx, cy, x1, y1));
                 }
             }
 
             return result;
+        }
+
+        private static bool RowKey(Func<int, int, int> key, int x0, int x1, int y, int expected)
+        {
+            for (var x = x0; x <= x1; x++) if (key(x, y) != expected) return false;
+            return true;
         }
 
         private bool RowFree(bool[] used, int x0, int x1, int y)

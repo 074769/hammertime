@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel.Composition;
 using System.Drawing;
 using System.Linq;
+using System.Numerics;
 using System.Windows.Forms;
 using Sledge.BspEditor.Terrain;
 using Sledge.Common.Shell.Components;
@@ -29,11 +30,15 @@ namespace Sledge.BspEditor.Tools.Terrain
         private readonly ComboBox _terrains;
         private readonly TextBox _name;
         private readonly Button _fromSelection;
-        private readonly Button _delete;
+        private readonly Button _revert;
+        private readonly NumericUpDown _posX;
+        private readonly NumericUpDown _posY;
+        private readonly NumericUpDown _posZ;
         private readonly NumericUpDown _cell;
         private readonly NumericUpDown _levelHeight;
 
         private readonly ComboBox _mode;
+        private readonly ComboBox _rightMode;
         private readonly NumericUpDown _radius;
         private readonly NumericUpDown _strength;
         private readonly ComboBox _falloff;
@@ -82,23 +87,32 @@ namespace Sledge.BspEditor.Tools.Terrain
             Row("Name:", _name);
             _fromSelection = MakeButton("Terrain from selected brush");
             Full(_fromSelection);
-            _delete = MakeButton("Delete terrain");
-            Full(_delete);
+            _revert = MakeButton("Revert to original brush");
+            Full(_revert);
             _cell = Number(1, 1024, 32);
             _levelHeight = Number(1, 256, 16);
             Row("Cell size (units):", _cell);
-            Row("Level height:", _levelHeight);
+            Row("Level height (units):", _levelHeight);
+            _posX = Number(-65536, 65536, 0);
+            _posY = Number(-65536, 65536, 0);
+            _posZ = Number(-65536, 65536, 0);
+            Row("Position X:", _posX);
+            Row("Position Y:", _posY);
+            Row("Position Z:", _posZ);
 
             // Sculpt
             Header("Sculpt (drag on the terrain)");
             _mode = Combo("Raise", "Lower", "Flatten", "Smooth", "Set height");
+            _rightMode = Combo("Raise", "Lower", "Flatten", "Smooth", "Set height");
+            _rightMode.SelectedIndex = 1;
             _radius = Number(8, 4096, 96);
-            _strength = Number(0.1m, 32, 1, 1, 0.5m);
+            _strength = Number(0.05m, 512, 4, 2, 1);
             _falloff = Combo("Smooth", "Linear", "Constant");
             _setLevel = Number(-4096, 4096, 0);
-            Row("Mode (Ctrl swaps raise/lower):", _mode);
-            Row("Radius (units):", _radius);
-            Row("Strength (levels):", _strength);
+            Row("Left mouse:", _mode);
+            Row("Right mouse:", _rightMode);
+            Row("Radius (Ctrl+wheel):", _radius);
+            Row("Strength (units/stamp):", _strength);
             Row("Falloff:", _falloff);
             Row("Set height (level):", _setLevel);
             _smoothPasses = Number(1, 16, 1);
@@ -209,13 +223,33 @@ namespace Sledge.BspEditor.Tools.Terrain
                 var text = _tool.FromSelection();
                 _info.Text = text;
             };
-            _delete.Click += (s, e) => _tool?.DeleteActive();
+            _revert.Click += (s, e) => _tool?.RevertToBrush();
 
-            _cell.ValueChanged += (s, e) => { if (_tool != null) _tool.NewCellSize = (float) _cell.Value; };
-            _levelHeight.ValueChanged += (s, e) => { if (_tool != null) _tool.NewLevelHeight = (float) _levelHeight.Value; };
+            // Cell size and level height change the active terrain at once
+            _cell.ValueChanged += (s, e) =>
+            {
+                if (_syncing || _tool == null) return;
+                var message = _tool.SetCellSize((float) _cell.Value);
+                if (message != null) _info.Text = message;
+            };
+            _levelHeight.ValueChanged += (s, e) =>
+            {
+                if (_syncing || _tool == null) return;
+                var message = _tool.SetLevelHeight((float) _levelHeight.Value);
+                if (message != null) _info.Text = message;
+            };
+            EventHandler move = (s, e) =>
+            {
+                if (_syncing || _tool == null) return;
+                _tool.MoveActiveTo(new Vector3((float) _posX.Value, (float) _posY.Value, (float) _posZ.Value));
+            };
+            _posX.ValueChanged += move;
+            _posY.ValueChanged += move;
+            _posZ.ValueChanged += move;
 
             _mode.SelectedIndexChanged += (s, e) => { if (_tool != null) _tool.Mode = (SculptMode) _mode.SelectedIndex; };
-            _radius.ValueChanged += (s, e) => { if (_tool != null) _tool.Radius = (float) _radius.Value; };
+            _rightMode.SelectedIndexChanged += (s, e) => { if (_tool != null) _tool.RightMode = (SculptMode) _rightMode.SelectedIndex; };
+            _radius.ValueChanged += (s, e) => { if (!_syncing && _tool != null) _tool.Radius = (float) _radius.Value; };
             _strength.ValueChanged += (s, e) => { if (_tool != null) _tool.Strength = (float) _strength.Value; };
             _falloff.SelectedIndexChanged += (s, e) => { if (_tool != null) _tool.Falloff = (BrushFalloff) _falloff.SelectedIndex; };
             _setLevel.ValueChanged += (s, e) => { if (_tool != null) _tool.SetLevel = (int) _setLevel.Value; };
@@ -228,7 +262,12 @@ namespace Sledge.BspEditor.Tools.Terrain
             };
 
             // Options of the active terrain are written straight to it
-            _surfaceTexture.TextChanged += (s, e) => Edit(t => t.SurfaceTexture = _surfaceTexture.Text.Trim());
+            // Typing a surface texture sets it for every face, so textures kept from the brushes are replaced
+            _surfaceTexture.TextChanged += (s, e) => Edit(t =>
+            {
+                t.SurfaceTexture = _surfaceTexture.Text.Trim();
+                t.CellTextures = null;
+            });
             _hiddenTexture.TextChanged += (s, e) => Edit(t => t.HiddenTexture = _hiddenTexture.Text.Trim());
             _clipTexture.TextChanged += (s, e) => Edit(t => t.ClipTexture = _clipTexture.Text.Trim());
             _merge.CheckedChanged += (s, e) => Edit(t => t.MergeCoplanar = _merge.Checked);
@@ -272,10 +311,25 @@ namespace Sledge.BspEditor.Tools.Terrain
                 }
 
                 var enabled = active != null;
-                _delete.Enabled = enabled;
+                _revert.Enabled = enabled;
                 _surfaceTexture.Enabled = _hiddenTexture.Enabled = _clipTexture.Enabled = enabled;
                 _merge.Enabled = _collision.Enabled = _block.Enabled = _sampling.Enabled = _toggle.Enabled = enabled;
                 _smooth.Enabled = _weld.Enabled = enabled && active.State == TerrainState.Heightfield;
+
+                // Radius can change with Ctrl+wheel in the view
+                if (!_radius.Focused) _radius.Value = Math.Max(_radius.Minimum, Math.Min(_radius.Maximum, (decimal) _tool.Radius));
+
+                var heightfield = active != null && active.State == TerrainState.Heightfield;
+                _cell.Enabled = _levelHeight.Enabled = active == null || heightfield;
+                _posX.Enabled = _posY.Enabled = _posZ.Enabled = heightfield;
+                if (active != null)
+                {
+                    if (!_cell.Focused) _cell.Value = Math.Max(_cell.Minimum, Math.Min(_cell.Maximum, (decimal) active.Field.CellSize));
+                    if (!_levelHeight.Focused) _levelHeight.Value = Math.Max(_levelHeight.Minimum, Math.Min(_levelHeight.Maximum, (decimal) active.Field.LevelHeight));
+                    if (!_posX.Focused) _posX.Value = Clamp(_posX, active.Field.Origin.X);
+                    if (!_posY.Focused) _posY.Value = Clamp(_posY, active.Field.Origin.Y);
+                    if (!_posZ.Focused) _posZ.Value = Clamp(_posZ, active.Field.Origin.Z);
+                }
 
                 if (active != null)
                 {
@@ -296,6 +350,11 @@ namespace Sledge.BspEditor.Tools.Terrain
             {
                 _syncing = false;
             }
+        }
+
+        private static decimal Clamp(NumericUpDown box, float value)
+        {
+            return Math.Max(box.Minimum, Math.Min(box.Maximum, (decimal) Math.Round(value)));
         }
 
         private static void Set(TextBox box, string value)
