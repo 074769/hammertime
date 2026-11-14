@@ -469,6 +469,43 @@ namespace Sledge.BspEditor.Terrain
         }
 
         /// <summary>
+        /// One step: every vertex inside the radius that isn't in <paramref name="done"/> moves <paramref name="levels"/> levels
+        /// (up, down, or towards the target / neighbour average, never past it). No falloff.
+        /// </summary>
+        public bool ApplyBrushStep(Vector3 hit, float radius, SculptMode mode, int levels, int targetLevel, HashSet<int> done)
+        {
+            var changed = false;
+            var before = mode == SculptMode.Smooth ? (int[]) Levels.Clone() : Levels;
+
+            for (var vy = 0; vy <= CellsY; vy++)
+            {
+                for (var vx = 0; vx <= CellsX; vx++)
+                {
+                    var idx = Index(vx, vy);
+                    if (done != null && done.Contains(idx)) continue;
+                    if ((Vertex(vx, vy) - hit).Length() > radius) continue;
+                    done?.Add(idx);
+
+                    var current = Levels[idx];
+                    var step = 0;
+                    switch (mode)
+                    {
+                        case SculptMode.Raise: step = levels; break;
+                        case SculptMode.Lower: step = -levels; break;
+                        case SculptMode.Flatten: step = Math.Max(-levels, Math.Min(levels, targetLevel - current)); break;
+                        case SculptMode.Smooth: step = Math.Max(-levels, Math.Min(levels, (int) Math.Round(NeighbourAverage(before, vx, vy)) - current)); break;
+                    }
+                    if (step == 0) continue;
+                    Levels[idx] = current + step;
+                    changed = true;
+                }
+            }
+
+            if (changed) Version++;
+            return changed;
+        }
+
+        /// <summary>
         /// One brush stamp: a sphere of the given radius at a world point (on the surface). Strength is in world units per stamp
         /// (at the full weight of the brush). The levels are whole numbers, so what is too small to move a level is kept in
         /// <paramref name="residual"/> (one value per vertex, kept for the whole stroke) and adds up over the next stamps:
