@@ -40,10 +40,6 @@ namespace Sledge.BspEditor.Tools.Terrain
         private readonly ComboBox _mode;
         private readonly ComboBox _rightMode;
         private readonly NumericUpDown _radius;
-        private readonly NumericUpDown _strength;
-        private readonly ComboBox _falloff;
-        private readonly NumericUpDown _setLevel;
-        private readonly NumericUpDown _smoothPasses;
         private readonly Button _smooth;
         private readonly Button _weld;
 
@@ -101,23 +97,15 @@ namespace Sledge.BspEditor.Tools.Terrain
             Row("Position Z:", _posZ);
 
             // Sculpt
-            Header("Sculpt (drag on the terrain)");
-            _mode = Combo("Raise", "Lower", "Flatten", "Smooth", "Set height");
-            _rightMode = Combo("Raise", "Lower", "Flatten", "Smooth", "Set height");
+            Header("Sculpt (click/drag: 1 level per vertex)");
+            _mode = Combo("Raise", "Lower", "Flatten", "Smooth");
+            _rightMode = Combo("Raise", "Lower", "Flatten", "Smooth");
             _rightMode.SelectedIndex = 1;
             _radius = Number(8, 4096, 96);
-            _strength = Number(0.05m, 512, 4, 2, 1);
-            _falloff = Combo("Smooth", "Linear", "Constant");
-            _setLevel = Number(-4096, 4096, 0);
             Row("Left mouse:", _mode);
             Row("Right mouse:", _rightMode);
             Row("Radius (Ctrl+wheel):", _radius);
-            Row("Strength (units/stamp):", _strength);
-            Row("Falloff:", _falloff);
-            Row("Set height (level):", _setLevel);
-            _smoothPasses = Number(1, 16, 1);
             _smooth = MakeButton("Smooth all");
-            Row("Passes:", _smoothPasses);
             Full(_smooth);
             _weld = MakeButton("Weld to neighbours");
             Full(_weld);
@@ -250,10 +238,7 @@ namespace Sledge.BspEditor.Tools.Terrain
             _mode.SelectedIndexChanged += (s, e) => { if (_tool != null) _tool.Mode = (SculptMode) _mode.SelectedIndex; };
             _rightMode.SelectedIndexChanged += (s, e) => { if (_tool != null) _tool.RightMode = (SculptMode) _rightMode.SelectedIndex; };
             _radius.ValueChanged += (s, e) => { if (!_syncing && _tool != null) _tool.Radius = (float) _radius.Value; };
-            _strength.ValueChanged += (s, e) => { if (_tool != null) _tool.Strength = (float) _strength.Value; };
-            _falloff.SelectedIndexChanged += (s, e) => { if (_tool != null) _tool.Falloff = (BrushFalloff) _falloff.SelectedIndex; };
-            _setLevel.ValueChanged += (s, e) => { if (_tool != null) _tool.SetLevel = (int) _setLevel.Value; };
-            _smooth.Click += (s, e) => _tool?.SmoothActive((int) _smoothPasses.Value);
+            _smooth.Click += (s, e) => _tool?.SmoothActive(1);
             _weld.Click += (s, e) =>
             {
                 if (_tool == null) return;

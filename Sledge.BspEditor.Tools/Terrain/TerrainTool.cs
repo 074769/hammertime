@@ -1,4 +1,5 @@
 using System;
+using LogicAndTrick.Oy;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Diagnostics;
@@ -56,7 +57,7 @@ namespace Sledge.BspEditor.Tools.Terrain
     ///
     /// Sculpt by dragging over a terrain in the 3D view (or the Top view): the left and right mouse buttons each have a mode,
     /// Ctrl swaps Raise and Lower, Ctrl+wheel changes the radius, and Shift+drag in a 2D view moves the terrain.
-    /// Strength is in world units per stamp; amounts smaller than one level add up over the stroke.
+    /// Every vertex under the brush moves one level (one step, the level height) per stroke, so a click is one step.
     /// </summary>
     [Export(typeof(ITool))]
     [Export]
@@ -75,11 +76,7 @@ namespace Sledge.BspEditor.Tools.Terrain
 
         public float Radius { get; set; } = 96f;
 
-        /// <summary>World units per brush stamp. Less than a level adds up over several stamps.</summary>
-        public float Strength { get; set; } = 4f;
 
-        public BrushFalloff Falloff { get; set; } = BrushFalloff.Smooth;
-        public int SetLevel { get; set; } = 0;
 
         // Settings for a new terrain (the sidebar shows the active terrain's own when there is one)
         public float NewCellSize { get; set; } = 32f;
@@ -94,7 +91,7 @@ namespace Sledge.BspEditor.Tools.Terrain
         {
             public TerrainData Terrain;
             public TerrainData.Snapshot Before;
-            public float[] Residual;
+            public HashSet<int> Done;
         }
 
         private sealed class Stroke
@@ -144,6 +141,12 @@ namespace Sledge.BspEditor.Tools.Terrain
         // Brush count shown in the sidebar, cached per terrain version
         private long _countKey = -1;
         private int _countBrushes;
+
+        protected override IEnumerable<Subscription> Subscribe()
+        {
+            // No context menu in the views while the Terrain tool is active (right mouse sculpts)
+            yield return Oy.Subscribe<RightClickMenuBuilder>("MapViewport:RightClick", b => { b.Intercepted = true; });
+        }
 
         public TerrainTool()
         {
@@ -614,7 +617,7 @@ namespace Sledge.BspEditor.Tools.Terrain
                 Candidates = document.Map.Data.Get<TerrainData>().Where(x => x.State == TerrainState.Heightfield).ToList(),
                 Button = button,
                 // Flatten works towards the height where the stroke began
-                Target = ModeFor(button) == SculptMode.Set ? SetLevel : (int) Math.Round(terrain.Field.LevelAt(gx, gy)),
+                Target = (int) Math.Round(terrain.Field.LevelAt(gx, gy)),
                 LastStamp = hit,
                 Viewport = viewport,
                 LastStampTime = _clock.ElapsedMilliseconds
@@ -634,12 +637,11 @@ namespace Sledge.BspEditor.Tools.Terrain
 
                 if (!_stroke.Entries.TryGetValue(t, out var touched))
                 {
-                    touched = new Touched { Terrain = t, Before = t.Capture(), Residual = new float[f.Levels.Length] };
+                    touched = new Touched { Terrain = t, Before = t.Capture(), Done = new HashSet<int>() };
                     _stroke.Entries[t] = touched;
                 }
-                if (touched.Residual.Length != f.Levels.Length) continue;
 
-                f.ApplyBrushUnits(at, Math.Max(1f, Radius), mode, Math.Max(0.01f, Strength), Falloff, _stroke.Target, touched.Residual);
+                f.ApplyBrushStep(at, Math.Max(1f, Radius), mode, _stroke.Target, touched.Done);
             }
 
             _stroke.LastStamp = at;
@@ -1178,19 +1180,8 @@ namespace Sledge.BspEditor.Tools.Terrain
         private void MoveStroke(Vector3 hit)
         {
             // A stamp every time the brush has moved a fair bit, so a drag leaves an even trail
-            var spacing = Math.Max(Radius / 4f, 1f);
+            var spacing = Math.Max(Radius / 8f, 1f);
             if ((hit - _stroke.LastStamp).Length() >= spacing) Stamp(hit);
-        }
-
-        protected override void UpdateFrame(MapDocument document, MapViewport viewport, PerspectiveCamera camera, long frame)
-        {
-            // Holding still keeps working on the surface, like an airbrush
-            if (_stroke == null || _stroke.Viewport != viewport || !_lastRay.HasValue) return;
-            if (_clock.ElapsedMilliseconds - _stroke.LastStampTime < StampIntervalMs) return;
-            if (EffectiveMode() == SculptMode.Set) return;
-
-            var terrain = PickIn3D(document, _lastRay.Value, out var hit, out _, out _);
-            if (terrain != null) Stamp(hit);
         }
 
         public override System.Threading.Tasks.Task PreToolDeselect()
