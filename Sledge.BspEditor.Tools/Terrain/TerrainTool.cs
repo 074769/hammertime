@@ -79,6 +79,9 @@ namespace Sledge.BspEditor.Tools.Terrain
         /// <summary>World units a vertex moves per step (rounded to whole levels, at least one).</summary>
         public float Step { get; set; } = 1f;
 
+        /// <summary>Holding a mouse button repeats the step every this many milliseconds.</summary>
+        public int RepeatInterval { get; set; } = 150;
+
 
 
         // Settings for a new terrain (the sidebar shows the active terrain's own when there is one)
@@ -105,6 +108,7 @@ namespace Sledge.BspEditor.Tools.Terrain
             public Vector3 LastStamp;
             public MapViewport Viewport;
             public long LastStampTime;
+            public long LastRepeatTime;
             public MouseButtons Button;
         }
 
@@ -623,7 +627,8 @@ namespace Sledge.BspEditor.Tools.Terrain
                 Target = (int) Math.Round(terrain.Field.LevelAt(gx, gy)),
                 LastStamp = hit,
                 Viewport = viewport,
-                LastStampTime = _clock.ElapsedMilliseconds
+                LastStampTime = _clock.ElapsedMilliseconds,
+                LastRepeatTime = _clock.ElapsedMilliseconds
             };
             Stamp(hit);
         }
@@ -1186,6 +1191,34 @@ namespace Sledge.BspEditor.Tools.Terrain
             // A stamp every time the brush has moved a fair bit, so a drag leaves an even trail
             var spacing = Math.Max(Radius / 8f, 1f);
             if ((hit - _stroke.LastStamp).Length() >= spacing) Stamp(hit);
+        }
+
+        protected override void UpdateFrame(MapDocument document, MapViewport viewport, PerspectiveCamera camera, long frame)
+        {
+            if (_stroke == null || _stroke.Viewport != viewport || !_lastRay.HasValue) return;
+            if (!RepeatDue()) return;
+
+            var terrain = PickIn3D(document, _lastRay.Value, out var hit, out _, out _);
+            if (terrain != null) Stamp(hit);
+        }
+
+        protected override void UpdateFrame(MapDocument document, MapViewport viewport, OrthographicCamera camera, long frame)
+        {
+            if (_stroke == null || _stroke.Viewport != viewport || !_hover.HasValue) return;
+            if (!RepeatDue()) return;
+
+            Stamp(_hover.Value);
+        }
+
+        // Holding the button repeats the step: once the interval has passed every vertex may move again
+        private bool RepeatDue()
+        {
+            var now = _clock.ElapsedMilliseconds;
+            if (now - _stroke.LastRepeatTime < Math.Max(10, RepeatInterval)) return false;
+
+            _stroke.LastRepeatTime = now;
+            foreach (var entry in _stroke.Entries.Values) entry.Done.Clear();
+            return true;
         }
 
         public override System.Threading.Tasks.Task PreToolDeselect()

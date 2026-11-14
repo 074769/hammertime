@@ -41,6 +41,7 @@ namespace Sledge.BspEditor.Tools.Terrain
         private readonly ComboBox _rightMode;
         private readonly NumericUpDown _radius;
         private readonly NumericUpDown _step;
+        private readonly NumericUpDown _repeat;
         private readonly Button _smooth;
         private readonly Button _weld;
 
@@ -104,10 +105,12 @@ namespace Sledge.BspEditor.Tools.Terrain
             _rightMode.SelectedIndex = 1;
             _radius = Number(8, 4096, 96);
             _step = Number(1, 256, 1);
+            _repeat = Number(20, 2000, 150, 0, 10);
             Row("Left mouse:", _mode);
             Row("Right mouse:", _rightMode);
             Row("Radius (Ctrl+wheel):", _radius);
             Row("Step (units):", _step);
+            Row("Repeat while held (ms):", _repeat);
             _smooth = MakeButton("Smooth all");
             Full(_smooth);
             _weld = MakeButton("Weld to neighbours");
@@ -240,6 +243,7 @@ namespace Sledge.BspEditor.Tools.Terrain
 
             _mode.SelectedIndexChanged += (s, e) => { if (_tool != null) _tool.Mode = (SculptMode) _mode.SelectedIndex; };
             _rightMode.SelectedIndexChanged += (s, e) => { if (_tool != null) _tool.RightMode = (SculptMode) _rightMode.SelectedIndex; };
+            _repeat.ValueChanged += (s, e) => { if (_tool != null) _tool.RepeatInterval = (int) _repeat.Value; };
             _step.ValueChanged += (s, e) => { if (_tool != null) _tool.Step = (float) _step.Value; };
             _radius.ValueChanged += (s, e) => { if (!_syncing && _tool != null) _tool.Radius = (float) _radius.Value; };
             _smooth.Click += (s, e) => _tool?.SmoothActive(1);
