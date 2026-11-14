@@ -85,7 +85,7 @@ namespace Sledge.BspEditor.Tools.Terrain
             Full(_terrains);
             _name = new TextBox { Dock = DockStyle.Fill };
             Row("Name:", _name);
-            _fromSelection = MakeButton("Terrain from selected brush");
+            _fromSelection = MakeButton("Terrain from selected faces");
             Full(_fromSelection);
             _revert = MakeButton("Revert to original brush");
             Full(_revert);
@@ -281,8 +281,9 @@ namespace Sledge.BspEditor.Tools.Terrain
         private void Edit(Action<TerrainData> change)
         {
             if (_syncing || _tool == null) return;
-            var t = _tool.Active;
-            if (t != null) change(t);
+
+            // The options stand for the whole set (all the surfaces made together)
+            foreach (var t in _tool.ActiveSet()) change(t);
         }
 
         #endregion

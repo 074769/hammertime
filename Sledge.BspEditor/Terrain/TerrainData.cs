@@ -33,6 +33,13 @@ namespace Sledge.BspEditor.Terrain
         public bool AffectsRendering => false;
 
         public long ID { get; set; }
+
+        /// <summary>
+        /// Surfaces made together (from several faces) share a set: they are sculpted, baked and reverted together.
+        /// The ID of the first one. A single surface is its own set.
+        /// </summary>
+        public long SetId { get; set; }
+
         public string Name { get; set; } = "Terrain";
         public TerrainState State { get; set; } = TerrainState.Heightfield;
         public Heightfield Field { get; set; } = new Heightfield();
@@ -78,6 +85,8 @@ namespace Sledge.BspEditor.Terrain
         public TerrainData(SerialisedObject obj)
         {
             ID = obj.Get<long>("ID");
+            SetId = obj.Get<long>("SetId");
+            if (SetId == 0) SetId = ID;
             Name = obj.Get<string>("Name") ?? "Terrain";
             State = (TerrainState) obj.Get<int>("State");
             SurfaceTexture = obj.Get<string>("SurfaceTexture") ?? "GROUND";
@@ -96,9 +105,32 @@ namespace Sledge.BspEditor.Terrain
                 CellsY = obj.Get<int>("CellsY"),
                 CellSize = obj.Get<float>("CellSize"),
                 LevelHeight = obj.Get<float>("LevelHeight"),
-                ThicknessLevels = Math.Max(1, obj.Get<int>("ThicknessLevels", 2)),
-                Origin = new Vector3(obj.Get<float>("OriginX"), obj.Get<float>("OriginY"), obj.Get<float>("OriginZ"))
+                ThicknessLevels = Math.Max(1, obj.Get<int>("ThicknessLevels", 2))
             };
+
+            var corner = obj.Get<string>("P00");
+            if (!string.IsNullOrEmpty(corner))
+            {
+                field.P00 = TerrainText.ReadVector(corner);
+                field.P10 = TerrainText.ReadVector(obj.Get<string>("P10"));
+                field.P01 = TerrainText.ReadVector(obj.Get<string>("P01"));
+                field.P11 = TerrainText.ReadVector(obj.Get<string>("P11"));
+                field.Normal = TerrainText.ReadVector(obj.Get<string>("Normal"));
+                if (field.Normal.LengthSquared() < 1e-8f) field.Normal = Vector3.UnitZ;
+                field.Dirs = TerrainText.ReadList(obj.Get<string>("Dirs"), (field.CellsX + 1) * (field.CellsY + 1));
+            }
+            else
+            {
+                // A flat terrain saved by an earlier version: a rectangle facing up
+                var origin = new Vector3(obj.Get<float>("OriginX"), obj.Get<float>("OriginY"), obj.Get<float>("OriginZ"));
+                var w = field.CellsX * field.CellSize;
+                var h = field.CellsY * field.CellSize;
+                field.P00 = origin;
+                field.P10 = origin + new Vector3(w, 0, 0);
+                field.P01 = origin + new Vector3(0, h, 0);
+                field.P11 = origin + new Vector3(w, h, 0);
+                field.Normal = Vector3.UnitZ;
+            }
             field.Levels = ParseLevels(obj.Get<string>("Levels"), (field.CellsX + 1) * (field.CellsY + 1));
             Field = field;
 
@@ -120,6 +152,7 @@ namespace Sledge.BspEditor.Terrain
             return new TerrainData
             {
                 ID = ID,
+                SetId = SetId,
                 Name = Name,
                 State = State,
                 Field = Field.Clone(),
@@ -147,6 +180,7 @@ namespace Sledge.BspEditor.Terrain
         {
             var so = new SerialisedObject("TerrainData");
             so.Set("ID", ID);
+            so.Set("SetId", SetId);
             so.Set("Name", Name);
             so.Set("State", (int) State);
             so.Set("SurfaceTexture", SurfaceTexture);
@@ -163,9 +197,12 @@ namespace Sledge.BspEditor.Terrain
             so.Set("CellSize", Field.CellSize);
             so.Set("LevelHeight", Field.LevelHeight);
             so.Set("ThicknessLevels", Field.ThicknessLevels);
-            so.Set("OriginX", Field.Origin.X);
-            so.Set("OriginY", Field.Origin.Y);
-            so.Set("OriginZ", Field.Origin.Z);
+            so.Set("P00", TerrainText.Write(Field.P00));
+            so.Set("P10", TerrainText.Write(Field.P10));
+            so.Set("P01", TerrainText.Write(Field.P01));
+            so.Set("P11", TerrainText.Write(Field.P11));
+            so.Set("Normal", TerrainText.Write(Field.Normal));
+            so.Set("Dirs", TerrainText.Write(Field.Dirs));
             so.Set("Levels", FormatLevels(Field.Levels));
             so.Set("CellTextures", TerrainCellTextures.Write(CellTextures));
             so.Set("OriginalBrushes", OriginalBrushes ?? "");

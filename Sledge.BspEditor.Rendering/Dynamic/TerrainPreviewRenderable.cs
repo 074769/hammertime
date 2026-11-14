@@ -159,7 +159,7 @@ namespace Sledge.BspEditor.Rendering.Dynamic
             };
         }
 
-        /// <summary>Smooth surface normal from the neighbouring heights (central differences).</summary>
+        /// <summary>Smooth surface normal from the neighbouring vertices (central differences), on the side of the surface's direction.</summary>
         private static Vector3 Normal(Heightfield f, int x, int y)
         {
             var x0 = System.Math.Max(0, x - 1);
@@ -167,9 +167,10 @@ namespace Sledge.BspEditor.Rendering.Dynamic
             var y0 = System.Math.Max(0, y - 1);
             var y1 = System.Math.Min(f.CellsY, y + 1);
 
-            var dzdx = (f.GetLevel(x1, y) - f.GetLevel(x0, y)) * f.LevelHeight / ((x1 - x0) * f.CellSize);
-            var dzdy = (f.GetLevel(x, y1) - f.GetLevel(x, y0)) * f.LevelHeight / ((y1 - y0) * f.CellSize);
-            return Vector3.Normalize(new Vector3(-dzdx, -dzdy, 1));
+            var n = Vector3.Cross(f.Vertex(x1, y) - f.Vertex(x0, y), f.Vertex(x, y1) - f.Vertex(x, y0));
+            if (n.LengthSquared() < 1e-10f) return f.Normal;
+            n = Vector3.Normalize(n);
+            return Vector3.Dot(n, f.Normal) < 0 ? -n : n;
         }
 
         /// <summary>Blue (low) through green and yellow to red (high).</summary>

@@ -7,6 +7,35 @@ using System.Text;
 
 namespace Sledge.BspEditor.Terrain
 {
+    /// <summary>Vectors and vector lists as short text.</summary>
+    public static class TerrainText
+    {
+        public static string Write(Vector3 v)
+        {
+            return TerrainTextureInfo.F(v.X) + "," + TerrainTextureInfo.F(v.Y) + "," + TerrainTextureInfo.F(v.Z);
+        }
+
+        public static Vector3 ReadVector(string s)
+        {
+            var p = (s ?? "").Split(',');
+            return p.Length == 3 ? new Vector3(TerrainTextureInfo.P(p[0]), TerrainTextureInfo.P(p[1]), TerrainTextureInfo.P(p[2])) : Vector3.Zero;
+        }
+
+        public static string Write(Vector3[] list)
+        {
+            return list == null ? "" : string.Join(";", list.Select(Write));
+        }
+
+        /// <summary>Reads a list back; null when it is empty or isn't the expected length.</summary>
+        public static Vector3[] ReadList(string s, int expected)
+        {
+            if (string.IsNullOrEmpty(s)) return null;
+            var parts = s.Split(';');
+            if (parts.Length != expected) return null;
+            return parts.Select(ReadVector).ToArray();
+        }
+    }
+
     /// <summary>The texture settings of one cell's top face. The axes are not kept: they are world aligned when the terrain is baked.</summary>
     public sealed class TerrainTextureInfo
     {

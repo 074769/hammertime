@@ -30,6 +30,7 @@ namespace Sledge.BspEditor.Terrain
         public class Entry
         {
             public long ID { get; set; }
+            public long SetId { get; set; }
             public string Name { get; set; }
             public int State { get; set; }
             public int CellsX { get; set; }
@@ -38,6 +39,9 @@ namespace Sledge.BspEditor.Terrain
             public float LevelHeight { get; set; }
             public int ThicknessLevels { get; set; }
             public float[] Origin { get; set; }
+            public string Corners { get; set; }
+            public string Normal { get; set; }
+            public string Dirs { get; set; }
             public int[] Levels { get; set; }
             public string SurfaceTexture { get; set; }
             public string HiddenTexture { get; set; }
@@ -95,6 +99,7 @@ namespace Sledge.BspEditor.Terrain
                     data.Terrains.Add(new Entry
                     {
                         ID = t.ID,
+                        SetId = t.SetId,
                         Name = t.Name,
                         State = (int) t.State,
                         CellsX = t.Field.CellsX,
@@ -102,7 +107,9 @@ namespace Sledge.BspEditor.Terrain
                         CellSize = t.Field.CellSize,
                         LevelHeight = t.Field.LevelHeight,
                         ThicknessLevels = t.Field.ThicknessLevels,
-                        Origin = new[] { t.Field.Origin.X, t.Field.Origin.Y, t.Field.Origin.Z },
+                        Corners = string.Join(";", new[] { t.Field.P00, t.Field.P10, t.Field.P01, t.Field.P11 }.Select(TerrainText.Write)),
+                        Normal = TerrainText.Write(t.Field.Normal),
+                        Dirs = TerrainText.Write(t.Field.Dirs),
                         Levels = (int[]) t.Field.Levels.Clone(),
                         SurfaceTexture = t.SurfaceTexture,
                         HiddenTexture = t.HiddenTexture,
@@ -144,13 +151,14 @@ namespace Sledge.BspEditor.Terrain
 
             foreach (var e in data.Terrains)
             {
-                if (e?.Levels == null || e.Origin == null || e.Origin.Length != 3) continue;
+                if (e?.Levels == null) continue;
                 var cells = (e.CellsX + 1) * (e.CellsY + 1);
                 if (e.CellsX < 1 || e.CellsY < 1 || e.Levels.Length != cells) continue;
 
                 var t = new TerrainData
                 {
                     ID = e.ID,
+                    SetId = e.SetId == 0 ? e.ID : e.SetId,
                     Name = e.Name ?? "Terrain",
                     State = (TerrainState) e.State,
                     SurfaceTexture = e.SurfaceTexture ?? "GROUND",
@@ -162,18 +170,44 @@ namespace Sledge.BspEditor.Terrain
                     ClipTexture = e.ClipTexture ?? "CLIP",
                     CellTextures = TerrainCellTextures.Read(e.CellTextures, e.CellsX * e.CellsY),
                     OriginalBrushes = e.OriginalBrushes ?? "",
-                    OriginalParentId = e.OriginalParentId,
-                    Field = new Heightfield
-                    {
-                        CellsX = e.CellsX,
-                        CellsY = e.CellsY,
-                        CellSize = e.CellSize,
-                        LevelHeight = e.LevelHeight,
-                        ThicknessLevels = Math.Max(1, e.ThicknessLevels),
-                        Origin = new Vector3(e.Origin[0], e.Origin[1], e.Origin[2]),
-                        Levels = (int[]) e.Levels.Clone()
-                    }
+                    OriginalParentId = e.OriginalParentId
                 };
+
+                var field = new Heightfield
+                {
+                    CellsX = e.CellsX,
+                    CellsY = e.CellsY,
+                    CellSize = e.CellSize,
+                    LevelHeight = e.LevelHeight,
+                    ThicknessLevels = Math.Max(1, e.ThicknessLevels),
+                    Levels = (int[]) e.Levels.Clone()
+                };
+
+                if (!string.IsNullOrEmpty(e.Corners))
+                {
+                    var c = e.Corners.Split(';').Select(TerrainText.ReadVector).ToArray();
+                    if (c.Length != 4) continue;
+                    field.P00 = c[0];
+                    field.P10 = c[1];
+                    field.P01 = c[2];
+                    field.P11 = c[3];
+                    field.Normal = TerrainText.ReadVector(e.Normal);
+                    if (field.Normal.LengthSquared() < 1e-8f) field.Normal = Vector3.UnitZ;
+                    field.Dirs = TerrainText.ReadList(e.Dirs, cells);
+                }
+                else if (e.Origin != null && e.Origin.Length == 3)
+                {
+                    // A flat terrain saved by an earlier version
+                    var origin = new Vector3(e.Origin[0], e.Origin[1], e.Origin[2]);
+                    var w = e.CellsX * e.CellSize;
+                    var h = e.CellsY * e.CellSize;
+                    field.P00 = origin;
+                    field.P10 = origin + new Vector3(w, 0, 0);
+                    field.P01 = origin + new Vector3(0, h, 0);
+                    field.P11 = origin + new Vector3(w, h, 0);
+                }
+                else continue;
+                t.Field = field;
 
                 if (t.State == TerrainState.Brushes)
                 {

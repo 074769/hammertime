@@ -48,7 +48,7 @@ namespace Sledge.BspEditor.Terrain
         public TerrainFaceKind Kind;
     }
 
-    /// <summary>A convex brush: a prism with a sloped top and a flat bottom, and vertical sides.</summary>
+    /// <summary>A convex brush: a prism with a (sloped) top, a flat bottom and sides that run along the surface normal.</summary>
     public sealed class TerrainBrush
     {
         public List<TerrainFace> Faces = new List<TerrainFace>();
@@ -67,25 +67,39 @@ namespace Sledge.BspEditor.Terrain
     }
 
     /// <summary>
-    /// A height grid. Heights are whole levels, so everything stays on the grid: a vertex is at
-    /// Origin + (x * CellSize, y * CellSize, Level * LevelHeight). The brushes are generated from it.
+    /// A displacement surface, like a Source displacement. Four corner points (on a face of a brush, or on a rectangle) are
+    /// divided into cells, and every grid vertex can be moved along a direction (the face normal) in whole levels:
+    /// vertex = bilinear point + direction * level * LevelHeight. A flat floor is the same thing with the normal pointing up.
+    /// The brushes are generated from it: each cell (or merged group of cells) is extruded back along the normal to a flat bottom.
     /// This file has no editor dependencies, so it can be tested on its own.
     /// </summary>
     public sealed class Heightfield
     {
+        /// <summary>The corners at level 0: (0, 0), (CellsX, 0), (0, CellsY) and (CellsX, CellsY) of the grid.</summary>
+        public Vector3 P00 { get; set; }
+        public Vector3 P10 { get; set; }
+        public Vector3 P01 { get; set; }
+        public Vector3 P11 { get; set; }
+
+        /// <summary>The direction the levels move the surface in (a unit vector; the normal of the face the surface came from).</summary>
+        public Vector3 Normal { get; set; } = Vector3.UnitZ;
+
+        /// <summary>
+        /// The direction each vertex moves in, or null when they all use <see cref="Normal"/>. Neighbouring surfaces that
+        /// meet at an angle share an averaged direction along their joint, so the same level means the same point (no crack).
+        /// </summary>
+        public Vector3[] Dirs { get; set; }
+
         public int CellsX { get; set; }
         public int CellsY { get; set; }
 
-        /// <summary>Width and depth of a cell in world units (a multiple of the grid).</summary>
+        /// <summary>The cell size asked for, in world units (the real cells follow the corners and may differ a little).</summary>
         public float CellSize { get; set; } = 16f;
 
-        /// <summary>World units per height level (a multiple of the grid).</summary>
+        /// <summary>World units per height level.</summary>
         public float LevelHeight { get; set; } = 8f;
 
-        /// <summary>World position of vertex (0, 0) at level 0.</summary>
-        public Vector3 Origin { get; set; }
-
-        /// <summary>How many levels thick the lowest point of the terrain is, down to the flat bottom of the brushes.</summary>
+        /// <summary>How many levels deep the brushes go below the lowest point of the surface.</summary>
         public int ThicknessLevels { get; set; } = 2;
 
         /// <summary>(CellsX + 1) * (CellsY + 1) levels, row by row.</summary>
@@ -104,38 +118,121 @@ namespace Sledge.BspEditor.Terrain
             Levels = new int[0];
         }
 
+        /// <summary>A flat rectangle facing up: the corner, the number of cells and their size.</summary>
         public Heightfield(int cellsX, int cellsY, float cellSize, float levelHeight, Vector3 origin, int level = 0)
         {
             CellsX = cellsX;
             CellsY = cellsY;
             CellSize = cellSize;
             LevelHeight = levelHeight;
-            Origin = origin;
+            P00 = origin;
+            P10 = origin + new Vector3(cellsX * cellSize, 0, 0);
+            P01 = origin + new Vector3(0, cellsY * cellSize, 0);
+            P11 = origin + new Vector3(cellsX * cellSize, cellsY * cellSize, 0);
+            Normal = Vector3.UnitZ;
             Levels = new int[(cellsX + 1) * (cellsY + 1)];
             if (level != 0) for (var i = 0; i < Levels.Length; i++) Levels[i] = level;
         }
 
+        /// <summary>
+        /// A surface over a four sided face (corners in order around the face). The grid runs along the longer edges first.
+        /// Depth is how far back the brushes go (the thickness of the brush the face came from).
+        /// </summary>
+        public static Heightfield FromQuad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 normal, float cellSize, float levelHeight, float depth, int maxCells = 256)
+        {
+            cellSize = Math.Max(1f, cellSize);
+            levelHeight = Math.Max(1f, levelHeight);
+
+            // Start at the corner that makes the first edge the longer one
+            if ((b - a).Length() + (c - d).Length() < (d - a).Length() + (c - b).Length())
+            {
+                var t = a;
+                a = b;
+                b = c;
+                c = d;
+                d = t;
+            }
+
+            var lengthX = ((b - a).Length() + (c - d).Length()) / 2;
+            var lengthY = ((d - a).Length() + (c - b).Length()) / 2;
+            var cellsX = Math.Max(1, Math.Min(maxCells, (int) Math.Round(lengthX / cellSize)));
+            var cellsY = Math.Max(1, Math.Min(maxCells, (int) Math.Round(lengthY / cellSize)));
+
+            return new Heightfield
+            {
+                P00 = a,
+                P10 = b,
+                P11 = c,
+                P01 = d,
+                Normal = Vector3.Normalize(normal),
+                CellsX = cellsX,
+                CellsY = cellsY,
+                CellSize = cellSize,
+                LevelHeight = levelHeight,
+                ThicknessLevels = Math.Max(1, (int) Math.Ceiling(depth / levelHeight - 1e-4f)),
+                Levels = new int[(cellsX + 1) * (cellsY + 1)]
+            };
+        }
+
+        /// <summary>The corner of the grid. Setting it moves the whole surface.</summary>
+        public Vector3 Origin
+        {
+            get => P00;
+            set => Translate(value - P00);
+        }
+
+        public void Translate(Vector3 delta)
+        {
+            if (delta == Vector3.Zero) return;
+            P00 += delta;
+            P10 += delta;
+            P01 += delta;
+            P11 += delta;
+            Version++;
+        }
+
         public int VertsX => CellsX + 1;
         public int VertsY => CellsY + 1;
+        public int CellCount => CellsX * CellsY;
 
         public int Index(int x, int y) => y * VertsX + x;
         public int GetLevel(int x, int y) => Levels[Index(x, y)];
         public void SetLevel(int x, int y, int level) { Levels[Index(x, y)] = level; Version++; }
 
+        /// <summary>The point at a (fractional) grid position at level 0.</summary>
+        public Vector3 Base(float gx, float gy)
+        {
+            var u = gx / CellsX;
+            var v = gy / CellsY;
+            return P00 * ((1 - u) * (1 - v)) + P10 * (u * (1 - v)) + P01 * ((1 - u) * v) + P11 * (u * v);
+        }
+
+        public Vector3 DirAt(int x, int y) => Dirs != null ? Dirs[Index(x, y)] : Normal;
+
         public Vector3 Vertex(int x, int y)
         {
-            return new Vector3(Origin.X + x * CellSize, Origin.Y + y * CellSize, Origin.Z + GetLevel(x, y) * LevelHeight);
+            return Base(x, y) + DirAt(x, y) * (GetLevel(x, y) * LevelHeight);
+        }
+
+        public Vector3 VertexAtLevel(int x, int y, int level)
+        {
+            return Base(x, y) + DirAt(x, y) * (level * LevelHeight);
         }
 
         public Heightfield Clone()
         {
             return new Heightfield
             {
+                P00 = P00,
+                P10 = P10,
+                P01 = P01,
+                P11 = P11,
+                Normal = Normal,
+                Dirs = Dirs == null ? null : (Vector3[]) Dirs.Clone(),
                 CellsX = CellsX,
                 CellsY = CellsY,
                 CellSize = CellSize,
                 LevelHeight = LevelHeight,
-                Origin = Origin,
                 ThicknessLevels = ThicknessLevels,
                 Levels = (int[]) Levels.Clone()
             };
@@ -144,20 +241,51 @@ namespace Sledge.BspEditor.Terrain
         public int MinLevel => Levels.Length == 0 ? 0 : Levels.Min();
         public int MaxLevel => Levels.Length == 0 ? 0 : Levels.Max();
 
-        /// <summary>World height of the flat bottom shared by every brush.</summary>
-        public float BottomZ => Origin.Z + (MinLevel - Math.Max(1, ThicknessLevels)) * LevelHeight;
+        /// <summary>Height of a point above the base surface's plane, along <see cref="Normal"/>.</summary>
+        public float HeightOf(Vector3 p) => Vector3.Dot(p - P00, Normal);
+
+        /// <summary>The height (along the normal) of the flat bottom shared by every brush.</summary>
+        public float BottomHeight
+        {
+            get
+            {
+                var min = float.MaxValue;
+                for (var y = 0; y < VertsY; y++)
+                    for (var x = 0; x < VertsX; x++)
+                        min = Math.Min(min, HeightOf(Vertex(x, y)));
+                return min - Math.Max(1, ThicknessLevels) * LevelHeight;
+            }
+        }
+
+        /// <summary>A surface point straight back (against the normal) to the bottom.</summary>
+        public Vector3 BottomPoint(Vector3 p, float bottomHeight)
+        {
+            return p - Normal * (HeightOf(p) - bottomHeight);
+        }
 
         public (Vector3 Min, Vector3 Max) Bounds()
         {
-            return (
-                new Vector3(Origin.X, Origin.Y, BottomZ),
-                new Vector3(Origin.X + CellsX * CellSize, Origin.Y + CellsY * CellSize, Origin.Z + MaxLevel * LevelHeight)
-            );
+            var bottom = BottomHeight;
+            var min = new Vector3(float.MaxValue);
+            var max = new Vector3(float.MinValue);
+            for (var y = 0; y < VertsY; y++)
+            {
+                for (var x = 0; x < VertsX; x++)
+                {
+                    var v = Vertex(x, y);
+                    var b = BottomPoint(v, bottom);
+                    min = Vector3.Min(min, Vector3.Min(v, b));
+                    max = Vector3.Max(max, Vector3.Max(v, b));
+                }
+            }
+            return (min, max);
         }
 
         public bool SameShapeAs(Heightfield other)
         {
-            return other != null && other.CellsX == CellsX && other.CellsY == CellsY && other.Levels.SequenceEqual(Levels);
+            return other != null && other.CellsX == CellsX && other.CellsY == CellsY && other.Levels.SequenceEqual(Levels)
+                   && other.P00 == P00 && other.P10 == P10 && other.P01 == P01 && other.P11 == P11
+                   && (Dirs == null) == (other.Dirs == null) && (Dirs == null || other.Dirs.SequenceEqual(Dirs));
         }
 
         #region Triangulation
@@ -194,7 +322,7 @@ namespace Sledge.BspEditor.Terrain
             }
         }
 
-        /// <summary>All surface triangles in world space, for the preview and for ray casts.</summary>
+        /// <summary>All surface triangles in world space, for ray casts.</summary>
         public IEnumerable<Vector3[]> SurfaceTriangles()
         {
             for (var cy = 0; cy < CellsY; cy++)
@@ -209,24 +337,67 @@ namespace Sledge.BspEditor.Terrain
             }
         }
 
+        /// <summary>The level at a (fractional) grid position, following the same triangles as the surface.</summary>
+        public float LevelAt(float gx, float gy)
+        {
+            gx = Math.Max(0, Math.Min(CellsX, gx));
+            gy = Math.Max(0, Math.Min(CellsY, gy));
+            var cx = Math.Min((int) Math.Floor(gx), CellsX - 1);
+            var cy = Math.Min((int) Math.Floor(gy), CellsY - 1);
+            var fx = gx - cx;
+            var fy = gy - cy;
+            float h00 = GetLevel(cx, cy), h10 = GetLevel(cx + 1, cy), h01 = GetLevel(cx, cy + 1), h11 = GetLevel(cx + 1, cy + 1);
+
+            if (DiagonalA(cx, cy))
+            {
+                return fx >= fy
+                    ? h00 + (h10 - h00) * (fx - fy) + (h11 - h00) * fy
+                    : h00 + (h11 - h00) * fx + (h01 - h00) * (fy - fx);
+            }
+
+            return fx + fy <= 1
+                ? h00 + (h10 - h00) * fx + (h01 - h00) * fy
+                : h11 + (h01 - h11) * (1 - fx) + (h10 - h11) * (1 - fy);
+        }
+
         #endregion
 
         #region Ray casting
 
-        /// <summary>The nearest point where the ray crosses the surface.</summary>
-        public bool RayCast(Vector3 start, Vector3 end, out Vector3 hit)
+        /// <summary>The nearest point where the ray crosses the surface, and where on the grid that is.</summary>
+        public bool RayCast(Vector3 start, Vector3 end, out Vector3 hit, out float gx, out float gy)
         {
             hit = default;
+            gx = gy = 0;
             var dir = end - start;
             if (dir.LengthSquared() < 1e-12f) return false;
-            dir = Vector3.Normalize(dir);
-            var length = (end - start).Length();
+            var length = dir.Length();
+            dir /= length;
+
+            // Positions once, then every triangle
+            var verts = new Vector3[VertsX * VertsY];
+            for (var y = 0; y < VertsY; y++)
+                for (var x = 0; x < VertsX; x++)
+                    verts[Index(x, y)] = Vertex(x, y);
 
             var best = float.MaxValue;
-            foreach (var t in SurfaceTriangles())
+            for (var cy = 0; cy < CellsY; cy++)
             {
-                var d = RayTriangle(start, dir, t[0], t[1], t[2]);
-                if (d >= 0 && d <= length && d < best) best = d;
+                for (var cx = 0; cx < CellsX; cx++)
+                {
+                    foreach (var t in CellTriangles(cx, cy))
+                    {
+                        var a = verts[Index(t[0].X, t[0].Y)];
+                        var b = verts[Index(t[1].X, t[1].Y)];
+                        var c = verts[Index(t[2].X, t[2].Y)];
+                        if (!RayTriangle(start, dir, a, b, c, out var d, out var u, out var v)) continue;
+                        if (d < 0 || d > length || d >= best) continue;
+                        best = d;
+                        var w = 1 - u - v;
+                        gx = w * t[0].X + u * t[1].X + v * t[2].X;
+                        gy = w * t[0].Y + u * t[1].Y + v * t[2].Y;
+                    }
+                }
             }
 
             if (best == float.MaxValue) return false;
@@ -234,53 +405,29 @@ namespace Sledge.BspEditor.Terrain
             return true;
         }
 
-        private static float RayTriangle(Vector3 o, Vector3 d, Vector3 a, Vector3 b, Vector3 c)
+        public bool RayCast(Vector3 start, Vector3 end, out Vector3 hit)
+        {
+            return RayCast(start, end, out hit, out _, out _);
+        }
+
+        private static bool RayTriangle(Vector3 o, Vector3 d, Vector3 a, Vector3 b, Vector3 c, out float distance, out float u, out float v)
         {
             const float eps = 1e-6f;
+            distance = u = v = 0;
             var e1 = b - a;
             var e2 = c - a;
             var p = Vector3.Cross(d, e2);
             var det = Vector3.Dot(e1, p);
-            if (Math.Abs(det) < eps) return -1;
+            if (Math.Abs(det) < eps) return false;
             var inv = 1f / det;
             var tv = o - a;
-            var u = Vector3.Dot(tv, p) * inv;
-            if (u < 0 || u > 1) return -1;
+            u = Vector3.Dot(tv, p) * inv;
+            if (u < 0 || u > 1) return false;
             var q = Vector3.Cross(tv, e1);
-            var v = Vector3.Dot(d, q) * inv;
-            if (v < 0 || u + v > 1) return -1;
-            return Vector3.Dot(e2, q) * inv;
-        }
-
-        /// <summary>The surface height at a world position, or null outside the grid.</summary>
-        public float? HeightAt(float x, float y)
-        {
-            var fx = (x - Origin.X) / CellSize;
-            var fy = (y - Origin.Y) / CellSize;
-            if (fx < 0 || fy < 0 || fx > CellsX || fy > CellsY) return null;
-            var cx = Math.Min((int) Math.Floor(fx), CellsX - 1);
-            var cy = Math.Min((int) Math.Floor(fy), CellsY - 1);
-            foreach (var t in CellTriangles(cx, cy))
-            {
-                var a = Vertex(t[0].X, t[0].Y);
-                var b = Vertex(t[1].X, t[1].Y);
-                var c = Vertex(t[2].X, t[2].Y);
-                var z = TriangleHeight(a, b, c, x, y);
-                if (z.HasValue) return z;
-            }
-            return null;
-        }
-
-        private static float? TriangleHeight(Vector3 a, Vector3 b, Vector3 c, float x, float y)
-        {
-            var d = (b.Y - c.Y) * (a.X - c.X) + (c.X - b.X) * (a.Y - c.Y);
-            if (Math.Abs(d) < 1e-9f) return null;
-            var l1 = ((b.Y - c.Y) * (x - c.X) + (c.X - b.X) * (y - c.Y)) / d;
-            var l2 = ((c.Y - a.Y) * (x - c.X) + (a.X - c.X) * (y - c.Y)) / d;
-            var l3 = 1 - l1 - l2;
-            const float e = -1e-4f;
-            if (l1 < e || l2 < e || l3 < e) return null;
-            return l1 * a.Z + l2 * b.Z + l3 * c.Z;
+            v = Vector3.Dot(d, q) * inv;
+            if (v < 0 || u + v > 1) return false;
+            distance = Vector3.Dot(e2, q) * inv;
+            return true;
         }
 
         #endregion
@@ -302,64 +449,6 @@ namespace Sledge.BspEditor.Terrain
             }
         }
 
-        /// <summary>
-        /// One brush stamp at a world position (x, y). Strength is in levels: a vertex under the full weight of the brush moves
-        /// by that many levels, and the rest are rounded to whole levels, so the terrain never leaves the grid.
-        /// Flatten and Set move towards (or to) the target level.
-        /// </summary>
-        public bool ApplyBrush(float x, float y, float radius, SculptMode mode, float strength, BrushFalloff falloff, int targetLevel = 0)
-        {
-            var changed = false;
-            var minX = Math.Max(0, (int) Math.Floor((x - radius - Origin.X) / CellSize));
-            var maxX = Math.Min(CellsX, (int) Math.Ceiling((x + radius - Origin.X) / CellSize));
-            var minY = Math.Max(0, (int) Math.Floor((y - radius - Origin.Y) / CellSize));
-            var maxY = Math.Min(CellsY, (int) Math.Ceiling((y + radius - Origin.Y) / CellSize));
-
-            var before = (int[]) Levels.Clone();
-
-            for (var vy = minY; vy <= maxY; vy++)
-            {
-                for (var vx = minX; vx <= maxX; vx++)
-                {
-                    var px = Origin.X + vx * CellSize - x;
-                    var py = Origin.Y + vy * CellSize - y;
-                    var w = Weight((float) Math.Sqrt(px * px + py * py), radius, falloff);
-                    if (w <= 0) continue;
-
-                    var current = before[Index(vx, vy)];
-                    var next = current;
-                    switch (mode)
-                    {
-                        case SculptMode.Raise:
-                            next = current + (int) Math.Round(strength * w, MidpointRounding.AwayFromZero);
-                            break;
-                        case SculptMode.Lower:
-                            next = current - (int) Math.Round(strength * w, MidpointRounding.AwayFromZero);
-                            break;
-                        case SculptMode.Flatten:
-                            next = current + (int) Math.Round((targetLevel - current) * Math.Min(1f, w * Math.Max(0.1f, strength)), MidpointRounding.AwayFromZero);
-                            break;
-                        case SculptMode.Set:
-                            next = targetLevel;
-                            break;
-                        case SculptMode.Smooth:
-                            var avg = NeighbourAverage(before, vx, vy);
-                            next = current + (int) Math.Round((avg - current) * Math.Min(1f, w * Math.Max(0.25f, strength)), MidpointRounding.AwayFromZero);
-                            break;
-                    }
-
-                    if (next != current)
-                    {
-                        Levels[Index(vx, vy)] = next;
-                        changed = true;
-                    }
-                }
-            }
-
-            if (changed) Version++;
-            return changed;
-        }
-
         private float NeighbourAverage(int[] levels, int vx, int vy)
         {
             var sum = 0f;
@@ -379,65 +468,29 @@ namespace Sledge.BspEditor.Terrain
             return count == 0 ? levels[Index(vx, vy)] : sum / count;
         }
 
-        /// <summary>Smooths the whole terrain by averaging each vertex with its neighbours, rounded to whole levels.</summary>
-        public bool Smooth(int iterations, float amount = 1f)
-        {
-            var any = false;
-            for (var i = 0; i < Math.Max(1, iterations); i++)
-            {
-                var before = (int[]) Levels.Clone();
-                for (var vy = 0; vy <= CellsY; vy++)
-                {
-                    for (var vx = 0; vx <= CellsX; vx++)
-                    {
-                        var current = before[Index(vx, vy)];
-                        var avg = NeighbourAverage(before, vx, vy);
-                        var next = current + (int) Math.Round((avg - current) * amount, MidpointRounding.AwayFromZero);
-                        if (next != current)
-                        {
-                            Levels[Index(vx, vy)] = next;
-                            any = true;
-                        }
-                    }
-                }
-            }
-            if (any) Version++;
-            return any;
-        }
-
-        #endregion
-
-        #region Units-based sculpting
-
         /// <summary>
-        /// A brush stamp where strength is in world units per stamp (at the full weight of the brush). The heights are whole
-        /// levels, so what is too small to move a level is kept in <paramref name="residual"/> (one value per vertex, kept for the
-        /// whole stroke) and adds up over the next stamps: a small strength is slower, not nothing.
-        /// Raise and Lower move by the amount; Flatten and Smooth move towards their target by at most the amount; Set jumps to the level.
+        /// One brush stamp: a sphere of the given radius at a world point (on the surface). Strength is in world units per stamp
+        /// (at the full weight of the brush). The levels are whole numbers, so what is too small to move a level is kept in
+        /// <paramref name="residual"/> (one value per vertex, kept for the whole stroke) and adds up over the next stamps:
+        /// a small strength is slower, not nothing. Raise and Lower move along each vertex's direction (the face normal);
+        /// Flatten and Smooth move towards their target by at most the amount; Set jumps to the level.
         /// </summary>
-        public bool ApplyBrushUnits(float x, float y, float radius, SculptMode mode, float units, BrushFalloff falloff, int targetLevel, float[] residual)
+        public bool ApplyBrushUnits(Vector3 hit, float radius, SculptMode mode, float units, BrushFalloff falloff, int targetLevel, float[] residual)
         {
             var perStamp = Math.Max(0f, units) / Math.Max(0.0001f, LevelHeight);
             var changed = false;
 
-            var minX = Math.Max(0, (int) Math.Floor((x - radius - Origin.X) / CellSize));
-            var maxX = Math.Min(CellsX, (int) Math.Ceiling((x + radius - Origin.X) / CellSize));
-            var minY = Math.Max(0, (int) Math.Floor((y - radius - Origin.Y) / CellSize));
-            var maxY = Math.Min(CellsY, (int) Math.Ceiling((y + radius - Origin.Y) / CellSize));
-
             // The neighbours of a vertex are read from the heights before this stamp, so the result doesn't depend on the order
             var before = mode == SculptMode.Smooth ? (int[]) Levels.Clone() : Levels;
 
-            for (var vy = minY; vy <= maxY; vy++)
+            for (var vy = 0; vy <= CellsY; vy++)
             {
-                for (var vx = minX; vx <= maxX; vx++)
+                for (var vx = 0; vx <= CellsX; vx++)
                 {
-                    var px = Origin.X + vx * CellSize - x;
-                    var py = Origin.Y + vy * CellSize - y;
-                    var w = Weight((float) Math.Sqrt(px * px + py * py), radius, falloff);
+                    var idx = Index(vx, vy);
+                    var w = Weight((Vertex(vx, vy) - hit).Length(), radius, falloff);
                     if (w <= 0) continue;
 
-                    var idx = Index(vx, vy);
                     var current = Levels[idx];
                     var cap = perStamp * w;
                     float move;
@@ -481,41 +534,102 @@ namespace Sledge.BspEditor.Terrain
             return changed;
         }
 
+        /// <summary>Smooths the whole surface by averaging each vertex with its neighbours, rounded to whole levels.</summary>
+        public bool Smooth(int iterations, float amount = 1f)
+        {
+            var any = false;
+            for (var i = 0; i < Math.Max(1, iterations); i++)
+            {
+                var before = (int[]) Levels.Clone();
+                for (var vy = 0; vy <= CellsY; vy++)
+                {
+                    for (var vx = 0; vx <= CellsX; vx++)
+                    {
+                        var current = before[Index(vx, vy)];
+                        var avg = NeighbourAverage(before, vx, vy);
+                        var next = current + (int) Math.Round((avg - current) * amount, MidpointRounding.AwayFromZero);
+                        if (next != current)
+                        {
+                            Levels[Index(vx, vy)] = next;
+                            any = true;
+                        }
+                    }
+                }
+            }
+            if (any) Version++;
+            return any;
+        }
+
         #endregion
 
         #region Resizing
 
-        /// <summary>
-        /// The same terrain with another cell size: the area stays the same (to a whole number of cells) and heights are
-        /// taken from the old surface.
-        /// </summary>
-        public Heightfield Resample(float newCellSize)
+        private float AverageLengthX() => ((P10 - P00).Length() + (P11 - P01).Length()) / 2;
+        private float AverageLengthY() => ((P01 - P00).Length() + (P11 - P10).Length()) / 2;
+
+        private float MinHeight()
+        {
+            var min = float.MaxValue;
+            for (var y = 0; y < VertsY; y++)
+                for (var x = 0; x < VertsX; x++)
+                    min = Math.Min(min, HeightOf(Vertex(x, y)));
+            return min;
+        }
+
+        private Vector3 DirAtGrid(float gx, float gy)
+        {
+            if (Dirs == null) return Normal;
+            gx = Math.Max(0, Math.Min(CellsX, gx));
+            gy = Math.Max(0, Math.Min(CellsY, gy));
+            var x0 = Math.Min((int) Math.Floor(gx), CellsX - 1);
+            var y0 = Math.Min((int) Math.Floor(gy), CellsY - 1);
+            var fx = gx - x0;
+            var fy = gy - y0;
+            var d = Dirs[Index(x0, y0)] * ((1 - fx) * (1 - fy)) + Dirs[Index(x0 + 1, y0)] * (fx * (1 - fy))
+                    + Dirs[Index(x0, y0 + 1)] * ((1 - fx) * fy) + Dirs[Index(x0 + 1, y0 + 1)] * (fx * fy);
+            return d.LengthSquared() < 1e-8f ? Normal : Vector3.Normalize(d);
+        }
+
+        /// <summary>The same surface with another cell size: the corners stay, heights are taken from the old surface.</summary>
+        public Heightfield Resample(float newCellSize, int maxCells = 256)
         {
             newCellSize = Math.Max(1f, newCellSize);
-            var width = CellsX * CellSize;
-            var depth = CellsY * CellSize;
-            var cx = Math.Max(1, (int) Math.Round(width / newCellSize));
-            var cy = Math.Max(1, (int) Math.Round(depth / newCellSize));
+            var cx = Math.Max(1, Math.Min(maxCells, (int) Math.Round(AverageLengthX() / newCellSize)));
+            var cy = Math.Max(1, Math.Min(maxCells, (int) Math.Round(AverageLengthY() / newCellSize)));
 
-            var result = new Heightfield(cx, cy, newCellSize, LevelHeight, Origin);
+            var result = new Heightfield
+            {
+                P00 = P00,
+                P10 = P10,
+                P01 = P01,
+                P11 = P11,
+                Normal = Normal,
+                CellsX = cx,
+                CellsY = cy,
+                CellSize = newCellSize,
+                LevelHeight = LevelHeight,
+                Levels = new int[(cx + 1) * (cy + 1)]
+            };
+
+            if (Dirs != null) result.Dirs = new Vector3[(cx + 1) * (cy + 1)];
             for (var y = 0; y <= cy; y++)
             {
                 for (var x = 0; x <= cx; x++)
                 {
-                    var wx = Math.Min(Origin.X + width, Origin.X + x * newCellSize);
-                    var wy = Math.Min(Origin.Y + depth, Origin.Y + y * newCellSize);
-                    var z = HeightAt(wx, wy) ?? Origin.Z;
-                    result.Levels[result.Index(x, y)] = (int) Math.Round((z - Origin.Z) / LevelHeight);
+                    var gx = x * (float) CellsX / cx;
+                    var gy = y * (float) CellsY / cy;
+                    result.Levels[result.Index(x, y)] = (int) Math.Round(LevelAt(gx, gy));
+                    if (Dirs != null) result.Dirs[result.Index(x, y)] = DirAtGrid(gx, gy);
                 }
             }
 
             // Keep the bottom where it was
-            result.ThicknessLevels = Math.Max(1, ThicknessLevels + result.MinLevel - MinLevel);
+            result.ThicknessLevels = Math.Max(1, (int) Math.Round((result.MinHeight() - BottomHeight) / LevelHeight));
             result.Touch();
             return result;
         }
 
-        /// <summary>The same terrain with another level height: the shape is kept, rounded to the new levels.</summary>
+        /// <summary>The same surface with another level height: the shape is kept, rounded to the new levels.</summary>
         public Heightfield WithLevelHeight(float newLevelHeight)
         {
             newLevelHeight = Math.Max(1f, newLevelHeight);
@@ -526,112 +640,158 @@ namespace Sledge.BspEditor.Terrain
                 result.Levels[i] = (int) Math.Round(Levels[i] * LevelHeight / newLevelHeight);
             }
 
-            var bottomLevel = (int) Math.Round((BottomZ - Origin.Z) / newLevelHeight);
-            result.ThicknessLevels = Math.Max(1, result.MinLevel - bottomLevel);
+            result.ThicknessLevels = Math.Max(1, (int) Math.Round((result.MinHeight() - BottomHeight) / newLevelHeight));
             result.Touch();
             return result;
         }
-
-        public int CellCount => CellsX * CellsY;
 
         #endregion
 
         #region Weld
 
-        /// <summary>
-        /// Makes the vertices that two terrains share (the same world x and y) the same height: this terrain's height wins.
-        /// Returns how many vertices of the other terrain changed. Terrains with different cell or level sizes are left alone.
-        /// </summary>
-        public int WeldTo(Heightfield other)
+        private const float WeldTolerance = 0.05f;
+
+        private static (long, long, long) Key(Vector3 p)
         {
-            if (other == null || other == this) return 0;
-            if (Math.Abs(other.LevelHeight - LevelHeight) > 1e-4f) return 0;
+            return ((long) Math.Round(p.X * 8), (long) Math.Round(p.Y * 8), (long) Math.Round(p.Z * 8));
+        }
 
-            var changed = 0;
-            const float tol = 0.01f;
-            for (var vy = 0; vy <= CellsY; vy++)
+        /// <summary>
+        /// Stitches surfaces that meet along an edge: where their corner and edge vertices are in the same place they get the
+        /// same height as the first one and the same (averaged) direction, so the surfaces meet with no crack however they are sculpted.
+        /// Returns how many vertices were changed.
+        /// </summary>
+        public static int Weld(IList<Heightfield> fields)
+        {
+            var groups = new Dictionary<(long, long, long), List<(Heightfield F, int X, int Y)>>();
+            foreach (var f in fields)
             {
-                for (var vx = 0; vx <= CellsX; vx++)
+                for (var y = 0; y <= f.CellsY; y++)
                 {
-                    var wx = Origin.X + vx * CellSize;
-                    var wy = Origin.Y + vy * CellSize;
-
-                    var fx = (wx - other.Origin.X) / other.CellSize;
-                    var fy = (wy - other.Origin.Y) / other.CellSize;
-                    var ox = (int) Math.Round(fx);
-                    var oy = (int) Math.Round(fy);
-                    if (Math.Abs(fx - ox) * other.CellSize > tol || Math.Abs(fy - oy) * other.CellSize > tol) continue;
-                    if (ox < 0 || oy < 0 || ox > other.CellsX || oy > other.CellsY) continue;
-
-                    var worldZ = Origin.Z + GetLevel(vx, vy) * LevelHeight;
-                    var level = (int) Math.Round((worldZ - other.Origin.Z) / other.LevelHeight);
-                    if (other.GetLevel(ox, oy) != level)
+                    for (var x = 0; x <= f.CellsX; x++)
                     {
-                        other.SetLevel(ox, oy, level);
-                        changed++;
+                        if (x != 0 && y != 0 && x != f.CellsX && y != f.CellsY) continue; // only the border can touch another surface
+                        var key = Key(f.Base(x, y));
+                        if (!groups.TryGetValue(key, out var list)) groups[key] = list = new List<(Heightfield, int, int)>();
+                        list.Add((f, x, y));
                     }
                 }
             }
-            return changed;
-        }
 
-        #endregion
-
-        #region From existing geometry
-
-        /// <summary>
-        /// A height grid that follows an existing shape. The grid covers the box (min to max); top(x, y) gives the height of the
-        /// shape's upper surface at a point, or null where it has none. The grid's zero level is the box top, so a flat block
-        /// is a flat terrain, and the thickness is set so the generated brushes end at the original bottom.
-        /// </summary>
-        public static Heightfield FromSurface(Vector3 min, Vector3 max, float cellSize, float levelHeight, Func<float, float, float?> top)
-        {
-            cellSize = Math.Max(1f, cellSize);
-            levelHeight = Math.Max(1f, levelHeight);
-
-            var cellsX = Math.Max(1, (int) Math.Round((max.X - min.X) / cellSize));
-            var cellsY = Math.Max(1, (int) Math.Round((max.Y - min.Y) / cellSize));
-            var field = new Heightfield(cellsX, cellsY, cellSize, levelHeight, new Vector3(min.X, min.Y, max.Z));
-
-            const float inset = 0.01f;
-            var lowest = int.MaxValue;
-            for (var y = 0; y <= cellsY; y++)
+            var changed = 0;
+            foreach (var list in groups.Values)
             {
-                for (var x = 0; x <= cellsX; x++)
+                // The same surface can only be in a group once; two vertices of one surface are not a seam
+                if (list.Count < 2 || list.Select(x => x.F).Distinct().Count() < 2) continue;
+
+                var sum = Vector3.Zero;
+                foreach (var e in list) sum += e.F.DirAt(e.X, e.Y);
+                var dir = sum.LengthSquared() < 1e-8f ? list[0].F.Normal : Vector3.Normalize(sum);
+
+                var first = list[0];
+                var firstHeight = first.F.GetLevel(first.X, first.Y) * first.F.LevelHeight;
+
+                foreach (var e in list)
                 {
-                    // Points on the far edge are nudged inside, so the surface is found there too
-                    var wx = Math.Min(max.X - inset, Math.Max(min.X + inset, min.X + x * cellSize));
-                    var wy = Math.Min(max.Y - inset, Math.Max(min.Y + inset, min.Y + y * cellSize));
-                    var z = top(wx, wy) ?? max.Z;
-                    var level = (int) Math.Round((z - max.Z) / levelHeight);
-                    field.Levels[field.Index(x, y)] = level;
-                    lowest = Math.Min(lowest, level);
+                    var f = e.F;
+                    var idx = f.Index(e.X, e.Y);
+                    var touched = false;
+
+                    if (f.DirAt(e.X, e.Y) != dir)
+                    {
+                        if (f.Dirs == null)
+                        {
+                            f.Dirs = new Vector3[f.Levels.Length];
+                            for (var i = 0; i < f.Dirs.Length; i++) f.Dirs[i] = f.Normal;
+                        }
+                        f.Dirs[idx] = dir;
+                        touched = true;
+                    }
+
+                    var level = (int) Math.Round(firstHeight / f.LevelHeight);
+                    if (f.Levels[idx] != level)
+                    {
+                        f.Levels[idx] = level;
+                        touched = true;
+                    }
+
+                    if (touched)
+                    {
+                        changed++;
+                        f.Version++;
+                    }
                 }
             }
 
-            // Thick enough that the bottom of the brushes is the bottom of the original shape
-            var lowestZ = max.Z + lowest * levelHeight;
-            field.ThicknessLevels = Math.Max(1, (int) Math.Round((lowestZ - min.Z) / levelHeight));
-            field.Touch();
-            return field;
+            return changed;
+        }
+
+        /// <summary>Welds this surface to another one (this surface's heights win). Returns how many vertices changed.</summary>
+        public int WeldTo(Heightfield other)
+        {
+            if (other == null || other == this) return 0;
+            return Weld(new[] { this, other });
         }
 
         #endregion
 
         #region Brush generation
 
+        private static bool Coplanar(Vector3 a, Vector3 b, Vector3 c, Vector3 d)
+        {
+            var n = Vector3.Cross(b - a, c - a);
+            var len = n.Length();
+            if (len < 1e-6f) n = Vector3.Cross(b - a, d - a);
+            len = n.Length();
+            if (len < 1e-6f) return true;
+            return Math.Abs(Vector3.Dot(n / len, d - a)) < 0.01f;
+        }
+
+        /// <summary>A plane through the first three corners of the rectangle of cells, as (normal, distance).</summary>
+        private (Vector3 N, float D) CellPlane(int cx, int cy)
+        {
+            var a = Vertex(cx, cy);
+            var n = Vector3.Cross(Vertex(cx + 1, cy) - a, Vertex(cx, cy + 1) - a);
+            if (n.LengthSquared() < 1e-12f) n = Normal;
+            n = Vector3.Normalize(n);
+            return (n, Vector3.Dot(n, a));
+        }
+
+        private bool CellIsPlanar(int cx, int cy)
+        {
+            return Coplanar(Vertex(cx, cy), Vertex(cx + 1, cy), Vertex(cx, cy + 1), Vertex(cx + 1, cy + 1));
+        }
+
+        private bool OnPlane((Vector3 N, float D) plane, int x, int y)
+        {
+            return Math.Abs(Vector3.Dot(plane.N, Vertex(x, y)) - plane.D) < 0.01f;
+        }
+
+        private bool ColumnOnPlane((Vector3 N, float D) plane, int x, int y0, int y1)
+        {
+            for (var y = y0; y <= y1; y++) if (!OnPlane(plane, x, y)) return false;
+            return true;
+        }
+
+        private bool RowOnPlane((Vector3 N, float D) plane, int y, int x0, int x1)
+        {
+            for (var x = x0; x <= x1; x++) if (!OnPlane(plane, x, y)) return false;
+            return true;
+        }
+
         /// <summary>
-        /// The brushes of the terrain. With mergeCoplanar, rectangles of cells that lie in one plane become one brush
+        /// The brushes of the surface. With mergeCoplanar, rectangles of cells that lie in one plane become one brush
         /// (a flat area is a single block); the remaining cells are split into two triangles each.
+        /// Cells with different keys (textures) are never merged.
         /// </summary>
         public List<TerrainBrush> BuildBrushes(bool mergeCoplanar = true, int[] cellKeys = null)
         {
             var result = new List<TerrainBrush>();
-            var bottom = BottomZ;
+            var bottom = BottomHeight;
             var used = new bool[CellsX * CellsY];
 
-            // Cells with different keys (textures) are never merged into one brush
             int Key(int x, int y) => cellKeys == null || cellKeys.Length != used.Length ? 0 : cellKeys[y * CellsX + x];
+            TerrainBrush Make(Vector3[] top) => Prism(top, Normal, p => BottomPoint(p, bottom));
 
             for (var cy = 0; cy < CellsY; cy++)
             {
@@ -639,38 +799,42 @@ namespace Sledge.BspEditor.Terrain
                 {
                     if (used[cy * CellsX + cx]) continue;
 
-                    if (!mergeCoplanar || !RectPlanar(cx, cy, cx, cy))
+                    var planar = CellIsPlanar(cx, cy);
+                    if (!mergeCoplanar || !planar)
                     {
                         used[cy * CellsX + cx] = true;
-                        if (RectPlanar(cx, cy, cx, cy))
+                        if (planar)
                         {
                             // A planar cell is one brush even without merging
-                            result.Add(Prism(new[] { Vertex(cx, cy), Vertex(cx + 1, cy), Vertex(cx + 1, cy + 1), Vertex(cx, cy + 1) }, bottom).WithCells(cx, cy, cx, cy));
+                            result.Add(Make(new[] { Vertex(cx, cy), Vertex(cx + 1, cy), Vertex(cx + 1, cy + 1), Vertex(cx, cy + 1) }).WithCells(cx, cy, cx, cy));
                         }
                         else
                         {
                             foreach (var t in CellTriangles(cx, cy))
                             {
-                                result.Add(Prism(new[] { Vertex(t[0].X, t[0].Y), Vertex(t[1].X, t[1].Y), Vertex(t[2].X, t[2].Y) }, bottom).WithCells(cx, cy, cx, cy));
+                                result.Add(Make(new[] { Vertex(t[0].X, t[0].Y), Vertex(t[1].X, t[1].Y), Vertex(t[2].X, t[2].Y) }).WithCells(cx, cy, cx, cy));
                             }
                         }
                         continue;
                     }
 
                     var key = Key(cx, cy);
+                    var plane = CellPlane(cx, cy);
 
                     // Grow right, then down, while the rectangle stays in one plane and one texture
                     var x1 = cx;
-                    while (x1 + 1 < CellsX && !used[cy * CellsX + x1 + 1] && Key(x1 + 1, cy) == key && RectPlanar(cx, cy, x1 + 1, cy)) x1++;
+                    while (x1 + 1 < CellsX && !used[cy * CellsX + x1 + 1] && Key(x1 + 1, cy) == key
+                           && ColumnOnPlane(plane, x1 + 2, cy, cy + 1)) x1++;
 
                     var y1 = cy;
-                    while (y1 + 1 < CellsY && RowFree(used, cx, x1, y1 + 1) && RowKey(Key, cx, x1, y1 + 1, key) && RectPlanar(cx, cy, x1, y1 + 1)) y1++;
+                    while (y1 + 1 < CellsY && RowFree(used, cx, x1, y1 + 1) && RowKey(Key, cx, x1, y1 + 1, key)
+                           && RowOnPlane(plane, y1 + 2, cx, x1 + 1)) y1++;
 
                     for (var yy = cy; yy <= y1; yy++)
                         for (var xx = cx; xx <= x1; xx++)
                             used[yy * CellsX + xx] = true;
 
-                    result.Add(Prism(new[] { Vertex(cx, cy), Vertex(x1 + 1, cy), Vertex(x1 + 1, y1 + 1), Vertex(cx, y1 + 1) }, bottom).WithCells(cx, cy, x1, y1));
+                    result.Add(Make(new[] { Vertex(cx, cy), Vertex(x1 + 1, cy), Vertex(x1 + 1, y1 + 1), Vertex(cx, y1 + 1) }).WithCells(cx, cy, x1, y1));
                 }
             }
 
@@ -689,52 +853,28 @@ namespace Sledge.BspEditor.Terrain
             return true;
         }
 
-        /// <summary>True if every vertex of the cells (x0..x1, y0..y1) lies in the plane through the rectangle's corners.</summary>
-        private bool RectPlanar(int x0, int y0, int x1, int y1)
-        {
-            var w = x1 + 1 - x0;
-            var h = y1 + 1 - y0;
-            var a = GetLevel(x0, y0);
-            var b = GetLevel(x0 + w, y0);
-            var c = GetLevel(x0, y0 + h);
-
-            // The fourth corner decides whether the rectangle is a plane at all
-            if (GetLevel(x0 + w, y0 + h) * 1L != a + (b - a) + (c - a)) return false;
-
-            for (var y = y0; y <= y0 + h; y++)
-            {
-                for (var x = x0; x <= x0 + w; x++)
-                {
-                    // (level - a) = (b - a) * (x - x0) / w + (c - a) * (y - y0) / h, in integers
-                    long lhs = (long) (GetLevel(x, y) - a) * w * h;
-                    long rhs = (long) (b - a) * (x - x0) * h + (long) (c - a) * (y - y0) * w;
-                    if (lhs != rhs) return false;
-                }
-            }
-            return true;
-        }
-
         /// <summary>
-        /// A convex brush from a top polygon (3 or 4 points, in x/y order around the footprint) down to a flat bottom.
+        /// A convex brush from a top polygon (3 or 4 points around the footprint), extruded back against the normal to a flat bottom.
+        /// The sides all run along the normal, so they are flat, and the bottom is flat because every bottom point is on one plane.
         /// </summary>
-        public static TerrainBrush Prism(Vector3[] top, float bottomZ)
+        public static TerrainBrush Prism(Vector3[] top, Vector3 normal, Func<Vector3, Vector3> bottomOf)
         {
-            // Make the footprint counter-clockwise seen from above, so the faces can be wound consistently
+            // Make the footprint counter-clockwise seen from the front, so the faces can be wound consistently
             var area = 0f;
             for (var i = 0; i < top.Length; i++)
             {
                 var p = top[i];
                 var q = top[(i + 1) % top.Length];
-                area += p.X * q.Y - q.X * p.Y;
+                area += Vector3.Dot(Vector3.Cross(p, q), normal);
             }
             var t = (Vector3[]) top.Clone();
             if (area < 0) Array.Reverse(t);
 
             var n = t.Length;
-            var bot = t.Select(v => new Vector3(v.X, v.Y, bottomZ)).ToArray();
+            var bot = t.Select(bottomOf).ToArray();
             var brush = new TerrainBrush();
 
-            // Counter-clockwise from outside is (a, b, c); Sledge wants clockwise from outside, so every face is reversed below
+            // Counter-clockwise from outside is (a, b, c); Sledge wants clockwise from outside, so every face is reversed
             brush.Faces.Add(new TerrainFace { Kind = TerrainFaceKind.Top, Vertices = Clockwise(t) });
             brush.Faces.Add(new TerrainFace { Kind = TerrainFaceKind.Bottom, Vertices = Clockwise(bot.Reverse().ToArray()) });
             for (var i = 0; i < n; i++)
@@ -760,8 +900,8 @@ namespace Sledge.BspEditor.Terrain
         #region Collision
 
         /// <summary>
-        /// Coarse collision brushes: the terrain sampled every blockSize cells (the last block is whatever is left over),
-        /// built into brushes the same way. The result never has more brushes than the terrain itself.
+        /// Coarse collision brushes: the surface sampled every blockSize cells (the last block is whatever is left over),
+        /// built into brushes the same way. The result never has more brushes than the surface itself.
         /// </summary>
         public List<TerrainBrush> BuildCollision(int blockSize, CollisionSampling sampling, bool mergeCoplanar = true)
         {
@@ -769,59 +909,50 @@ namespace Sledge.BspEditor.Terrain
             var xs = Stops(CellsX, blockSize);
             var ys = Stops(CellsY, blockSize);
 
-            // The coarse grid, as a heightfield of its own with uneven cells
             var levels = new int[xs.Count, ys.Count];
             for (var j = 0; j < ys.Count; j++)
                 for (var i = 0; i < xs.Count; i++)
                     levels[i, j] = Sample(xs[i], ys[j], blockSize, sampling);
 
-            var bottom = BottomZ;
+            var bottom = BottomHeight;
             var result = new List<TerrainBrush>();
+            TerrainBrush Make(Vector3[] top) => Prism(top, Normal, p => BottomPoint(p, bottom));
 
             for (var j = 0; j + 1 < ys.Count; j++)
             {
                 for (var i = 0; i + 1 < xs.Count; i++)
                 {
-                    Vector3 V(int a, int b) => new Vector3(Origin.X + xs[a] * CellSize, Origin.Y + ys[b] * CellSize, Origin.Z + levels[a, b] * LevelHeight);
+                    Vector3 V(int a, int b) => VertexAtLevel(xs[a], ys[b], levels[a, b]);
 
                     var p00 = V(i, j);
                     var p10 = V(i + 1, j);
                     var p01 = V(i, j + 1);
                     var p11 = V(i + 1, j + 1);
 
-                    // The same rule as the terrain: planar blocks are one brush, the others two triangles
-                    var planar = Math.Abs((p00.Z + p11.Z) - (p10.Z + p01.Z)) < 1e-3f
-                                 && PlanarQuad(p00, p10, p11, p01);
-                    if (mergeCoplanar && planar)
+                    if (mergeCoplanar && Coplanar(p00, p10, p01, p11))
                     {
-                        result.Add(Prism(new[] { p00, p10, p11, p01 }, bottom));
+                        result.Add(Make(new[] { p00, p10, p11, p01 }));
                     }
                     else
                     {
-                        var a = Math.Abs(p00.Z - p11.Z);
-                        var b = Math.Abs(p10.Z - p01.Z);
+                        var a = Math.Abs(levels[i, j] - levels[i + 1, j + 1]);
+                        var b = Math.Abs(levels[i + 1, j] - levels[i, j + 1]);
                         var diagonalA = a != b ? a < b : (i + j) % 2 == 0;
                         if (diagonalA)
                         {
-                            result.Add(Prism(new[] { p00, p10, p11 }, bottom));
-                            result.Add(Prism(new[] { p00, p11, p01 }, bottom));
+                            result.Add(Make(new[] { p00, p10, p11 }));
+                            result.Add(Make(new[] { p00, p11, p01 }));
                         }
                         else
                         {
-                            result.Add(Prism(new[] { p00, p10, p01 }, bottom));
-                            result.Add(Prism(new[] { p10, p11, p01 }, bottom));
+                            result.Add(Make(new[] { p00, p10, p01 }));
+                            result.Add(Make(new[] { p10, p11, p01 }));
                         }
                     }
                 }
             }
 
             return result;
-        }
-
-        private static bool PlanarQuad(Vector3 p00, Vector3 p10, Vector3 p11, Vector3 p01)
-        {
-            // Horizontal positions are a rectangle, so the corners are in one plane when z00 + z11 == z10 + z01
-            return Math.Abs((p00.Z + p11.Z) - (p10.Z + p01.Z)) < 1e-3f;
         }
 
         private static List<int> Stops(int cells, int block)
