@@ -312,6 +312,9 @@ namespace Sledge.BspEditor.Rendering.Resources
 			if (!_resources.ContainsKey(environment.ID)) _resources.TryAdd(environment.ID, new List<IResource>());
 		}
 
+        // D3D11 (feature level 11) rejects textures wider or taller than this
+        private const int MaxTextureSize = 16384;
+
         private async Task<IResource> UploadTexture(IEnvironment environment, TextureItem item,
             ITextureStreamSource source)
         {
@@ -321,28 +324,52 @@ namespace Sledge.BspEditor.Rendering.Resources
             {
                 return null;
             }
-            var combinedBitmap = new Bitmap(firstbitmap.Width * bitmaps.Count, firstbitmap.Height);
-            int i = 0;
-            foreach (var bitmap in bitmaps)
+
+            // Frames are laid out side by side in one strip. A long animated sprite can exceed the
+            // GPU texture size limit (e.g. 100 frames of 256px = 25600px), so shrink every frame
+            // until the strip fits. All frames are kept, only the resolution drops.
+            int frameW = firstbitmap.Width, frameH = firstbitmap.Height;
+            var scale = System.Math.Min(1.0, (double) MaxTextureSize / ((double) frameW * bitmaps.Count));
+            scale = System.Math.Min(scale, (double) MaxTextureSize / frameH);
+            if (scale < 1.0)
             {
-                using (Graphics g = Graphics.FromImage(combinedBitmap))
+                frameW = System.Math.Max(1, (int) System.Math.Floor(frameW * scale));
+                frameH = System.Math.Max(1, (int) System.Math.Floor(frameH * scale));
+            }
+
+            using var combinedBitmap = new Bitmap(frameW * bitmaps.Count, frameH);
+            using (var g = Graphics.FromImage(combinedBitmap))
+            {
+                if (scale < 1.0)
                 {
-                    g.DrawImage(bitmap, firstbitmap.Width * i, 0);
+                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                    g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
                 }
+                int i = 0;
+                foreach (var bitmap in bitmaps)
+                {
+                    g.DrawImage(bitmap, new Rectangle(frameW * i, 0, frameW, frameH));
+                    i++;
+                }
+            }
 
-				i++;
-			}
+            var lb = combinedBitmap.LockBits(new Rectangle(0, 0, combinedBitmap.Width, combinedBitmap.Height), ImageLockMode.ReadOnly,
+                PixelFormat.Format32bppArgb);
+            var data = new byte[lb.Stride * lb.Height];
+            Marshal.Copy(lb.Scan0, data, 0, data.Length);
+            combinedBitmap.UnlockBits(lb);
 
-			var lb = combinedBitmap.LockBits(new Rectangle(0, 0, item.Width, item.Height), ImageLockMode.ReadOnly,
-				PixelFormat.Format32bppArgb);
-			var data = new byte[lb.Stride * lb.Height];
-			Marshal.Copy(lb.Scan0, data, 0, data.Length);
-			combinedBitmap.UnlockBits(lb);
-
-
-			return _engine.Value.UploadTexture($"{environment.ID}::{item.Name}", combinedBitmap.Width,
-				combinedBitmap.Height, data, TextureSampleType.Standard, bitmaps.Count);
-		}
+            try
+            {
+                return _engine.Value.UploadTexture($"{environment.ID}::{item.Name}", combinedBitmap.Width,
+                    combinedBitmap.Height, data, TextureSampleType.Standard, bitmaps.Count);
+            }
+            catch (System.Exception)
+            {
+                // A texture the GPU refuses must not take down the change handler
+                return null;
+            }
+        }
 		public async Task<Texture> UploadCubemap(CompositeFile file)
 		{
 			try
